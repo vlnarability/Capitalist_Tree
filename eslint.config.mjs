@@ -37,4 +37,14 @@ export default tseslint.config(
       'no-console': ['warn', { allow: ['warn', 'error'] }],
     },
   },
+  {
+    // Headless CLI scripts (e.g. packages/simulation/scripts/grow-sapling.ts)
+    // are *intended* to print to stdout via console.log. The import-boundary
+    // test walks `packages/simulation/src/` only, so these scripts never
+    // impact the simulation's purity contract.
+    files: ['**/scripts/**/*.ts'],
+    rules: {
+      'no-console': 'off',
+    },
+  },
 );
