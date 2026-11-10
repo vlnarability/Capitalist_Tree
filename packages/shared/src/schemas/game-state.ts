@@ -14,6 +14,27 @@ import { rngStateSchema } from './rng.js';
 import { schedulerStateSchema } from './scheduler.js';
 
 /**
+ * Per-system RNG sub-streams (P2 — TDD §18.3).
+ *
+ * The root RNG (`GameState.rngState`) is shared — forks derived from it each
+ * step are stateless per-step draws. Systems that need their sub-stream's
+ * position to advance across save/load (stateful per-system RNG) MUST
+ * persist the child's state here.
+ *
+ * P2 adds `weather` for the WeatherSystem: the Markov chain's RNG position
+ * survives save/load so the weather sequence is reproducible given
+ * seed + sequence number (TDD §18.3). See `docs/simulation.md` §6 note.
+ *
+ * Future systems that need persistent sub-streams (e.g. a pest-outbreak
+ * RNG in P6+) add fields here.
+ */
+export const rngStreamsSchema = z.object({
+  /** Persisted RNG sub-stream for WeatherSystem. */
+  weather: rngStateSchema,
+});
+export type RngStreams = z.infer<typeof rngStreamsSchema>;
+
+/**
  * Root GameState (TDD §5.1).
  *
  * Fields beyond the TDD's original list:
@@ -43,6 +64,9 @@ export const gameStateSchema = z
     // P0 additions beyond TDD §5.1 (documented in docs/simulation.md):
     rngState: rngStateSchema,
     scheduler: schedulerStateSchema,
+    // P2 addition: per-system RNG sub-streams that need to survive save/load
+    // (TDD §18.3). Currently only WeatherSystem needs this.
+    rngStreams: rngStreamsSchema.default(() => ({ weather: [0, 0, 0, 0] as [number, number, number, number] })),
   })
   .superRefine((s, ctx) => {
     // GDD §16.1: The original tree cannot be sold.

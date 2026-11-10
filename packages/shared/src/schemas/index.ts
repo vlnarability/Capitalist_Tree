@@ -18,3 +18,5 @@ export * from './game-state.js';
 export * from './save.js';
 export * from './species.js';
 export * from './harvest.js';
+export * from './weather.js';
+export * from './fertilizer.js';
