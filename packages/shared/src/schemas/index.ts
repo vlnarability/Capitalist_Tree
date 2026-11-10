@@ -16,3 +16,5 @@ export * from './actions.js';
 export * from './config.js';
 export * from './game-state.js';
 export * from './save.js';
+export * from './species.js';
+export * from './harvest.js';

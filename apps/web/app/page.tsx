@@ -43,6 +43,15 @@ function eventToString(ev: SimulationEvent): string {
       return `[${ev.payload.severity}] ${ev.payload.message}`;
     case 'system':
       return `${ev.payload.systemId}: ${ev.payload.message}`;
+    case 'harvest-completed':
+      // P1 biology event — full UI lands in P4. Show a short summary.
+      return `harvest: ${ev.payload.result.leavesHarvested} leaves -> ${ev.payload.result.currencyIssuance.amount} minor units`;
+    case 'tree-died':
+      return `tree died: ${ev.payload.cause}${ev.payload.detail ? ` (${ev.payload.detail})` : ''}`;
+    case 'defoliation':
+      return `defoliation: ${Math.round(ev.payload.fractionRemoved * 100)}% removed${ev.payload.repeated ? ' (repeated)' : ''}`;
+    case 'biology-notification':
+      return `biology: [${ev.payload.severity}] ${ev.payload.code} — ${ev.payload.message}`;
     default: {
       // exhaustive check
       const _exhaustive: never = ev;

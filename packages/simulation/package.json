@@ -22,6 +22,7 @@
   },
   "dependencies": {
     "@capitalist-tree/shared": "workspace:*",
+    "@capitalist-tree/content": "workspace:*",
     "zod": "^3.23.8"
   }
 }

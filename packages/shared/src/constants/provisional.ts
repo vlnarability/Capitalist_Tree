@@ -68,9 +68,10 @@ export const PROVISIONAL_STARTING_PERSONAL_CASH_MINOR: bigint = 50_000n;
 // PROVISIONAL (GDD §17: initial tree species)
 //
 // Default species id used when the player starts a new game with no species
-// selection. The actual species definition will live in packages/content/species/
-// in a later phase; for P0 we just record the id.
-export const PROVISIONAL_DEFAULT_SPECIES_ID = 'species:proto-oak';
+// selection. P1 ships the White Oak (Quercus alba) as the first playable
+// species — see packages/content/src/species/white-oak.ts. The choice is
+// documented in docs/biology.md.
+export const PROVISIONAL_DEFAULT_SPECIES_ID = 'species:white-oak';
 
 // PROVISIONAL (GDD §17: initial leaf denomination and production rules)
 //
@@ -109,7 +110,17 @@ export const PROVISIONAL_INITIAL_INTEREST_RATE = 0;
 
 // Initial schema version for serialized saves. Increment when the GameState
 // shape changes; register a migration in packages/shared/src/migrations.
-export const CURRENT_SCHEMA_VERSION = 1;
+//
+// v2 (P1): added `originalTree.pendingIssuances: CurrencyIssuanceRequest[]`
+// — a queue of currency-issuance requests produced by `harvest-leaves` and
+// drained by P3's EconomySystem. Migration v1 -> v2 backfills the field with
+// an empty array.
+//
+// v3 (P1): added `originalTree.foliage.leafGrowthProgress: number` — an
+// accumulator for fractional leaf growth so per-step energy allocation isn't
+// wasted when it's too small to grow a whole leaf. Migration v2 -> v3
+// backfills the field with 0.
+export const CURRENT_SCHEMA_VERSION = 3;
 
 // Used by migration tests to exercise the v0 -> v1 path. Real saves are
 // always written at CURRENT_SCHEMA_VERSION.
