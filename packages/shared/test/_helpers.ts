@@ -56,6 +56,7 @@ export function baseState(overrides: Partial<GameState> = {}): GameState {
         leafCapacity: 100,
         activeLeafArea: 0,
         seasonalCondition: 1,
+        leafGrowthProgress: 0,
       },
       roots: { development: 0.1, absorptionCapacity: 0.1 },
       energy: { reserves: 50, production: 0, consumption: 0 },
@@ -64,6 +65,7 @@ export function baseState(overrides: Partial<GameState> = {}): GameState {
       health: 1,
       stress: 0,
       damage: [],
+      pendingIssuances: [],
     },
     world: {
       environment: {

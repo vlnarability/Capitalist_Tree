@@ -1,9 +1,18 @@
 /**
- * Default migrations for the current P0 schema.
+ * Default migrations for the current schema.
  *
  * v0 -> v1: a sample migration that the test suite exercises. v0 saves are
  * hypothetical (we never wrote one in production); the migration exists to
  * prove the framework works end-to-end.
+ *
+ * v1 -> v2 (P1): backfills `originalTree.pendingIssuances` with an empty
+ * array if missing. P1 added this field to queue currency-issuance requests
+ * produced by the `harvest-leaves` action handler. P3's EconomySystem
+ * drains the queue each tick.
+ *
+ * v2 -> v3 (P1): backfills `originalTree.foliage.leafGrowthProgress` with
+ * 0 if missing. P1 added this accumulator so per-step leaf-growth energy
+ * isn't wasted when it's too small to grow a whole leaf.
  *
  * Future agents: when you change GameState's shape, bump CURRENT_SCHEMA_VERSION
  * in constants/provisional.ts and add a real migration here. Migrations MUST
@@ -26,4 +35,45 @@ const v0ToV1: Migration = (state: GameState): GameState => {
   };
 };
 
+// P1: v1 -> v2 migration. Backfills `originalTree.pendingIssuances` if a
+// v1 save lacks it. The field is always present on v2+ saves.
+const v1ToV2: Migration = (state: GameState): GameState => {
+  const originalTree = state.originalTree as typeof state.originalTree & {
+    pendingIssuances?: unknown;
+  };
+  if (Array.isArray(originalTree.pendingIssuances)) {
+    return state;
+  }
+  return {
+    ...state,
+    originalTree: {
+      ...state.originalTree,
+      pendingIssuances: [],
+    },
+  };
+};
+
+// P1: v2 -> v3 migration. Backfills `originalTree.foliage.leafGrowthProgress`
+// with 0 if a v2 save lacks it. The field is always present on v3+ saves.
+const v2ToV3: Migration = (state: GameState): GameState => {
+  const foliage = state.originalTree.foliage as typeof state.originalTree.foliage & {
+    leafGrowthProgress?: unknown;
+  };
+  if (typeof foliage.leafGrowthProgress === 'number') {
+    return state;
+  }
+  return {
+    ...state,
+    originalTree: {
+      ...state.originalTree,
+      foliage: {
+        ...state.originalTree.foliage,
+        leafGrowthProgress: 0,
+      },
+    },
+  };
+};
+
 migrations.register(0, v0ToV1);
+migrations.register(1, v1ToV2);
+migrations.register(2, v2ToV3);

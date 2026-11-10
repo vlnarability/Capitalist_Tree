@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { PROVISIONAL_SPEED_MULTIPLIERS } from '../constants/provisional.js';
+import { harvestLeavesActionSchema } from './actions-biology.js';
 
 /**
  * GameAction — discriminated union of player actions handled by
@@ -35,7 +36,13 @@ export const setSpeedActionSchema = z.object({
 export const gameActionSchema = z.discriminatedUnion('type', [
   noOpActionSchema,
   setSpeedActionSchema,
+  harvestLeavesActionSchema,
 ]);
 export type GameAction = z.infer<typeof gameActionSchema>;
 export type NoOpAction = z.infer<typeof noOpActionSchema>;
 export type SetSpeedAction = z.infer<typeof setSpeedActionSchema>;
+export type HarvestLeavesAction = z.infer<typeof harvestLeavesActionSchema>;
+
+// Re-export biology action variants so consumers can `import { HarvestLeavesAction }`
+// from @capitalist-tree/shared without reaching into the biology submodule.
+export * from './actions-biology.js';

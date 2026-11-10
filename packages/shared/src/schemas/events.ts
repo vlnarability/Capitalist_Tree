@@ -1,4 +1,10 @@
 import { z } from 'zod';
+import {
+  harvestCompletedEventSchema,
+  treeDiedEventSchema,
+  defoliationEventSchema,
+  biologyNotificationEventSchema,
+} from './events-biology.js';
 
 /**
  * SimulationEvent — discriminated union emitted by systems during `advance`.
@@ -84,5 +90,13 @@ export const simulationEventSchema = z.discriminatedUnion('type', [
   scheduledEventFiredSchema,
   notificationEventSchema,
   systemEventSchema,
+  harvestCompletedEventSchema,
+  treeDiedEventSchema,
+  defoliationEventSchema,
+  biologyNotificationEventSchema,
 ]);
 export type SimulationEvent = z.infer<typeof simulationEventSchema>;
+
+// Re-export biology event variants so consumers can import them from
+// @capitalist-tree/shared without reaching into the biology submodule.
+export * from './events-biology.js';

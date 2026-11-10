@@ -32,6 +32,39 @@ describe('MigrationRegistry', () => {
     expect(out.scheduler.events).toEqual([]);
   });
 
+  it('v1 -> v2 migration backfills originalTree.pendingIssuances (P1)', () => {
+    // A v1 save predates the pendingIssuances field (P1 addition).
+    const v1State = freshState();
+    const withoutIssuances = {
+      ...v1State,
+      originalTree: { ...v1State.originalTree, pendingIssuances: undefined },
+    } as unknown as GameState;
+    const out = migrations.migrate(withoutIssuances, 1, CURRENT_SCHEMA_VERSION);
+    expect(Array.isArray(out.originalTree.pendingIssuances)).toBe(true);
+    expect(out.originalTree.pendingIssuances).toEqual([]);
+  });
+
+  it('v2 -> v3 migration backfills foliage.leafGrowthProgress (P1)', () => {
+    // A v2 save predates the leafGrowthProgress field (P1 addition).
+    const v2State = freshState();
+    const withoutProgress = {
+      ...v2State,
+      originalTree: {
+        ...v2State.originalTree,
+        foliage: { ...v2State.originalTree.foliage, leafGrowthProgress: undefined },
+      },
+    } as unknown as GameState;
+    const out = migrations.migrate(withoutProgress, 2, CURRENT_SCHEMA_VERSION);
+    expect(out.originalTree.foliage.leafGrowthProgress).toBe(0);
+  });
+
+  it('v3 (current) saves pass through migrations unchanged', () => {
+    const s = freshState();
+    const out = migrations.migrate(s, CURRENT_SCHEMA_VERSION, CURRENT_SCHEMA_VERSION);
+    // Identity — no copy when from === target.
+    expect(out).toBe(s);
+  });
+
   it('raises UnknownSchemaVersionError for an unknown source version', () => {
     const reg = new MigrationRegistry();
     const s = freshState();
