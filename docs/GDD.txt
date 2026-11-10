@@ -1,0 +1,946 @@
+# GAME DESIGN DOCUMENT
+## Working Title: The Capitalist Tree
+**Version:** 0.1
+**Date:** November 9, 2026
+**Status:** Foundation / Pre-production
+**Initial Platform:** Web (Next.js)
+**Potential Future Platform:** Godot
+**Genre:** Incremental, Idle, Economic Simulation, Environmental Management
+
+---
+
+## 1. Game Overview
+
+### 1.1 Concept
+
+The player begins with a single sapling, a small amount of money, and a piece of land.
+
+The sapling produces leaves that are physically represented as banknotes. These leaves can be harvested and spent on resources, equipment, personal expenses, and eventually business expansion.
+
+The player must manage the biological needs of the tree while meeting their own financial obligations.
+
+Initially, almost everything is done manually. The player waters the tree, applies fertilizer, monitors its condition, and harvests its leaves.
+
+As the game progresses, the player unlocks increasingly sophisticated technologies, businesses, automation, supply chains, and eventually global economic influence.
+
+However, economic expansion has consequences.
+
+Industrial production consumes resources, generates pollution, damages ecosystems, and changes the climate. More efficient production can encourage greater consumption. Financial institutions, investors, competitors, and debt create pressure to pursue continued growth even when the existing operation is already successful.
+
+The player can become extraordinarily wealthy by exploiting the environment. Alternatively, they can pursue financial independence while maintaining ecological stability.
+
+There is no mandatory definition of success.
+
+The original tree remains permanently tied to the player's journey. It cannot be sold, transferred, or replaced. It can flourish, deteriorate, recover, or die.
+
+It is a living record of the player's decisions.
+
+### 1.2 Central Theme
+
+The game explores the conflict between natural equilibrium and perpetual economic growth.
+
+A natural tree grows rapidly when young, eventually reaches maturity, and then maintains itself through ongoing biological processes.
+
+An economic system built around compound growth may demand increasing production indefinitely, even when the underlying biological and environmental systems have finite limits.
+
+The game asks:
+
+- Why must successful businesses continually expand?
+- What happens when financial incentives conflict with environmental sustainability?
+- Can technological advancement solve environmental problems if consumption continues increasing?
+- Is wealth equivalent to well-being?
+- What does success mean when economic growth is no longer necessary?
+- Can an economy exist within ecological limits?
+
+The player should discover these questions through gameplay rather than through mandatory narrative or explicit moral judgments.
+
+### 1.3 Design Philosophy
+
+The game should not punish every environmentally destructive decision immediately.
+
+Unsustainable strategies should often be financially attractive in the short term. Their consequences should emerge through accumulated biological stress, environmental degradation, resource scarcity, economic instability, and personal well-being.
+
+Sustainable strategies should be viable, profitable, and potentially superior over longer time horizons, but should require planning, investment, and resistance to external growth pressures.
+
+Environmental sustainability should not mean economic stagnation.
+
+Economic success should not require environmental destruction.
+
+The player is free to pursue either philosophy or something in between.
+
+---
+
+## 2. Design Pillars
+
+### Pillar 1: The Tree Is the Game
+
+The original tree is the permanent visual and emotional focal point.
+
+It cannot be sold or exchanged for money. It is not included in the player's tradable assets.
+
+Its appearance reflects its biological condition, environmental surroundings, and history.
+
+### Pillar 2: Every Economic Decision Has Consequences
+
+Money, resources, labor, infrastructure, and environmental health are interconnected.
+
+Spending money should move it through the economy rather than simply making it disappear.
+
+### Pillar 3: Biology Must Behave Believably
+
+Tree growth, photosynthesis, energy storage, water absorption, nutrient availability, dormancy, stress, and recovery should be based on coherent biological relationships.
+
+The simulation can simplify complex real-world processes, but should avoid arbitrary mechanics that contradict one another.
+
+### Pillar 4: Automation Creates New Trade-offs
+
+Automation improves production capacity and reduces manual involvement.
+
+However, it introduces infrastructure costs, energy requirements, manufacturing impacts, resource consumption, and pollution.
+
+Efficiency does not automatically guarantee sustainability.
+
+### Pillar 5: Success Is Player-Defined
+
+There is no single mandatory ending.
+
+Players can pursue wealth, restoration, industrial domination, environmental destruction, or financial independence.
+
+The game should recognize multiple achievements without declaring one universally correct playstyle.
+
+### Pillar 6: Complexity Is Optional
+
+The default interface should be understandable to casual players.
+
+An advanced interface should expose biological, economic, environmental, and mathematical details for players who want to understand the simulation deeply.
+
+---
+
+## 3. Core Gameplay Loop
+
+### 3.1 Initial Gameplay
+
+1. Observe the sapling's current condition.
+2. Purchase water and fertilizer.
+3. Apply resources to support growth.
+4. Allow the tree to photosynthesize and develop.
+5. Harvest available money leaves.
+6. Use harvested money to purchase additional resources.
+7. Pay personal expenses.
+8. Monitor the tree's health and energy reserves.
+9. Adapt to weather and seasonal changes.
+
+### 3.2 Midgame Gameplay
+
+1. Improve biological production through research and equipment.
+2. Purchase additional land.
+3. Plant additional trees.
+4. Introduce automated irrigation and harvesting.
+5. Hire workers and establish businesses.
+6. Purchase equipment and manufacturing capacity.
+7. Manage operating expenses, pollution, and supply chains.
+8. Respond to market conditions and environmental changes.
+
+### 3.3 Endgame Gameplay
+
+1. Manage a diversified business portfolio.
+2. Own multiple levels of supply chains.
+3. Influence regional and global markets.
+4. Invest in or exploit natural resources.
+5. Influence governments and environmental regulations.
+6. Manage global environmental conditions.
+7. Pursue personal and global objectives.
+
+The original tree remains visible throughout every stage.
+
+---
+
+## 4. Time and World Simulation
+
+### 4.1 Time System
+
+The game operates on a continuous simulation clock.
+
+It includes:
+
+- Day and night.
+- Four seasons.
+- Weather changes.
+- Seasonal biological cycles.
+- Long-term climate patterns.
+- Offline progression.
+
+Players can adjust simulation speed.
+
+Proposed initial speeds:
+
+| Setting | Simulation speed |
+|---|---|
+| Paused | No simulation |
+| 1x | Normal simulation |
+| 5x | Five times normal |
+| 15x | Fifteen times normal |
+| 60x | Sixty times normal |
+
+These are initial configuration options, not final balance decisions.
+
+### 4.2 Offline Progression
+
+The simulation continues conceptually while the player is away.
+
+When returning, the game calculates elapsed time and processes relevant biological, environmental, and economic events.
+
+Offline progression must account for:
+
+- Resource availability.
+- Water consumption.
+- Nutrient depletion.
+- Photosynthesis.
+- Energy reserves.
+- Seasonal transitions.
+- Weather.
+- Automation.
+- Personal expenses.
+- Business operations.
+- Market fluctuations.
+
+Offline progression must not simply multiply production rates by elapsed time.
+
+### 4.3 Weather
+
+Initial weather events:
+
+- Sunny conditions.
+- Cloud cover.
+- Rain.
+- Heavy rain.
+- Drought.
+- Frost.
+- Heat waves.
+- Wind.
+- Severe storms.
+
+Weather influences biological growth, water availability, leaf production, energy consumption, and physical damage.
+
+### 4.4 Seasons
+
+Each season affects the tree differently.
+
+**Spring**
+- Bud development.
+- New leaf production.
+- Increased nutrient demand.
+- Vulnerability to late frost.
+
+**Summer**
+- Active photosynthesis.
+- High water requirements.
+- Continued growth.
+- Increased drought risk.
+
+**Autumn**
+- Reduced growth.
+- Leaf aging and senescence.
+- Preparation for dormancy.
+- Potential harvesting opportunities.
+
+**Winter**
+- Dormancy for deciduous species.
+- Minimal or no new foliage.
+- Reduced metabolic activity.
+- Dependence on stored energy.
+- Frost and storm exposure.
+
+Seasonal behavior should depend on the selected species and environmental conditions.
+
+---
+
+## 5. Tree Biology
+
+### 5.1 Biological Attributes
+
+Each tree has independently tracked biological characteristics.
+
+| Attribute | Description |
+|---|---|
+| Age | Time since planting |
+| Height | Vertical development |
+| Trunk diameter | Structural development |
+| Branch development | Available canopy structure |
+| Leaf count | Current foliage |
+| Leaf capacity | Maximum supported foliage |
+| Root development | Water and nutrient absorption capacity |
+| Energy reserves | Stored energy for survival and recovery |
+| Water reserves | Internal water availability |
+| Nutrient status | Availability of essential nutrients |
+| Soil condition | Quality of the surrounding growing medium |
+| Structural integrity | Resistance to physical damage |
+| Biological stress | Accumulated physiological stress |
+| Overall health | Derived condition indicator |
+
+Overall health should be calculated from underlying biological factors rather than serving as an independent magic statistic.
+
+### 5.2 Photosynthesis
+
+Leaves capture solar energy and convert it into chemical energy.
+
+Photosynthetic production depends on:
+
+- Active leaf area.
+- Light availability.
+- Temperature.
+- Water availability.
+- Carbon dioxide availability.
+- Nutrient status.
+- Leaf health.
+
+Photosynthetic energy is allocated to:
+
+1. Maintenance and respiration.
+2. Root development.
+3. Trunk and branch growth.
+4. New leaf production.
+5. Reproductive development where applicable.
+6. Energy reserves.
+
+The player cannot harvest energy that the tree has not biologically produced.
+
+### 5.3 Energy Reserves
+
+Energy reserves are one of the most important mechanics.
+
+A tree stores energy that can be used during periods of limited photosynthesis or severe foliage loss.
+
+Young trees have relatively small reserves.
+
+Mature, healthy trees can accumulate larger reserves.
+
+Energy reserves are consumed by:
+
+- Maintenance.
+- Recovery.
+- New leaf production.
+- Stress responses.
+- Seasonal survival.
+
+Repeated defoliation reduces reserves and can eventually kill the tree.
+
+A mature tree may survive losing nearly all foliage in one season but suffer serious consequences if the event repeats.
+
+### 5.4 Harvesting
+
+Leaves are physical banknotes.
+
+Harvesting removes foliage and therefore reduces photosynthetic capacity.
+
+Each harvested leaf has:
+
+- A monetary denomination.
+- A biological energy cost.
+- A contribution to the tree's current foliage reduction.
+
+The player can manually harvest leaves or use automated equipment.
+
+Harvesting decisions must account for the tree's age, energy reserves, season, current health, and expected recovery time.
+
+The game should expose an estimated sustainable harvest level without forcing the player to follow it.
+
+### 5.5 Tree Maturity
+
+Trees approach a species-specific biological maturity.
+
+Mature trees experience reduced structural growth but can remain productive and healthy.
+
+Maturity is not a failure state.
+
+A mature tree should be capable of maintaining itself for extended periods when environmental conditions are appropriate.
+
+### 5.6 Tree Death
+
+Tree death can result from:
+
+- Repeated severe defoliation.
+- Exhausted energy reserves.
+- Severe drought.
+- Prolonged nutrient deficiencies.
+- Disease.
+- Pest damage.
+- Physical destruction.
+- Extreme environmental conditions.
+
+The original tree's death does not erase it from the game.
+
+It remains as a permanent stump, dead trunk, or other appropriate representation of its final condition.
+
+The player can continue playing and establish new generations, but the original tree cannot be replaced.
+
+---
+
+## 6. Money and Currency
+
+### 6.1 Physical Currency
+
+Money physically grows as leaves.
+
+The player can select the visual appearance and denomination style of their currency.
+
+Currency cosmetics may include:
+
+- Banknote design.
+- Denomination.
+- Symbols.
+- Colors.
+- Portraits or illustrations.
+- Currency-specific tree decorations.
+
+The initial simulation should use one consistent underlying monetary unit. Cosmetic currency selection must not create unintended economic advantages.
+
+Additional currency systems can be introduced later.
+
+### 6.2 Central Monetary Authority
+
+The world contains a central monetary authority that regulates currency production.
+
+It controls monetary issuance and influences the broader money supply through monetary policy.
+
+The tree's money production must interact with the central monetary system.
+
+The monetary authority may eventually introduce:
+
+- Issuance limits.
+- Interest rate changes.
+- Inflation controls.
+- Monetary interventions.
+- Currency reforms.
+- Economic stabilization policies.
+
+### 6.3 Inflation
+
+Inflation affects:
+
+- Food.
+- Housing.
+- Utilities.
+- Labor.
+- Fertilizer.
+- Equipment.
+- Land.
+- Services.
+
+The player should experience the difference between nominal income growth and actual purchasing power.
+
+Increasing the number of banknotes does not necessarily increase real wealth.
+
+---
+
+## 7. Personal Economy and Well-Being
+
+### 7.1 Personal Expenses
+
+The player must cover recurring living expenses.
+
+Initial categories:
+
+- Food.
+- Housing.
+- Utilities.
+- Healthcare.
+- Transportation.
+
+Expenses create pressure to harvest leaves and generate income.
+
+### 7.2 Personal Attributes
+
+Three primary indicators:
+
+**Financial security**
+
+Measures the player's ability to maintain their lifestyle and meet obligations.
+
+**Physical health**
+
+Influenced by nutrition, housing, environmental exposure, pollution, and stress.
+
+**Happiness**
+
+Influenced by financial security, leisure, relationships, environmental surroundings, and accumulated stress.
+
+### 7.3 Wealth and Diminishing Returns
+
+Wealth should improve quality of life, but with diminishing returns.
+
+The difference between poverty and financial security should be substantial.
+
+The difference between being wealthy and extraordinarily wealthy should be considerably smaller.
+
+A player can become extremely rich while remaining unhappy or unhealthy.
+
+Financial independence should be achievable without endless expansion.
+
+---
+
+## 8. Business and Economic Simulation
+
+### 8.1 Financial Separation
+
+The game distinguishes:
+
+- Personal cash.
+- Business cash.
+- Business assets.
+- Business liabilities.
+- Personal assets and liabilities.
+- Consolidated net worth.
+
+Money transferred from one owned business to another remains within the player's consolidated business group.
+
+However, operating costs, wages, taxes, resource consumption, and external payments still have real economic consequences.
+
+Ownership does not make resources free.
+
+### 8.2 Supply Chains
+
+Businesses can eventually own multiple levels of production.
+
+Example fertilizer supply chain:
+
+1. Raw material extraction.
+2. Chemical production.
+3. Fertilizer manufacturing.
+4. Distribution.
+5. Retail.
+6. Agricultural application.
+
+The player can own some or all of these businesses.
+
+Vertical integration provides greater control over costs and supply but requires capital, management, infrastructure, and resources.
+
+### 8.3 Economic Organizations
+
+The player can establish or transition between:
+
+- Sole proprietorships.
+- Corporations.
+- Cooperatives.
+- Sustainable enterprises.
+- Non-profit organizations.
+- State-owned enterprises.
+
+Each organizational structure introduces different incentives, restrictions, financing options, and decision-making systems.
+
+### 8.4 Growth Pressure
+
+The game introduces pressure to increase economic output.
+
+Sources include:
+
+- Inflation.
+- Debt and interest.
+- Shareholder expectations.
+- Competition.
+- Corporate valuation.
+- Market demand.
+- Labor costs.
+- Investment requirements.
+
+A stable business may be financially successful while being considered unsuccessful by investors expecting perpetual growth.
+
+### 8.5 Market Simulation
+
+Prices fluctuate based on supply, demand, scarcity, production costs, and monetary conditions.
+
+Initial markets:
+
+- Water.
+- Fertilizer.
+- Seeds.
+- Equipment.
+- Food.
+- Energy.
+- Labor.
+- Land.
+
+Markets should eventually operate at regional and global scales.
+
+---
+
+## 9. Automation and Technology
+
+Automation gradually removes manual interactions.
+
+Initial automation:
+
+- Automatic watering.
+- Automatic fertilizing.
+- Automatic harvesting.
+- Environmental monitoring.
+
+Advanced automation:
+
+- Industrial irrigation.
+- Mechanical harvesting.
+- Autonomous equipment.
+- Automated manufacturing.
+- AI-managed supply chains.
+- Global production optimization.
+
+Automation requires capital, infrastructure, energy, maintenance, and sometimes specialized labor.
+
+### 9.1 Environmental Impact
+
+Automation can introduce:
+
+- Electricity consumption.
+- Fossil fuel consumption.
+- Manufacturing emissions.
+- Resource extraction.
+- Land disruption.
+- Chemical pollution.
+- Water consumption.
+
+Efficiency improvements can reduce environmental impact per unit of production while increasing total production.
+
+The game should model this distinction.
+
+---
+
+## 10. Environmental Simulation
+
+The environment consists of interconnected indicators.
+
+### 10.1 Global Indicators
+
+| Indicator | Principal influences |
+|---|---|
+| Atmospheric carbon | Emissions, sequestration, land use |
+| Soil health | Nutrient cycles, erosion, contamination, regeneration |
+| Freshwater availability | Precipitation, extraction, pollution, consumption |
+| Biodiversity | Habitat, fragmentation, pollution, climate |
+| Forest coverage | Deforestation, planting, growth, fires |
+| Ecosystem resilience | Biodiversity, habitat quality, ecosystem connectivity |
+| Global temperature | Greenhouse gases and climate processes |
+
+Additional indicators may include:
+
+- Air quality.
+- Ocean health.
+- Wetland coverage.
+- Species extinction.
+- Groundwater levels.
+- Nutrient runoff.
+- Land degradation.
+
+### 10.2 Regional Environments
+
+Global indicators must be derived from regional conditions.
+
+Regions should have their own:
+
+- Climate.
+- Soil composition.
+- Water availability.
+- Biodiversity.
+- Forest coverage.
+- Industrial activity.
+- Pollution.
+- Environmental vulnerabilities.
+
+A healthy global average must not conceal a collapsing local ecosystem.
+
+### 10.3 Environmental Feedback
+
+Environmental damage should create secondary consequences.
+
+Examples:
+
+- Deforestation increases erosion and reduces habitat.
+- Soil degradation reduces agricultural productivity.
+- Water scarcity increases resource prices.
+- Biodiversity loss reduces ecosystem resilience.
+- Increased greenhouse gas concentrations influence climate.
+- Climate disruption increases drought, heat, and extreme weather risks.
+
+Environmental recovery is possible, but the time and resources required should depend on the severity and type of damage.
+
+Some losses, particularly species extinction, are irreversible within the current world.
+
+---
+
+## 11. Progression and Generations
+
+### 11.1 Expansion
+
+The player progresses from one tree to:
+
+- Additional trees.
+- Multiple species.
+- Larger properties.
+- Commercial forestry.
+- Regional businesses.
+- Global operations.
+
+### 11.2 Genetic Legacy
+
+When establishing new generations, the player can preserve genetic material from previous trees.
+
+Genetic Legacy is a potential prestige currency.
+
+It unlocks genetic modifications and inherited characteristics.
+
+Possible traits:
+
+| Trait | Benefit | Trade-off |
+|---|---|---|
+| Rapid growth | Faster development | Higher resource demand |
+| Large foliage | Higher potential production | Higher water requirements |
+| Deep roots | Drought resistance | Slower early development |
+| Thick trunk | Greater reserves | Slower structural growth |
+| Pest resistance | Reduced vulnerability | Potential growth trade-off |
+| Cold resistance | Better frost survival | Reduced warm-climate performance |
+| Efficient photosynthesis | Greater energy production | Possible reduced maximum growth |
+
+Genetic modifications should have meaningful trade-offs.
+
+The original tree's lineage should remain identifiable.
+
+### 11.3 Prestige
+
+Prestige should represent generational progress rather than simply resetting the game for a numerical multiplier.
+
+Potential rewards:
+
+- Genetic material.
+- New species.
+- New starting environments.
+- Inherited traits.
+- Research advantages.
+- Historical records.
+
+The original tree remains permanently represented in the player's history.
+
+---
+
+## 12. Player Objectives and Endings
+
+The game has no mandatory ending.
+
+Potential objectives:
+
+**The Wealthiest Being**
+Accumulate extraordinary wealth and control a significant portion of the global economy.
+
+**The Great Restoration**
+Restore biodiversity, forests, soil, and ecosystem resilience.
+
+**The Last Tree**
+Pursue complete environmental destruction and maximize extraction.
+
+**The Natural Balance**
+Maintain the original tree, achieve financial independence, and establish a self-sustaining ecosystem.
+
+**The Industrial Empire**
+Own the major levels of global supply chains.
+
+**The Generational Legacy**
+Develop a successful genetic lineage across multiple generations.
+
+These objectives should be tracked independently and may overlap.
+
+The player can pursue several objectives in the same playthrough.
+
+---
+
+## 13. User Interface and Presentation
+
+### 13.1 Main Game Screen
+
+The original tree is the dominant visual element.
+
+The surrounding environment reflects actual simulation conditions.
+
+The main interface should expose:
+
+- Current money.
+- Personal expenses.
+- Tree condition.
+- Available resources.
+- Current weather.
+- Season and time.
+- Active automation.
+- Major environmental warnings.
+
+### 13.2 Simplified View
+
+The default interface should use understandable summaries.
+
+Players should not need to understand photosynthetic efficiency, carbon flux, or nutrient ratios to play.
+
+### 13.3 Advanced View
+
+An optional advanced interface exposes:
+
+- Biological formulas and variables.
+- Energy production and allocation.
+- Root and soil conditions.
+- Nutrient concentrations.
+- Water balance.
+- Environmental data.
+- Economic transactions.
+- Production efficiency.
+- Pollution sources.
+- Historical trends.
+
+The advanced interface should explain relationships, not merely display more numbers.
+
+### 13.4 Tree Visualization
+
+Tree appearance should respond to:
+
+- Age.
+- Species.
+- Height.
+- Trunk diameter.
+- Branch structure.
+- Foliage density.
+- Leaf condition.
+- Physical damage.
+- Seasonal state.
+
+The surrounding environment responds to:
+
+- Soil quality.
+- Water conditions.
+- Pollution.
+- Biodiversity.
+- Wildlife populations.
+- Climate.
+
+### 13.5 Notifications
+
+Notifications should prioritize actionable events.
+
+Examples:
+
+- Tree water reserves critically low.
+- Energy reserves declining.
+- Late frost forecast.
+- Harvesting is exceeding sustainable levels.
+- Loan payment due.
+- Soil quality deteriorating.
+- Local biodiversity declining.
+- Automation equipment malfunctioning.
+
+---
+
+## 14. Monetization and Cosmetics
+
+Potential cosmetic options:
+
+- Currency designs.
+- Banknote appearances.
+- Tree species appearances.
+- Foliage colors.
+- Environmental visual themes.
+- UI themes.
+- Seasonal decorations.
+
+Cosmetics must not provide gameplay advantages.
+
+The selected currency appearance should affect the physical look of the leaves and banknotes.
+
+No monetization decisions are finalized.
+
+---
+
+## 15. Initial Development Scope
+
+### First Playable Prototype
+
+The first prototype should include:
+
+1. One sapling.
+2. One environment.
+3. Basic day/night and seasonal simulation.
+4. Water and fertilizer.
+5. Biological growth.
+6. Energy reserves.
+7. Physical money leaves.
+8. Manual harvesting.
+9. Basic currency management.
+10. Personal expenses.
+11. Weather events.
+12. Save/load functionality.
+13. Offline progression.
+14. A visual tree that responds to the simulation.
+
+### Post-Prototype
+
+Add:
+
+- Additional tree species.
+- Advanced biology.
+- Soil composition.
+- More detailed weather.
+- Environmental indicators.
+- Research.
+- Basic automation.
+- Additional land.
+- Multiple trees.
+
+### Long-Term Development
+
+Add:
+
+- Business ownership.
+- Supply chains.
+- Central banking.
+- Dynamic markets.
+- Global environmental simulation.
+- Governments.
+- International trade.
+- Genetic generations.
+- Player-defined global objectives.
+
+---
+
+## 16. Design Constraints
+
+The following principles should remain consistent throughout development:
+
+1. The original tree cannot be sold.
+2. The original tree cannot be replaced.
+3. Tree death does not automatically end the game.
+4. Physical money leaves represent real currency.
+5. Currency issuance is regulated by a central monetary authority.
+6. Money flows through the economy.
+7. Business ownership does not eliminate operating costs.
+8. Environmental systems influence one another.
+9. Biological systems must remain internally consistent.
+10. Automation must have meaningful costs and consequences.
+11. The player can pursue destructive economic strategies.
+12. Sustainability must be economically viable.
+13. The main game screen always retains the original tree as its focal point.
+14. Advanced simulation details remain accessible without being mandatory.
+
+---
+
+## 17. Unresolved Design Decisions
+
+The following items require balancing or further design work:
+
+- Exact real-time-to-simulation-time relationship.
+- Initial tree species.
+- Starting currency and initial living expenses.
+- Initial leaf denomination and production rules.
+- Detailed photosynthesis and energy allocation equations.
+- Maximum harvesting rates.
+- Currency issuance mechanics and monetary policy.
+- Exact inflation model.
+- Environmental recovery timescales.
+- Regional simulation granularity.
+- Genetic Legacy calculation.
+- Business valuation model.
+- Multiplayer or single-player scope.
+- Final monetization model.
+
+These should be resolved through simulation prototypes and playtesting rather than arbitrary initial assumptions.

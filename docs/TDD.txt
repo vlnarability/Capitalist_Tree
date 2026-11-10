@@ -1,0 +1,1493 @@
+# TECHNICAL DESIGN DOCUMENT
+## Working Title: The Capitalist Tree
+**Version:** 0.1  
+**Date:** November 9, 2026  
+**Status:** Initial Technical Architecture  
+**Primary Stack:** Next.js, React, TypeScript  
+**Potential Future Engine:** Godot
+
+---
+
+## 1. Technical Objectives
+
+The technical architecture must support a game that begins as a relatively simple incremental experience and gradually develops into a complex simulation.
+
+The most important technical requirement is separation between simulation logic and presentation.
+
+The simulation must not depend on Next.js, React, browser APIs, or a specific rendering engine.
+
+This will allow the initial web implementation to evolve without requiring the entire game to be rewritten.
+
+### Primary objectives
+
+1. Maintain a deterministic, testable simulation engine.
+2. Separate biological, economic, environmental, and time systems.
+3. Support adjustable simulation speeds.
+4. Support accurate offline progression.
+5. Support persistent world state and historical records.
+6. Allow complex systems to be added incrementally.
+7. Support both simplified and advanced interfaces.
+8. Keep rendering independent of simulation calculations.
+9. Support a future Godot implementation.
+10. Avoid premature infrastructure complexity.
+
+---
+
+## 2. Technology Stack
+
+### Initial Stack
+
+| Component | Technology | Responsibility |
+|---|---|---|
+| Framework | Next.js | Web application |
+| Language | TypeScript | Application and simulation logic |
+| UI | React | Interface components |
+| Styling | Tailwind CSS | UI styling |
+| State management | Zustand or equivalent | Client-side application state |
+| Visualization | Canvas / SVG | Tree and environmental rendering |
+| Persistence | IndexedDB initially | Local game saves |
+| Validation | Zod | State and data validation |
+| Testing | Vitest | Unit and integration tests |
+| Version control | Git / GitHub | Source management |
+| Deployment | Vercel or equivalent | Web hosting |
+
+Specific libraries are subject to change.
+
+The simulation package should not depend on any UI or application framework.
+
+### Future Godot Compatibility
+
+Godot is not natively able to import an ordinary TypeScript package as a game engine module.
+
+Therefore, the initial architecture should establish:
+
+- Engine-independent simulation rules.
+- Explicit state schemas.
+- Versioned serialization.
+- Deterministic calculations.
+- Testable system interfaces.
+- Clearly defined simulation events.
+
+A future Godot implementation can port the simulation rules to GDScript or C#, or use a separately maintained simulation service or WebAssembly implementation if appropriate.
+
+The initial project should not introduce unnecessary cross-engine infrastructure solely to anticipate this migration.
+
+---
+
+## 3. Repository Structure
+
+Proposed monorepo:
+
+```text
+capitalist-tree/
+│
+├── apps/
+│   └── web/
+│       ├── app/
+│       ├── components/
+│       │   ├── game/
+│       │   ├── tree/
+│       │   ├── dashboard/
+│       │   ├── economy/
+│       │   └── environment/
+│       ├── hooks/
+│       ├── stores/
+│       └── public/
+│
+├── packages/
+│   │
+│   ├── simulation/
+│   │   ├── src/
+│   │   │   ├── biology/
+│   │   │   ├── resources/
+│   │   │   ├── weather/
+│   │   │   ├── environment/
+│   │   │   ├── economy/
+│   │   │   ├── business/
+│   │   │   ├── automation/
+│   │   │   ├── time/
+│   │   │   ├── events/
+│   │   │   ├── systems/
+│   │   │   └── simulation.ts
+│   │   └── tests/
+│   │
+│   ├── shared/
+│   │   ├── types/
+│   │   ├── constants/
+│   │   ├── schemas/
+│   │   ├── serialization/
+│   │   └── utilities/
+│   │
+│   ├── rendering/
+│   │   └── tree/
+│   │
+│   └── content/
+│       ├── species/
+│       ├── fertilizers/
+│       ├── equipment/
+│       ├── weather/
+│       └── upgrades/
+│
+├── docs/
+│   ├── GDD.md
+│   ├── TDD.md
+│   ├── biology.md
+│   ├── economy.md
+│   └── simulation.md
+│
+├── package.json
+├── tsconfig.json
+└── README.md
+```
+
+### Architectural Rule
+
+`packages/simulation` must never import from `apps/web`.
+
+The web application consumes simulation functionality, but the simulation must not know that a web application exists.
+
+---
+
+## 4. Simulation Architecture
+
+### 4.1 Overview
+
+The simulation engine maintains the complete game state and advances it through discrete time steps.
+
+The primary interface should be conceptually:
+
+```typescript
+interface SimulationEngine {
+  initialize(config: GameConfig): GameState;
+
+  advance(
+    state: GameState,
+    elapsedSeconds: number
+  ): SimulationResult;
+
+  executeAction(
+    state: GameState,
+    action: GameAction
+  ): SimulationResult;
+}
+```
+
+The simulation should be a pure state transformation wherever practical.
+
+It receives a previous state and a set of elapsed simulation time or player actions, then produces an updated state and relevant events.
+
+Randomness must be controlled through an explicit seeded random-number generator.
+
+This enables reproducible tests and consistent offline calculations.
+
+### 4.2 Simulation Systems
+
+The simulation should be divided into independent systems.
+
+| System | Responsibility |
+|---|---|
+| TimeSystem | Time, day/night, seasons |
+| WeatherSystem | Weather generation and transitions |
+| BiologySystem | Tree growth and physiology |
+| ResourceSystem | Water, nutrients, soil |
+| HarvestSystem | Leaf removal and currency production |
+| EconomySystem | Money, prices, transactions |
+| PersonalSystem | Expenses, health, happiness |
+| BusinessSystem | Businesses, ownership, liabilities |
+| AutomationSystem | Equipment and automated actions |
+| EnvironmentSystem | Global and regional environmental changes |
+| ProgressionSystem | Research, genetics, achievements |
+| EventSystem | Simulation events and consequences |
+
+Each system should expose clearly defined inputs and outputs.
+
+Systems should not directly manipulate unrelated parts of the state without going through an established interface.
+
+---
+
+## 5. Game State and Data Models
+
+The following are initial conceptual TypeScript structures. They are intended to establish the data model, not prescribe every final field.
+
+### 5.1 Root Game State
+
+```typescript
+interface GameState {
+  metadata: GameMetadata;
+
+  clock: SimulationClock;
+
+  player: PlayerState;
+
+  originalTree: TreeState;
+
+  world: WorldState;
+
+  economy: EconomyState;
+
+  businesses: BusinessState[];
+
+  inventory: InventoryState;
+
+  automation: AutomationState[];
+
+  progression: ProgressionState;
+
+  history: HistoricalState;
+}
+```
+
+The original tree is explicitly separated from additional trees.
+
+This reinforces its special status and prevents accidental treatment as an ordinary business asset.
+
+### 5.2 Game Metadata
+
+```typescript
+interface GameMetadata {
+  saveId: string;
+
+  version: number;
+
+  createdAt: number;
+
+  lastSavedAt: number;
+
+  lastSimulatedAt: number;
+
+  randomSeed: number;
+
+  simulationVersion: number;
+}
+```
+
+Timestamps should use Unix milliseconds.
+
+The random seed allows deterministic weather and other stochastic events.
+
+### 5.3 Player State
+
+```typescript
+interface PlayerState {
+  personalCash: number;
+
+  assets: number;
+
+  liabilities: number;
+
+  health: number;
+
+  happiness: number;
+
+  financialSecurity: number;
+
+  livingExpenses: LivingExpenses;
+
+  employment?: EmploymentState;
+}
+```
+
+Personal and business finances must remain separate.
+
+### 5.4 Tree State
+
+```typescript
+interface TreeState {
+  id: string;
+
+  speciesId: string;
+
+  isOriginal: boolean;
+
+  ageDays: number;
+
+  alive: boolean;
+
+  structure: {
+    height: number;
+
+    trunkDiameter: number;
+
+    branchDevelopment: number;
+
+    structuralIntegrity: number;
+  };
+
+  foliage: {
+    currentLeaves: number;
+
+    leafCapacity: number;
+
+    activeLeafArea: number;
+
+    seasonalCondition: number;
+  };
+
+  roots: {
+    development: number;
+
+    absorptionCapacity: number;
+  };
+
+  energy: {
+    reserves: number;
+
+    production: number;
+
+    consumption: number;
+  };
+
+  water: {
+    stored: number;
+
+    capacity: number;
+  };
+
+  nutrients: NutrientState;
+
+  health: number;
+
+  stress: number;
+
+  damage: TreeDamageState[];
+}
+```
+
+Additional biological variables should be introduced as the simulation becomes more sophisticated.
+
+### 5.5 Environmental State
+
+```typescript
+interface EnvironmentState {
+  atmosphere: {
+    co2Concentration: number;
+    emissions: number;
+    sequestration: number;
+  };
+
+  soil: {
+    health: number;
+    organicMatter: number;
+    contamination: number;
+    nutrients: NutrientState;
+  };
+
+  freshwater: {
+    availability: number;
+    groundwater: number;
+    contamination: number;
+  };
+
+  biodiversity: {
+    index: number;
+    speciesPopulations: SpeciesPopulation[];
+  };
+
+  forestCoverage: number;
+
+  ecosystemResilience: number;
+
+  globalTemperature: number;
+}
+```
+
+Regional environments should eventually use the same conceptual structure, with global indicators calculated from regional conditions.
+
+### 5.6 Economic State
+
+```typescript
+interface EconomyState {
+  monetarySupply: number;
+
+  inflationRate: number;
+
+  interestRate: number;
+
+  monetaryAuthority: MonetaryAuthorityState;
+
+  markets: MarketState[];
+
+  transactions: TransactionRecord[];
+}
+```
+
+### 5.7 Business State
+
+```typescript
+interface BusinessState {
+  id: string;
+
+  name: string;
+
+  type: string;
+
+  ownership: OwnershipState;
+
+  cash: number;
+
+  assets: BusinessAsset[];
+
+  liabilities: Liability[];
+
+  revenue: number;
+
+  expenses: number;
+
+  valuation: number;
+
+  employees: number;
+
+  production: ProductionState;
+}
+```
+
+Business valuation must remain separate from available cash.
+
+An increase in asset valuation does not automatically generate spendable money.
+
+---
+
+## 6. Time Engine
+
+### 6.1 Simulation Clock
+
+The simulation uses an internal clock independent of the operating system clock.
+
+```typescript
+interface SimulationClock {
+  elapsedSeconds: number;
+
+  day: number;
+
+  season: Season;
+
+  timeOfDay: number;
+
+  speedMultiplier: number;
+
+  paused: boolean;
+}
+```
+
+The internal clock advances according to simulation speed.
+
+The operating system timestamp is used to calculate offline elapsed time, not to directly determine every biological event.
+
+### 6.2 Fixed Timestep
+
+Use a fixed simulation timestep to avoid inconsistent calculations caused by varying browser frame rates.
+
+For the initial implementation, a reasonable starting point is one simulation update per in-game minute.
+
+This is a provisional engineering choice and should be benchmarked.
+
+Rendering can operate independently at the browser's normal frame rate.
+
+The simulation must never depend on the number of frames rendered.
+
+### 6.3 Simulation Accumulator
+
+The application maintains accumulated elapsed simulation time.
+
+Conceptually:
+
+```typescript
+accumulator += realElapsedSeconds * speedMultiplier;
+
+while (accumulator >= SIMULATION_STEP) {
+  state = advanceOneStep(state);
+
+  accumulator -= SIMULATION_STEP;
+}
+```
+
+For long offline periods, the engine should use a dedicated catch-up processor rather than executing millions of individual browser updates.
+
+### 6.4 Event Scheduling
+
+Certain events do not need to be recalculated every simulation minute.
+
+Examples:
+
+- Seasonal transitions.
+- Scheduled bills.
+- Loan payments.
+- Equipment maintenance.
+- Market reviews.
+- Scheduled harvesting.
+
+These should use an event scheduler.
+
+Continuous biological processes and discrete scheduled events must be handled separately.
+
+---
+
+## 7. Biological Simulation
+
+### 7.1 General Model
+
+The biological system should use interconnected variables rather than arbitrary independent growth timers.
+
+The primary relationship is:
+
+```text
+Environmental conditions
+        |
+        v
+Resource availability
+        |
+        v
+Photosynthetic production
+        |
+        v
+Energy allocation
+        |
+        v
+Maintenance / Growth / Reserves
+        |
+        v
+Future biological condition
+```
+
+### 7.2 Photosynthesis
+
+A conceptual photosynthesis function:
+
+```typescript
+function calculatePhotosynthesis(
+  tree: TreeState,
+  environment: EnvironmentState,
+  weather: WeatherState,
+  timestep: number
+): number;
+```
+
+Production depends on:
+
+- Active leaf area.
+- Light intensity.
+- Temperature.
+- Water availability.
+- Carbon dioxide.
+- Nutrient availability.
+- Leaf health.
+
+The model should include limiting factors.
+
+Increasing fertilizer should not produce unlimited growth if water, light, or another essential factor is insufficient.
+
+### 7.3 Energy Allocation
+
+Photosynthetic production is distributed among several demands.
+
+```typescript
+interface EnergyAllocation {
+  maintenance: number;
+
+  rootGrowth: number;
+
+  trunkGrowth: number;
+
+  branchGrowth: number;
+
+  leafGrowth: number;
+
+  reproduction: number;
+
+  reserveStorage: number;
+}
+```
+
+Allocation priorities should depend on species, season, age, health, and stress.
+
+The initial model should prioritize survival and maintenance before discretionary growth.
+
+### 7.4 Energy Reserves
+
+The reserve system tracks accumulated stored energy.
+
+Conceptually:
+
+```text
+New reserves =
+  Previous reserves
+  + Stored photosynthetic energy
+  - Maintenance consumption
+  - Recovery consumption
+  - Other metabolic costs
+```
+
+Reserve capacity should increase with tree development and species characteristics.
+
+Reserve depletion should increase mortality risk.
+
+### 7.5 Harvesting
+
+Harvesting removes physical foliage.
+
+```typescript
+function harvestLeaves(
+  tree: TreeState,
+  requestedAmount: number
+): HarvestResult;
+```
+
+The result should include:
+
+- Actual leaves removed.
+- Currency generated.
+- Remaining foliage.
+- Change in photosynthetic capacity.
+- Immediate biological stress.
+- Updated harvest history.
+
+Harvesting must be constrained by available foliage.
+
+The simulation should not permit negative leaf counts or generate money from nonexistent leaves.
+
+### 7.6 Growth and Maturity
+
+Growth rates should respond to:
+
+- Age.
+- Genetics.
+- Energy availability.
+- Nutrient availability.
+- Water availability.
+- Seasonal conditions.
+- Environmental stress.
+
+Growth should approach a species-specific biological ceiling.
+
+Mature trees should retain maintenance and production functions even when structural growth becomes minimal.
+
+### 7.7 Species Configuration
+
+Tree species should be data-driven.
+
+Example:
+
+```typescript
+interface TreeSpecies {
+  id: string;
+
+  name: string;
+
+  growthRate: number;
+
+  matureAgeDays: number;
+
+  maximumHeight: number;
+
+  rootDevelopmentRate: number;
+
+  reserveCapacity: number;
+
+  waterRequirement: number;
+
+  nutrientRequirement: NutrientState;
+
+  temperatureRange: {
+    minimum: number;
+    optimum: number;
+    maximum: number;
+  };
+
+  deciduous: boolean;
+}
+```
+
+Species-specific configuration belongs in the content package, not hardcoded inside the biological engine.
+
+---
+
+## 8. Resource Simulation
+
+### 8.1 Water
+
+Water enters the system through:
+
+- Rainfall.
+- Irrigation.
+- Other available water sources.
+
+It leaves through:
+
+- Evaporation.
+- Drainage.
+- Plant uptake.
+- Runoff.
+
+Water availability should affect photosynthesis and physiological stress.
+
+### 8.2 Nutrients
+
+The initial nutrient model should include:
+
+- Nitrogen.
+- Phosphorus.
+- Potassium.
+
+Additional nutrients can be added later.
+
+Nutrients should be consumed, replenished, absorbed, and lost through environmental processes.
+
+Fertilizer should contain explicit nutrient compositions.
+
+### 8.3 Soil
+
+Soil health should be a derived condition supported by several underlying variables.
+
+Potential variables:
+
+- Organic matter.
+- Nutrient availability.
+- pH.
+- Moisture.
+- Compaction.
+- Contamination.
+- Microbial activity.
+
+Fertilizer should not be treated as an unconditional positive multiplier.
+
+Excessive or inappropriate application can damage soil or contaminate surrounding environments.
+
+---
+
+## 9. Weather and Climate
+
+### 9.1 Weather Generation
+
+Weather should use a seeded pseudo-random generator.
+
+Weather probability should depend on:
+
+- Season.
+- Region.
+- Temperature.
+- Climate conditions.
+- Long-term environmental changes.
+
+Weather events should be reproducible when given the same seed and simulation sequence.
+
+### 9.2 Climate Model
+
+Global temperature and atmospheric carbon should evolve over long periods.
+
+Regional weather patterns should be influenced by broader climate conditions.
+
+The initial game should use simplified, stable approximations rather than attempting to reproduce a complete climate model.
+
+### 9.3 Environmental Feedback
+
+Environmental systems should expose explicit input and output relationships.
+
+For example:
+
+```text
+Industrial emissions
+        |
+        v
+Atmospheric carbon
+        |
+        v
+Climate conditions
+        |
+        v
+Regional temperature and precipitation
+        |
+        v
+Tree growth and agricultural productivity
+```
+
+The same principle applies to biodiversity, soil degradation, water scarcity, and forest coverage.
+
+---
+
+## 10. Economic Engine
+
+### 10.1 Monetary Representation
+
+Use integer-based monetary accounting wherever practical.
+
+Floating-point arithmetic should not be used directly for financial balances if it can introduce rounding inconsistencies.
+
+Store monetary amounts in the smallest supported unit.
+
+For example, a currency with two decimal places stores $10.25 as 1025 minor units.
+
+Large values may require JavaScript `bigint` or a dedicated fixed-point representation.
+
+### 10.2 Currency Production
+
+A harvest transaction creates money through the tree's physical leaves.
+
+The transaction must interact with the monetary authority.
+
+```typescript
+interface CurrencyIssuanceRequest {
+  treeId: string;
+
+  amount: bigint;
+
+  currencyId: string;
+}
+```
+
+The monetary authority determines whether the issuance is authorized and how it affects the monetary supply.
+
+The implementation must distinguish:
+
+- Physical leaves currently attached to the tree.
+- Currency generated by harvesting.
+- Currency currently in circulation.
+- Currency held by the player.
+- Currency held by other economic participants.
+
+### 10.3 Monetary Authority
+
+The monetary authority maintains:
+
+- Monetary supply.
+- Issuance policy.
+- Interest rates.
+- Inflation targets.
+- Monetary adjustments.
+
+Currency production must be accounted for exactly once.
+
+Harvesting should not create duplicate money through repeated processing or save/load errors.
+
+### 10.4 Transactions
+
+All economic transfers should use a transaction system.
+
+```typescript
+interface TransactionRecord {
+  id: string;
+
+  timestamp: number;
+
+  sourceAccount: string;
+
+  destinationAccount: string;
+
+  amount: bigint;
+
+  category: string;
+
+  description: string;
+}
+```
+
+A transaction should:
+
+1. Validate the source balance.
+2. Validate the destination.
+3. Apply the transfer atomically.
+4. Record the transaction.
+5. Update relevant accounting summaries.
+
+Transactions should never silently destroy money.
+
+Money can leave circulation through explicit monetary operations such as taxation, fees, or central-bank interventions, but these must be recorded.
+
+### 10.5 Ownership and Internal Transfers
+
+Businesses should have separate accounts.
+
+If the player owns both a fertilizer manufacturer and a fertilizer retailer, a purchase transfers money between their accounts.
+
+At the consolidated group level, the internal transfer cancels out.
+
+However, the manufacturing process still consumes resources and incurs real costs.
+
+External payments include:
+
+- Employee wages.
+- External suppliers.
+- Taxes.
+- Utilities.
+- Interest paid outside the group.
+- Resource extraction costs.
+
+The accounting system should distinguish internal transactions from external cash flows.
+
+### 10.6 Inflation and Markets
+
+Market prices should respond to:
+
+- Supply.
+- Demand.
+- Production costs.
+- Resource scarcity.
+- Monetary conditions.
+- Regional conditions.
+
+Inflation should be calculated from an appropriate price index rather than applied as a universal multiplier to every item.
+
+---
+
+## 11. Personal and Business Accounting
+
+Maintain separate accounting ledgers for:
+
+- Player personal finances.
+- Individual businesses.
+- Consolidated business group.
+- Central monetary authority.
+- External economic participants.
+
+Business valuation should consider:
+
+- Assets.
+- Liabilities.
+- Profitability.
+- Cash flow.
+- Expected future performance.
+- Market conditions.
+
+Valuation must not be confused with liquidity.
+
+A business can have substantial assets and valuation while having very little available cash.
+
+The player should not be able to spend business valuation directly without selling assets, borrowing, or raising capital.
+
+---
+
+## 12. Automation Engine
+
+Automation should operate through configurable actions and schedules.
+
+Example:
+
+```typescript
+interface AutomationState {
+  id: string;
+
+  type: string;
+
+  enabled: boolean;
+
+  targetId: string;
+
+  schedule: AutomationSchedule;
+
+  resourceConsumption: ResourceCost[];
+
+  energyConsumption: number;
+
+  maintenanceCost: number;
+
+  environmentalImpact: EnvironmentalImpact;
+}
+```
+
+Automation actions should be processed by the simulation engine.
+
+The rendering layer should not execute automation independently.
+
+Automation systems must account for:
+
+- Input resources.
+- Output production.
+- Maintenance.
+- Energy consumption.
+- Environmental impact.
+- Operating costs.
+- Failure conditions.
+
+---
+
+## 13. Environmental Accounting
+
+Environmental impacts should be recorded by source.
+
+For example:
+
+```typescript
+interface EnvironmentalImpact {
+  carbonEmissions: number;
+
+  waterConsumption: number;
+
+  soilDegradation: number;
+
+  pollution: number;
+
+  landDisturbance: number;
+
+  biodiversityImpact: number;
+}
+```
+
+These values should represent the actual effects of actions rather than arbitrary penalties.
+
+Environmental impact should be accumulated into regional and global systems.
+
+Environmental restoration should also be modeled as an active process.
+
+Examples:
+
+- Reforestation.
+- Soil regeneration.
+- Wetland restoration.
+- Pollution cleanup.
+- Water conservation.
+- Habitat restoration.
+
+---
+
+## 14. Persistence and Save System
+
+### 14.1 Initial Persistence
+
+The first version should use local-first persistence.
+
+IndexedDB is appropriate for the initial browser implementation because the game state and historical records may become substantial.
+
+Avoid making the initial game dependent on a backend merely to save progress.
+
+### 14.2 Save Format
+
+A save should contain:
+
+- Complete game state.
+- Simulation timestamp.
+- Simulation version.
+- Random seed.
+- Player configuration.
+- Historical records.
+- Progression data.
+
+### 14.3 Versioning
+
+Every save must contain a schema version.
+
+When the data structure changes, migration functions should convert older saves to the latest supported version.
+
+Never assume that an existing player's save can be discarded when the game updates.
+
+### 14.4 Offline Progression
+
+On loading a save:
+
+1. Validate the save.
+2. Read the last simulation timestamp.
+3. Calculate elapsed real-world time.
+4. Determine the maximum allowed catch-up interval.
+5. Process simulation events.
+6. Update biological and economic state.
+7. Record relevant events.
+8. Save the updated state.
+
+The game should have safeguards against extreme offline catch-up periods and unreasonable system clock changes.
+
+If offline progression is later connected to a server-authoritative economy or multiplayer system, server timestamps must become authoritative.
+
+---
+
+## 15. Rendering Architecture
+
+### 15.1 Tree Rendering
+
+The tree should be rendered independently of the simulation.
+
+The rendering package receives tree data and translates it into visual properties.
+
+For example:
+
+```typescript
+interface TreeRenderData {
+  height: number;
+
+  trunkDiameter: number;
+
+  branchDevelopment: number;
+
+  foliageDensity: number;
+
+  foliageCondition: number;
+
+  seasonalAppearance: string;
+
+  damage: TreeDamageState[];
+}
+```
+
+The renderer should not decide whether the tree is healthy or how much energy it has.
+
+It simply displays the state supplied by the simulation.
+
+### 15.2 Environmental Rendering
+
+The environment renderer receives:
+
+- Soil condition.
+- Vegetation.
+- Biodiversity.
+- Weather.
+- Pollution.
+- Time of day.
+- Season.
+
+These inputs control the surrounding environment's appearance.
+
+### 15.3 Visual Implementation
+
+For the initial web version, use a rendering approach that supports:
+
+- Procedural tree structure.
+- Branch development.
+- Leaf generation.
+- Seasonal changes.
+- Leaf harvesting animations.
+- Weather effects.
+- Day/night transitions.
+
+Canvas or SVG can be used initially.
+
+The choice should be based on performance and rendering complexity rather than convenience alone.
+
+The rendering implementation should remain replaceable.
+
+### 15.4 Currency Cosmetics
+
+Currency appearance should be driven by configuration.
+
+```typescript
+interface CurrencyVisual {
+  id: string;
+
+  name: string;
+
+  symbol: string;
+
+  denominations: CurrencyDenomination[];
+
+  banknoteTheme: string;
+
+  leafAppearance: string;
+}
+```
+
+Cosmetic selection must not modify the underlying monetary value or simulation balance.
+
+---
+
+## 16. State Management and Application Architecture
+
+The application should distinguish between:
+
+**Simulation state**
+
+The authoritative game data produced by the simulation engine.
+
+**UI state**
+
+Interface-specific information such as:
+
+- Selected menu.
+- Open panels.
+- Advanced mode.
+- Display preferences.
+- Selected tree.
+- Tooltip visibility.
+
+UI state must not be stored inside the biological or economic simulation unless it affects actual gameplay.
+
+Zustand or a comparable state manager can coordinate the application interface.
+
+The simulation should update on a controlled schedule and publish state snapshots or relevant changes to the UI.
+
+Avoid forcing a full React re-render for every biological simulation step.
+
+---
+
+## 17. Performance and Scaling
+
+The game should initially optimize for a single tree.
+
+However, its architecture must eventually support many trees and interconnected systems.
+
+Potential optimization strategies:
+
+- Fixed simulation timesteps.
+- Event scheduling.
+- Region-based updates.
+- Aggregated offline calculations.
+- Cached derived statistics.
+- Selective UI updates.
+- Data-driven entity definitions.
+- Efficient historical data storage.
+
+Individual trees may eventually be simulated at different levels of detail.
+
+For example:
+
+- Original tree: Full biological simulation.
+- Nearby trees: Detailed simulation.
+- Distant trees: Aggregated regional simulation.
+
+This can reduce processing requirements without eliminating meaningful environmental interactions.
+
+---
+
+## 18. Testing Strategy
+
+Testing should be built alongside the simulation rather than postponed until the game is complete.
+
+### 18.1 Unit Tests
+
+**Biology**
+- Water deficiency reduces photosynthesis.
+- Reduced foliage reduces energy production.
+- Harvesting reduces leaf count.
+- Energy reserves decline when maintenance exceeds production.
+- Mature trees approach structural growth limits.
+- Repeated defoliation increases mortality risk.
+
+**Resources**
+- Water consumption cannot exceed available water.
+- Nutrient uptake cannot exceed availability.
+- Fertilizer application changes nutrient availability.
+- Excessive fertilizer can produce negative environmental effects.
+
+**Economy**
+- Transactions transfer money correctly.
+- Invalid transactions are rejected.
+- Internal transfers are correctly consolidated.
+- Business valuation does not increase available cash.
+- Currency issuance is accounted for exactly once.
+- Inflation changes purchasing power.
+
+**Environment**
+- Emissions affect atmospheric carbon.
+- Deforestation reduces forest coverage.
+- Habitat destruction affects biodiversity.
+- Restoration can improve environmental indicators.
+
+**Time**
+- Seasons transition correctly.
+- Simulation speed changes elapsed simulation time.
+- Pausing stops simulation progression.
+- Offline progression accounts for elapsed time.
+
+### 18.2 Integration Tests
+
+Test complete sequences rather than isolated functions.
+
+Examples:
+
+1. Grow a sapling into a mature tree.
+2. Harvest a significant portion of its leaves.
+3. Verify that energy production decreases.
+4. Verify that reserves begin compensating.
+5. Verify recovery when foliage returns.
+
+Another:
+
+1. Establish a fertilizer business.
+2. Purchase raw materials.
+3. Manufacture fertilizer.
+4. Sell fertilizer to an owned retailer.
+5. Apply fertilizer to a tree.
+6. Verify that money moves correctly through the business accounts.
+7. Verify that manufacturing and application affect the environment.
+
+### 18.3 Deterministic Tests
+
+Given:
+
+- The same initial game state.
+- The same random seed.
+- The same player actions.
+- The same simulation duration.
+
+The simulation should produce the same result.
+
+This is essential for debugging, balancing, offline calculations, and reproducibility.
+
+### 18.4 Invariant Tests
+
+Important rules should be continuously verified:
+
+- No negative leaf counts.
+- No negative resource balances.
+- No unauthorized currency creation.
+- No duplicate transaction processing.
+- No invalid ownership transfers.
+- No impossible tree state transitions.
+- No accidental sale or transfer of the original tree.
+- No direct modification of simulation state by rendering components.
+
+---
+
+## 19. Development Milestones
+
+### Milestone 1: Foundation
+
+- Set up Next.js and TypeScript.
+- Establish the monorepo.
+- Create simulation package.
+- Define game state.
+- Implement deterministic random generation.
+- Implement fixed timestep.
+- Establish local save/load.
+
+**Deliverable:** A running simulation with a persistent clock and basic game state.
+
+### Milestone 2: First Tree
+
+- Implement one tree species.
+- Implement water and nutrients.
+- Implement photosynthesis.
+- Implement energy reserves.
+- Implement growth and maturity.
+- Implement harvesting.
+- Implement tree death.
+
+**Deliverable:** A biologically functioning tree simulation.
+
+### Milestone 3: Main Game Interface
+
+- Create the main tree visualization.
+- Implement day/night.
+- Implement seasons.
+- Implement weather.
+- Implement resource controls.
+- Implement physical money leaves.
+- Add currency cosmetics.
+
+**Deliverable:** A playable first-tree experience.
+
+### Milestone 4: Personal Economy
+
+- Implement personal cash.
+- Implement food and housing expenses.
+- Implement basic markets.
+- Implement central currency issuance.
+- Implement personal well-being.
+- Add financial notifications.
+
+**Deliverable:** A functioning survival and financial loop.
+
+### Milestone 5: Offline and Automation
+
+- Implement offline catch-up.
+- Implement automated watering.
+- Implement automated fertilizing.
+- Implement automated harvesting.
+- Introduce energy consumption and pollution.
+
+**Deliverable:** A functioning idle game with automation.
+
+### Milestone 6: Environmental Simulation
+
+- Implement soil health.
+- Implement freshwater.
+- Implement biodiversity.
+- Implement atmospheric carbon.
+- Implement forest coverage.
+- Implement ecosystem resilience.
+- Implement environmental feedback.
+
+**Deliverable:** A functioning environmental management simulation.
+
+### Milestone 7: Expansion and Economy
+
+- Additional trees.
+- Additional land.
+- Business ownership.
+- Assets and liabilities.
+- Supply chains.
+- Dynamic markets.
+- Growth pressure.
+
+**Deliverable:** A functioning economic management game.
+
+### Milestone 8: Generational Progression
+
+- Genetic Legacy.
+- Seeds.
+- Genetic modifications.
+- Tree lineages.
+- New generations.
+- Historical records.
+
+**Deliverable:** A generational incremental game.
+
+### Milestone 9: Global Simulation
+
+- Regional environments.
+- Industrial systems.
+- Governments.
+- Monetary policy.
+- Global markets.
+- Climate feedback.
+- Global objectives.
+
+**Deliverable:** A large-scale economic and environmental simulation.
+
+---
+
+## 20. Technical Risks
+
+| Risk | Consequence | Mitigation |
+|---|---|---|
+| Simulation complexity | Difficult debugging and balancing | Modular systems and deterministic tests |
+| Excessive simulation steps | Performance problems | Fixed timestep and event aggregation |
+| Offline progression | Incorrect growth or resource calculations | Dedicated catch-up simulation |
+| Floating-point errors | Financial inconsistencies | Integer or fixed-point monetary representation |
+| Excessive React updates | Poor interface performance | Decouple rendering and simulation |
+| Save incompatibility | Lost player progress | Versioned schemas and migrations |
+| Economic runaway | Unbalanced money supply | Centralized monetary accounting |
+| Environmental runaway | Unstable simulation | Bounded processes and feedback testing |
+| Godot migration | Rewriting core logic | Engine-independent rules and serialization |
+| Simulation complexity at scale | Excessive CPU and memory use | Regional aggregation and levels of detail |
+
+---
+
+## 21. Initial Technical Acceptance Criteria
+
+The first playable version should not be considered complete until the following conditions are satisfied:
+
+1. A new player can start with a sapling and initial funds.
+2. The player can purchase water and fertilizer.
+3. The tree grows through simulated biological processes.
+4. The tree produces physical money leaves.
+5. Harvesting reduces foliage and photosynthetic capacity.
+6. Energy reserves compensate for reduced foliage.
+7. Repeated harvesting can cause irreversible damage or death.
+8. The tree responds to seasons and weather.
+9. Personal expenses create a meaningful financial requirement.
+10. The simulation continues while the player is offline.
+11. The game saves and restores correctly.
+12. The original tree cannot be sold or transferred.
+13. The tree's visual appearance reflects its actual simulation state.
+14. The simulation can be tested independently of Next.js.
+15. Simulation results are deterministic under identical inputs.
+
+---
+
+## 22. Final Architectural Principles
+
+The following decisions should guide all future development:
+
+**Simulation before presentation.** Biological, economic, and environmental rules should exist independently of the interface.
+
+**Data-driven content.** Species, fertilizers, equipment, upgrades, and weather should be configurable without rewriting core systems.
+
+**Explicit accounting.** Every currency movement must have an identifiable source and destination.
+
+**Deterministic simulation.** Randomness must be controlled and reproducible.
+
+**Persistent history.** The original tree and its history must survive generations and major game progression.
+
+**Incremental complexity.** New systems should build on established interfaces rather than introducing unrelated mechanics.
+
+**Engine independence.** Next.js is the initial presentation platform, not the foundation of the simulation itself.
+
+**Biological consistency.** Economic incentives must never override the underlying biological rules.
+
+The game should remain technically manageable even as its simulated world becomes increasingly complex.
