@@ -4,7 +4,9 @@ import {
   UnknownSchemaVersionError,
   migrations,
   CURRENT_SCHEMA_VERSION,
+  deserialize,
   type GameState,
+  type SaveEnvelope,
 } from '../src/index.js';
 import { baseState } from './_helpers.js';
 
@@ -62,5 +64,47 @@ describe('MigrationRegistry', () => {
       expect(e.actual).toBe(99);
       expect(Array.isArray(e.known)).toBe(true);
     }
+  });
+});
+
+describe('deserialize() runs migrations before strict validation (TDD §14.3)', () => {
+  // Regression: previously `deserialize()` parsed the envelope with the
+  // *current* gameStateSchema, which rejected any older save before the
+  // migration could fix it. This proves the v0 -> v1 migration actually
+  // runs end-to-end via the public deserialize() entry point.
+  it('migrates a v0 envelope (missing scheduler) to a valid v1 GameState', () => {
+    const v1State = freshState();
+    const { scheduler: _scheduler, ...v0State } = v1State;
+    void _scheduler;
+    const env: SaveEnvelope = {
+      schemaVersion: 0,
+      state: v0State as unknown as GameState,
+    };
+    const out = deserialize(env);
+    expect(out.scheduler).toBeDefined();
+    expect(out.scheduler.events).toEqual([]);
+  });
+
+  it('still rejects an unknown schemaVersion (no silent discard)', () => {
+    const env = {
+      schemaVersion: 999,
+      state: freshState(),
+    } as unknown as SaveEnvelope;
+    expect(() => deserialize(env)).toThrow(UnknownSchemaVersionError);
+  });
+
+  it('still rejects a v1 save whose state fails the strict schema', () => {
+    const valid = freshState();
+    const bad = {
+      ...valid,
+      originalTree: { ...valid.originalTree, isOriginal: false },
+    };
+    const env: SaveEnvelope = {
+      schemaVersion: CURRENT_SCHEMA_VERSION,
+      state: bad,
+    };
+    // The strict post-migration validation must catch the superRefine
+    // violation even though the envelope shape itself is fine.
+    expect(() => deserialize(env)).toThrow();
   });
 });

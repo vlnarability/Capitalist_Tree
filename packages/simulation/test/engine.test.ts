@@ -183,3 +183,43 @@ describe('executeAction', () => {
     expect(r.events).toEqual([]);
   });
 });
+
+describe('purity — engine never mutates its input state (TDD §4.1, rule 2)', () => {
+  // Deep-freeze the input to ensure any mutation would throw, then run the
+  // engine and confirm the input is structurally unchanged afterward.
+  function deepFreeze<T>(v: T): T {
+    if (v && typeof v === 'object') {
+      for (const k of Object.keys(v as Record<string, unknown>)) {
+        deepFreeze((v as Record<string, unknown>)[k]);
+      }
+      Object.freeze(v);
+    }
+    return v;
+  }
+
+  it('engine.advance does not mutate its input state', () => {
+    const s = deepFreeze(engine.initialize(cfg(7)));
+    // Must not throw — strict mode would surface any mutation as a TypeError.
+    expect(() => engine.advance(s, 5 * STEP_SECONDS)).not.toThrow();
+    // Snapshot for post-call deep equality.
+    const before = engine.initialize(cfg(7));
+    engine.advance(before, 5 * STEP_SECONDS);
+    expect(before).toEqual(engine.initialize(cfg(7)));
+  });
+
+  it('engine.executeAction does not mutate its input state', () => {
+    const s = deepFreeze(engine.initialize(cfg(7)));
+    expect(() =>
+      engine.executeAction(s, {
+        type: 'set-speed',
+        payload: { multiplier: PROVISIONAL_SPEED_5X },
+      }),
+    ).not.toThrow();
+    const before = engine.initialize(cfg(7));
+    engine.executeAction(before, {
+      type: 'set-speed',
+      payload: { multiplier: PROVISIONAL_SPEED_5X },
+    });
+    expect(before).toEqual(engine.initialize(cfg(7)));
+  });
+});

@@ -9,11 +9,22 @@
  * because we store bigints as strings). `deserialize(raw)` runs Zod
  * validation and migrations. Both are pure.
  */
+import { z } from 'zod';
 import { gameStateSchema, type GameState } from '../schemas/game-state.js';
 import { saveEnvelopeSchema, type SaveEnvelope } from '../schemas/save.js';
 import { CURRENT_SCHEMA_VERSION } from '../constants/provisional.js';
 import { migrations } from '../migrations/index.js';
 import { SaveValidationError, UnknownSchemaVersionError } from '../errors.js';
+
+/**
+ * Loose envelope shape used by `deserialize()` to peek at `schemaVersion`
+ * before migrating. We do NOT validate `state` here — that would reject
+ * older saves before migrations could fix them (TDD §14.3).
+ */
+const looseEnvelopeSchema = z.object({
+  schemaVersion: z.number().int().nonnegative(),
+  state: z.unknown(),
+});
 
 /** Serialize a GameState to a JSON-safe save envelope. */
 export function serialize(state: GameState): SaveEnvelope {
@@ -23,25 +34,40 @@ export function serialize(state: GameState): SaveEnvelope {
 /**
  * Deserialize a raw save envelope into a validated GameState.
  *
- * Steps:
- *   1. Parse envelope shape (must have schemaVersion + state).
+ * Order of operations (TDD §14.3: migrations MUST run before strict
+ * validation, otherwise older saves whose `state` no longer matches the
+ * current schema would be rejected before the migration can fix them):
+ *
+ *   1. Parse the envelope *shape* loosely — only `schemaVersion` (a
+ *      nonnegative int) and `state` (unknown). The state's internals are
+ *      NOT validated here; that comes after migration.
  *   2. Run migrations from `schemaVersion` to CURRENT_SCHEMA_VERSION. If
- *      schemaVersion is unknown, raises UnknownSchemaVersionError (NOT silent discard).
- *   3. Validate the migrated state against gameStateSchema (incl. superRefine).
+ *      `schemaVersion` is unknown, raises UnknownSchemaVersionError
+ *      (NOT silent discard).
+ *   3. Strictly validate the migrated state against gameStateSchema
+ *      (including the originalTree superRefine invariants).
  *
  * On validation failure, raises SaveValidationError with the Zod issues.
  */
 export function deserialize(raw: unknown): GameState {
-  let envelope: SaveEnvelope;
-  try {
-    envelope = saveEnvelopeSchema.parse(raw);
-  } catch (err) {
-    if (err && typeof err === 'object' && 'issues' in err) {
-      throw new SaveValidationError('Save envelope failed validation', (err as { issues: unknown[] }).issues);
-    }
-    throw err;
+  // Step 1 — envelope shape only. We deliberately do NOT call
+  // `saveEnvelopeSchema.parse(raw)` here because that schema requires
+  // `state` to conform to the *current* gameStateSchema, which would
+  // reject older saves before migrations could run.
+  const looseEnvelope = looseEnvelopeSchema.safeParse(raw);
+  if (!looseEnvelope.success) {
+    throw new SaveValidationError('Save envelope failed validation', looseEnvelope.error.issues);
   }
-  const migrated = migrations.migrate(envelope.state, envelope.schemaVersion, CURRENT_SCHEMA_VERSION);
+  const env = looseEnvelope.data;
+
+  // Step 2 — migrate. Throws UnknownSchemaVersionError for unknown versions.
+  const migrated = migrations.migrate(
+    env.state as GameState,
+    env.schemaVersion,
+    CURRENT_SCHEMA_VERSION,
+  );
+
+  // Step 3 — strict validate the migrated state.
   const parsed = gameStateSchema.safeParse(migrated);
   if (!parsed.success) {
     throw new SaveValidationError('Save state failed validation', parsed.error.issues);

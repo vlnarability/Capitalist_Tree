@@ -90,3 +90,23 @@ describe('serialize/deserialize', () => {
     expect(back).toEqual(s);
   });
 });
+
+describe('Storage.validate() runs migrations end-to-end (TDD §14.3)', () => {
+  // Regression: previously `Storage.validate()` (via `deserialize()`) parsed
+  // the envelope with the *current* gameStateSchema, which rejected any
+  // older save before the migration could fix it. This proves the v0 -> v1
+  // migration actually runs through the public Storage.validate() entry point.
+  it('loads a v0 envelope (missing scheduler) and produces a valid v1 state', () => {
+    const storage = new InMemoryStorage();
+    const v1 = freshState();
+    const { scheduler: _scheduler, ...v0State } = v1;
+    void _scheduler;
+    const v0Env = {
+      schemaVersion: 0,
+      state: v0State,
+    } as unknown as SaveEnvelope;
+    const out = storage.validate(v0Env);
+    expect(out.scheduler).toBeDefined();
+    expect(out.scheduler.events).toEqual([]);
+  });
+});
