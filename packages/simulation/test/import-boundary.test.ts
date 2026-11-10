@@ -7,14 +7,19 @@ const root = fileURLToPath(new URL('../src', import.meta.url));
 
 // Match `import ... from 'X'` and `import 'X'` statements only — comments
 // are not flagged.
+//
+// We use `(\.\.\/)+` (one or more `../` segments) so a file at ANY depth
+// inside packages/simulation/src/ that tries to climb out into apps/ is
+// caught — not just files exactly 3 levels deep.
 const FORBIDDEN_IMPORTS: readonly RegExp[] = [
   /^\s*import\s+[^;]*from\s+['"]next(?:\/[^'"]*)?['"]/m,
   /^\s*import\s+[^;]*from\s+['"]react(?:\/[^'"]*)?['"]/m,
   /^\s*import\s+[^;]*from\s+['"]react-dom(?:\/[^'"]*)?['"]/m,
   /^\s*import\s+[^;]*from\s+['"]@reduxjs\/[^'"]*['"]/m,
   /^\s*import\s+[^;]*from\s+['"]idb(?:\/[^'"]*)?['"]/m,
-  // Relative path that escapes up into the web app.
-  /^\s*import\s+[^;]*from\s+['"]\.\.\/\.\.\/\.\.\/apps\/[^'"]*['"]/m,
+  // Any relative path that climbs out of packages/simulation and lands in
+  // apps/ (any depth). Catches `../../../apps/...` and `../../../../apps/...`.
+  /^\s*import\s+[^;]*from\s+['"](\.\.\/)+apps\/[^'"]*['"]/m,
   // `@/...` is the web app's path alias — should never resolve here.
   /^\s*import\s+[^;]*from\s+['"]@\/[^'"]*['"]/m,
 ];
