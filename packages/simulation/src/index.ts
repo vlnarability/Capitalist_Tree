@@ -38,3 +38,7 @@ export {
 export { schedule, due, cancel } from './events/index.js';
 export { dispatch, actionHandlers, type ActionListener } from './actions/index.js';
 export { type Storage, InMemoryStorage } from './persistence/index.js';
+
+// Biology module — pure functions used by BiologySystem + the harvest action
+// handler. Tests import these directly to assert biological invariants.
+export * from './biology/index.js';
