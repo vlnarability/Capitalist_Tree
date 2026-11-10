@@ -10,11 +10,11 @@
  * be pure and MUST NOT touch `originalTree.id` or `originalTree.isOriginal`.
  */
 import type { GameState } from '../schemas/game-state.js';
-import { migrations } from './registry.js';
+import { type Migration, migrations } from './registry.js';
 
 // Sample v0 -> v1 migration. v0 saves had no `scheduler` field; v1 adds it.
 // (In reality, no v0 saves exist — this is here to demonstrate the framework.)
-migrations.register(0, (state) => {
+const v0ToV1: Migration = (state: GameState): GameState => {
   // We can't actually reconstruct the missing field with full fidelity from
   // a v0 save in the general case. For the sample migration we add an empty
   // scheduler if it's missing, and otherwise return the state unchanged.
@@ -24,4 +24,6 @@ migrations.register(0, (state) => {
     ...state,
     scheduler: state.scheduler ?? { events: [] },
   };
-});
+};
+
+migrations.register(0, v0ToV1);

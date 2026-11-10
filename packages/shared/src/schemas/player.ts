@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { nutrientStateSchema } from './tree.js';
 
 /**
  * Living expenses (GDD §7.1, TDD §5.3).

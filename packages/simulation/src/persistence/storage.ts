@@ -76,7 +76,7 @@ export class InMemoryStorage implements Storage {
       !('schemaVersion' in raw) ||
       !('state' in raw)
     ) {
-      throw new UnknownSchemaVersionError(-1, [...this.map.keys(), CURRENT_SCHEMA_VERSION]);
+      throw new UnknownSchemaVersionError(-1, [CURRENT_SCHEMA_VERSION]);
     }
     const env = raw as { schemaVersion: number; state: unknown };
     assertKnownSchemaVersion(env.schemaVersion);

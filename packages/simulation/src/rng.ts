@@ -19,7 +19,7 @@
  */
 
 /** Serializable RNG state. Mirrors `RngState` in @capitalist-tree/shared. */
-export type RngState = readonly [number, number, number, number];
+export type RngState = [number, number, number, number];
 
 const MASK32 = 0xffffffff;
 
@@ -117,7 +117,6 @@ export class Rng {
       this.d & MASK32,
     ];
   }
-
   /**
    * Fork a sub-stream for a named consumer (e.g. a system id).
    *
