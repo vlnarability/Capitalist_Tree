@@ -14,7 +14,7 @@ import {
   PROVISIONAL_INITIAL_INTEREST_RATE,
   PROVISIONAL_SPEED_1X,
 } from '@capitalist-tree/shared';
-import { seasonFromDay } from './systems/time-system.js';
+import { seasonFromDay, SECONDS_PER_DAY } from './systems/time-system.js';
 import { Rng } from './rng.js';
 
 export const DEFAULT_GAME_CONFIG: GameConfig = {
@@ -34,8 +34,11 @@ export const DEFAULT_GAME_CONFIG: GameConfig = {
  */
 export function initializeState(config: GameConfig): GameState {
   const rng = Rng.fromSeed(config.seed);
-  const now = 0; // The clock starts at sim second 0.
   const day = config.startingDay;
+  // elapsedSeconds must be consistent with `day` so the TimeSystem's
+  // recomputation `day = floor(elapsedSeconds / SECONDS_PER_DAY)` is stable
+  // across the first step.
+  const startElapsedSeconds = day * SECONDS_PER_DAY;
   const season = seasonFromDay(day);
   const createdAt = config.createdAt ?? 0;
 
@@ -50,7 +53,7 @@ export function initializeState(config: GameConfig): GameState {
       simulationVersion: 1,
     },
     clock: {
-      elapsedSeconds: now,
+      elapsedSeconds: startElapsedSeconds,
       day,
       season,
       timeOfDay: 0,

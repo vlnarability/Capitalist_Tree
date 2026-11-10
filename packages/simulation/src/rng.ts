@@ -21,8 +21,6 @@
 /** Serializable RNG state. Mirrors `RngState` in @capitalist-tree/shared. */
 export type RngState = [number, number, number, number];
 
-const MASK32 = 0xffffffff;
-
 function rotl(n: number, k: number): number {
   return ((n << k) | (n >>> (32 - k))) >>> 0;
 }
@@ -111,10 +109,10 @@ export class Rng {
 
   getState(): RngState {
     return [
-      this.a & MASK32,
-      this.b & MASK32,
-      this.c & MASK32,
-      this.d & MASK32,
+      this.a >>> 0,
+      this.b >>> 0,
+      this.c >>> 0,
+      this.d >>> 0,
     ];
   }
   /**

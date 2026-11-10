@@ -1,8 +1,9 @@
 // @capitalist-tree/simulation — public API.
 //
-// This package MUST NOT import from `apps/web`, `next`, `react`,
-// `react-dom`, `@reduxjs/*`, or any browser-only API. The import-boundary
-// test in `packages/simulation/test/import-boundary.test.ts` enforces this.
+// This package MUST NOT import from the web app, `next`, `react`,
+// `react-dom`, `@reduxjs/*`, `idb`, or any browser-only API. The
+// import-boundary test in `packages/simulation/test/import-boundary.test.ts`
+// enforces this.
 
 export { Rng, type RngState } from './rng.js';
 export { deepCopy } from './deep-copy.js';
