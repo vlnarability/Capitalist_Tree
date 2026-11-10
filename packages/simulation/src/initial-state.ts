@@ -18,6 +18,14 @@ import {
   PROVISIONAL_INITIAL_INFLATION_RATE,
   PROVISIONAL_INITIAL_INTEREST_RATE,
   PROVISIONAL_SPEED_1X,
+  PROVISIONAL_RESOURCE_INITIAL_FRESHWATER_AVAILABILITY,
+  PROVISIONAL_RESOURCE_INITIAL_GROUNDWATER,
+  PROVISIONAL_RESOURCE_INITIAL_SOIL_WATER,
+  PROVISIONAL_RESOURCE_INITIAL_SOIL_NUTRIENTS,
+  PROVISIONAL_RESOURCE_INITIAL_ORGANIC_MATTER,
+  PROVISIONAL_WEATHER_INITIAL_CONDITION,
+  PROVISIONAL_WEATHER_INITIAL_INTENSITY,
+  PROVISIONAL_WEATHER_DEFAULT_CLIMATE_ID,
 } from '@capitalist-tree/shared';
 import { findSpeciesById } from '@capitalist-tree/content';
 import { seasonFromDay, SECONDS_PER_DAY } from './systems/time-system.js';
@@ -58,6 +66,18 @@ export function initializeState(config: GameConfig): GameState {
     );
   }
   const initialBio = species.initial;
+
+  // Fork a child RNG for the WeatherSystem at game start. Persisted on
+  // `state.rngStreams.weather` so the Markov sequence survives save/load
+  // (TDD §18.3 — see docs/simulation.md §6 note).
+  const weatherRng = rng.fork('WeatherSystem');
+
+  // PROVISIONAL: starting plot is in a temperate zone. P2 keeps the original
+  // P1 default of 18°C so the sapling's first-step photosynthesis matches the
+  // P1 baseline; WeatherSystem will overwrite this each tick with the
+  // local-temperature derivation.
+  const startTempC = 18;
+  void PROVISIONAL_WEATHER_DEFAULT_CLIMATE_ID;
 
   const state: GameState = {
     metadata: {
@@ -150,17 +170,17 @@ export function initializeState(config: GameConfig): GameState {
         },
         soil: {
           health: 1,
-          organicMatter: 50,
+          organicMatter: PROVISIONAL_RESOURCE_INITIAL_ORGANIC_MATTER,
           contamination: 0,
-          nutrients: {
-            nitrogen: 50,
-            phosphorus: 50,
-            potassium: 50,
-          },
+          nutrients: { ...PROVISIONAL_RESOURCE_INITIAL_SOIL_NUTRIENTS },
+          soilWater: PROVISIONAL_RESOURCE_INITIAL_SOIL_WATER,
+          ph: 6.5,
+          compaction: 0,
+          microbialActivity: 1.0,
         },
         freshwater: {
-          availability: 1000,
-          groundwater: 500,
+          availability: PROVISIONAL_RESOURCE_INITIAL_FRESHWATER_AVAILABILITY,
+          groundwater: PROVISIONAL_RESOURCE_INITIAL_GROUNDWATER,
           contamination: 0,
         },
         biodiversity: {
@@ -175,7 +195,17 @@ export function initializeState(config: GameConfig): GameState {
         // The starting plot is in a temperate zone — P6 (EnvironmentSystem)
         // will introduce regional temperature variation. Below the species'
         // minimum (5°C) photosynthesis is zero; at optimum (22°C) it peaks.
-        globalTemperature: 18,
+        // P2's WeatherSystem overwrites this each tick with the local
+        // temperature (climate baseline + per-condition delta). The starting
+        // value here is the day-0 baseline before WeatherSystem's first tick.
+        globalTemperature: startTempC,
+      },
+      weather: {
+        condition: PROVISIONAL_WEATHER_INITIAL_CONDITION,
+        temperature: startTempC,
+        intensity: PROVISIONAL_WEATHER_INITIAL_INTENSITY,
+        prevCondition: null,
+        daysInCondition: 0,
       },
       regionId: 'region:starting-plot',
     },
@@ -214,6 +244,11 @@ export function initializeState(config: GameConfig): GameState {
       archive: [],
     },
     rngState: rng.getState(),
+    rngStreams: {
+      // WeatherSystem's persisted RNG sub-stream. Initialized at game start by
+      // forking from the root RNG; advanced each tick by WeatherSystem.
+      weather: weatherRng.getState(),
+    },
     scheduler: {
       events: [],
     },

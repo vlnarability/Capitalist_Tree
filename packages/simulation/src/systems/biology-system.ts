@@ -15,17 +15,31 @@
  *   5. Recomputes leafCapacity from branch development.
  *   6. Caps currentLeaves at the seasonally-supported max (autumn senescence).
  *   7. Photosynthesizes — computes eu produced this step.
- *   8. Performs placeholder water/nutrient uptake (P2 will own this).
- *   9. Allocates energy (survival-first: maintenance → growth → reserves).
- *  10. Applies growth (height, trunk, branch, root, new leaves).
- *  11. Updates reserves (storage - draw - recovery).
- *  12. Updates stress (deficiency → +; favourable → −).
- *  13. Prunes decayed damage records.
- *  14. Ages the tree.
- *  15. Recomputes derived health (GDD §5.1).
- *  16. Checks mortality (RNG-driven; deterministic per seed).
- *  17. Emits `tree-died` if the tree died, plus `biology-notification` events
+ *   8. Allocates energy (survival-first: maintenance → growth → reserves).
+ *   9. Applies growth (height, trunk, branch, root, new leaves).
+ *  10. Updates reserves (storage - draw - recovery).
+ *  11. Updates stress (deficiency → +; favourable → −).
+ *  12. Prunes decayed damage records.
+ *  13. Ages the tree.
+ *  14. Recomputes derived health (GDD §5.1).
+ *  15. Checks mortality (RNG-driven; deterministic per seed).
+ *  16. Emits `tree-died` if the tree died, plus `biology-notification` events
  *      for low reserves / drought stress / nutrient deficiency (soft signals).
+ *
+ * WATER + NUTRIENT UPTAKE (P2 contract):
+ *   BiologySystem no longer mutates `tree.water.stored` or `tree.nutrients`.
+ *   P2's ResourceSystem (registry slot #4, runs AFTER this system) owns the
+ *   full water + nutrient balance: it transfers water from `env.soil.soilWater`
+ *   into `tree.water.stored` (Liebig-capped by root capacity + soil water,
+ *   conservation-enforced) and nutrients from `env.soil.nutrients` into
+ *   `tree.nutrients`. BiologySystem reads `tree.water.stored` (via
+ *   photosynthesis's `waterFactor`) and `tree.nutrients` (via `nutrientFactor`)
+ *   to compute Liebig factors — the values are populated by ResourceSystem.
+ *
+ *   P1 had a placeholder (`applyPlaceholderResources`) that mirrored env
+ *   into tree.water/nutrients WITHOUT decrementing env (conservation was
+ *   broken). P2 removed the placeholder; see R-P2-1 in
+ *   docs/resources-weather.md for the full contract.
  *
  * Emits (SimulationEvent):
  *   - `tree-died`           when the tree dies (GDD §5.6).
@@ -48,30 +62,21 @@ import {
   computeActiveLeafArea,
   computeHealth,
   advanceSeasonalCondition,
-  computeSpeciesMaxFoliage,
   maxSupportedLeaves,
   updateStress,
   checkMortality,
   recentSevereDefoliations,
   getSpeciesOrFail,
-  dailyWaterNeed,
   type BiologyContext,
 } from '../biology/index.js';
 import {
   PROVISIONAL_BIOLOGY_DEATH_DEFOLIATION_WINDOW_DAYS,
-  PROVISIONAL_BIOLOGY_NUTRIENT_UPTAKE_RATE,
-  PROVISIONAL_BIOLOGY_WATER_UPTAKE_RATE,
 } from '@capitalist-tree/shared';
 
 const SECONDS_PER_DAY = 24 * 60 * 60;
 
 /** Damage records older than this (sim seconds) are pruned. */
 const DAMAGE_PRUNE_SECONDS = PROVISIONAL_BIOLOGY_DEATH_DEFOLIATION_WINDOW_DAYS * SECONDS_PER_DAY;
-
-/** Placeholder fraction of environment freshwater the tree can absorb per day. */
-const ENV_WATER_ABSORPTION_FRACTION = 0.01;
-/** Placeholder fraction of environment soil nutrients the tree can absorb per day. */
-const ENV_NUTRIENT_ABSORPTION_FRACTION = 0.01;
 
 /** Drain queued CurrencyIssuanceRequests — P3's EconomySystem consumes them. */
 function hasPendingIssuances(tree: TreeState): boolean {
@@ -124,10 +129,15 @@ export const biologySystem: System = {
     const production = photosynthesisForStep(tree, bioCtx);
     tree.energy.production = production / stepDays; // store per-day rate
 
-    // 8. Placeholder water/nutrient uptake (P2's ResourceSystem will own this).
-    applyPlaceholderResources(tree, bioCtx);
+    // NOTE: water + nutrient uptake is owned by ResourceSystem (slot #4,
+    // runs AFTER this system). P1's placeholder `applyPlaceholderResources`
+    // was removed in P2 — see R-P2-1 in docs/resources-weather.md.
+    // BiologySystem reads `tree.water.stored` and `tree.nutrients` (via
+    // photosynthesis's `waterFactor` / `nutrientFactor` Liebig factors);
+    // ResourceSystem populates those fields from env.soil.soilWater and
+    // env.soil.nutrients each tick.
 
-    // 9. Energy allocation (survival-first).
+    // 8. Energy allocation (survival-first).
     const alloc = allocateEnergy(tree, production, bioCtx);
     tree.energy.consumption = (alloc.maintenance + alloc.reserveDraw) / stepDays;
 
@@ -236,73 +246,27 @@ export const biologySystem: System = {
 };
 
 /**
- * Placeholder water/nutrient uptake.
+ * Water + nutrient uptake — REMOVED in P2.
  *
- * P1's BiologySystem performs a minimal uptake so the tree survives long enough
- * for the headless script to grow it for several sim years. P2's ResourceSystem
- * will own the full model (rainfall, irrigation, soil depletion, etc.).
+ * P1's BiologySystem had a placeholder (`applyPlaceholderResources`) that
+ * mirrored `env.freshwater.availability` → `tree.water.stored` and
+ * `env.soil.nutrients` → `tree.nutrients` WITHOUT decrementing env. This
+ * violated conservation (TDD §18.4 invariant) and duplicated the soil water
+ * balance that P2's ResourceSystem owns.
  *
- * The placeholder:
- *   - Transpires `dailyWaterNeed * stepDays` from `water.stored`.
- *   - Absorbs water from `environment.freshwater.availability` (capped by a
- *     small per-day fraction and the tree's root absorption capacity).
- *   - Consumes nutrients proportional to foliage.
- *   - Absorbs nutrients from `environment.soil.nutrients` (capped similarly).
+ * P2's ResourceSystem now owns the full water + nutrient balance:
+ *   - Water: rainfall + irrigation in, evaporation + drainage + tree uptake
+ *     + runoff out. Tree uptake is Liebig-capped by root capacity + soil
+ *     water; transferred from env.soil.soilWater to tree.water.stored.
+ *   - Nutrients: replenishment + fertilizer in, leaching + tree absorption
+ *     out. Tree absorption is Liebig-capped by root capacity + soil
+ *     nutrients; transferred from env.soil.nutrients to tree.nutrients.
  *
- * Mutates `tree.water` and `tree.nutrients` in place (the caller already
- * deep-copied the state).
+ * BiologySystem reads `tree.water.stored` (via `waterFactor` in
+ * photosynthesis) and `tree.nutrients` (via `nutrientFactor`);
+ * ResourceSystem keeps them populated. See R-P2-1 in
+ * docs/resources-weather.md.
  */
-function applyPlaceholderResources(tree: TreeState, ctx: BiologyContext): void {
-  // Water: transpire from stored, absorb from environment.
-  const dailyWater = dailyWaterNeed(tree, ctx.species);
-  const transpired = dailyWater * ctx.stepDays;
-  // Environment offers a small fraction of its freshwater per day (P2's
-  // ResourceSystem will model rainfall, irrigation, soil moisture, etc.).
-  const absorbableFromEnv =
-    ctx.environment.freshwater.availability * ENV_WATER_ABSORPTION_FRACTION;
-  // Root absorption capacity (L/day) — independent of the daily need. A mature
-  // root system (absorptionCapacity=1.0) can absorb up to the species' baseline
-  // waterRequirement per day; a sapling root (0.2) absorbs proportionally less.
-  // Decoupling this from dailyWater means a sapling with a few leaves can still
-  // refill its (small) water buffer faster than it transpires.
-  const rootCap = ctx.species.waterRequirement * tree.roots.absorptionCapacity;
-  const absorbed = Math.min(absorbableFromEnv, rootCap) * ctx.stepDays * PROVISIONAL_BIOLOGY_WATER_UPTAKE_RATE;
-  tree.water.stored = Math.max(0, Math.min(tree.water.capacity, tree.water.stored - transpired + absorbed));
-
-  // Nutrients: consume proportional to foliage (relative to the species' max
-  // canopy, not the sapling's current leafCapacity — same scaling fix as
-  // dailyWaterNeed). Absorb from soil.
-  const speciesMaxFoliage = computeSpeciesMaxFoliage(ctx.species);
-  const foliageFrac = Math.min(1, tree.foliage.currentLeaves / Math.max(1, speciesMaxFoliage));
-  const req = ctx.species.nutrientRequirement;
-  const consumed = {
-    nitrogen: req.nitrogen * foliageFrac * ctx.stepDays,
-    phosphorus: req.phosphorus * foliageFrac * ctx.stepDays,
-    potassium: req.potassium * foliageFrac * ctx.stepDays,
-  };
-  const soilN = ctx.environment.soil.nutrients;
-  const absorbableN = soilN.nitrogen * ENV_NUTRIENT_ABSORPTION_FRACTION;
-  const absorbableP = soilN.phosphorus * ENV_NUTRIENT_ABSORPTION_FRACTION;
-  const absorbableK = soilN.potassium * ENV_NUTRIENT_ABSORPTION_FRACTION;
-  // Root absorption capacity (units/day) — decoupled from consumption.
-  // A mature root (absorptionCapacity=1.0) can absorb the species' full daily
-  // requirement per nutrient; a sapling root (0.3) absorbs proportionally less.
-  const rootAbsN = ctx.species.nutrientRequirement.nitrogen * tree.roots.absorptionCapacity * PROVISIONAL_BIOLOGY_NUTRIENT_UPTAKE_RATE;
-  const rootAbsP = ctx.species.nutrientRequirement.phosphorus * tree.roots.absorptionCapacity * PROVISIONAL_BIOLOGY_NUTRIENT_UPTAKE_RATE;
-  const rootAbsK = ctx.species.nutrientRequirement.potassium * tree.roots.absorptionCapacity * PROVISIONAL_BIOLOGY_NUTRIENT_UPTAKE_RATE;
-  tree.nutrients.nitrogen = Math.max(
-    0,
-    tree.nutrients.nitrogen - consumed.nitrogen + Math.min(absorbableN, rootAbsN) * ctx.stepDays,
-  );
-  tree.nutrients.phosphorus = Math.max(
-    0,
-    tree.nutrients.phosphorus - consumed.phosphorus + Math.min(absorbableP, rootAbsP) * ctx.stepDays,
-  );
-  tree.nutrients.potassium = Math.max(
-    0,
-    tree.nutrients.potassium - consumed.potassium + Math.min(absorbableK, rootAbsK) * ctx.stepDays,
-  );
-}
 
 /** Prune damage records older than the mortality window. */
 function pruneDamage(damage: TreeDamageState[], nowSeconds: number): TreeDamageState[] {

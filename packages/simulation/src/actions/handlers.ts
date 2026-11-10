@@ -22,9 +22,14 @@ import type {
   SetSpeedAction,
   TreeDamageState,
   TreeState,
+  ApplyWaterAction,
+  ApplyFertilizerAction,
+  FertilizerApplicationResult,
+  WaterApplicationResult,
 } from '@capitalist-tree/shared';
 import {
   PROVISIONAL_BIOLOGY_HARVEST_STRESS_PER_LEAF_FRACTION,
+  PROVISIONAL_RESOURCE_SOIL_WATER_CAPACITY,
   UnknownActionError,
 } from '@capitalist-tree/shared';
 import type { SystemResult } from '../systems/system.js';
@@ -35,6 +40,8 @@ import {
   SEVERE_DEFOLIATION_FRACTION,
   type BiologyContext,
 } from '../biology/index.js';
+import { findFertilizerById } from '@capitalist-tree/content';
+import { applyFertilizer, applyWaterToSoil } from '../resources/index.js';
 
 export type ActionListener<A extends GameAction = GameAction> = (
   state: GameState,
@@ -208,10 +215,121 @@ const harvestLeavesHandler: ActionListener<HarvestLeavesAction> = (state, action
   return { state: next, events };
 };
 
+/**
+ * `apply-water` action handler (P2 — TDD §8.1).
+ *
+ * Adds water to the soil water pool (capped at soil water capacity; excess
+ * becomes runoff). P2 only mutates the soil water state — it does NOT touch
+ * the player's cash (P3's EconomySystem will handle the purchase transaction
+ * when the irrigation action is wired into the economy).
+ *
+ * Emits a `water-applied` event carrying the full WaterApplicationResult.
+ *
+ * Invariants enforced by the pure `applyWaterToSoil` function:
+ *   - soilWaterAfter >= 0
+ *   - soilWaterAfter <= PROVISIONAL_RESOURCE_SOIL_WATER_CAPACITY
+ *   - runoff = max(0, soilWaterBefore + litres - capacity)
+ *   - No negative water additions (litres >= 0 enforced by the schema).
+ */
+const applyWaterHandler: ActionListener<ApplyWaterAction> = (state, action) => {
+  const next: GameState = {
+    ...state,
+    world: {
+      ...state.world,
+      environment: {
+        ...state.world.environment,
+        soil: { ...state.world.environment.soil },
+      },
+    },
+  };
+  const soil = next.world.environment.soil;
+
+  const result: WaterApplicationResult = applyWaterToSoil(
+    soil.soilWater,
+    action.payload.litres,
+    PROVISIONAL_RESOURCE_SOIL_WATER_CAPACITY,
+    state.clock.elapsedSeconds,
+  );
+  soil.soilWater = result.soilWaterAfter;
+
+  const events: SimulationEvent[] = [
+    {
+      type: 'water-applied',
+      at: state.clock.elapsedSeconds,
+      payload: result,
+    },
+  ];
+
+  return { state: next, events };
+};
+
+/**
+ * `apply-fertilizer` action handler (P2 — TDD §8.2, §8.3).
+ *
+ * Applies NPK to the soil nutrient pool (capped at soil nutrient capacity;
+ * excess converts to contamination per GDD §8.3 over-application harm).
+ * Adds organic matter if the fertilizer has any. P2 only mutates the soil
+ * state — it does NOT touch the player's cash or inventory (P3 will handle
+ * the purchase + inventory deduction when the action is wired into the
+ * economy).
+ *
+ * Emits a `fertilizer-applied` event carrying the full FertilizerApplicationResult.
+ *
+ * Invariants enforced by the pure `applyFertilizer` function:
+ *   - nutrientsAfter <= PROVISIONAL_RESOURCE_SOIL_NUTRIENT_CAPACITY (per nutrient)
+ *   - contaminationAfter >= contaminationBefore
+ *   - nutrientsAdded = nutrientsAfter - nutrientsBefore (no free nutrients)
+ */
+const applyFertilizerHandler: ActionListener<ApplyFertilizerAction> = (state, action) => {
+  const fertilizer = findFertilizerById(action.payload.fertilizerId);
+  if (!fertilizer) {
+    throw new Error(
+      `apply-fertilizer: unknown fertilizer id "${action.payload.fertilizerId}". ` +
+        `Register the fertilizer in packages/content/src/fertilizers/index.ts.`,
+    );
+  }
+
+  const next: GameState = {
+    ...state,
+    world: {
+      ...state.world,
+      environment: {
+        ...state.world.environment,
+        soil: { ...state.world.environment.soil },
+      },
+    },
+  };
+  const soil = next.world.environment.soil;
+
+  const result: FertilizerApplicationResult = applyFertilizer(
+    next.world.environment,
+    fertilizer,
+    action.payload.units,
+    state.clock.elapsedSeconds,
+  );
+
+  // Apply the result to the soil state.
+  soil.nutrients = { ...result.nutrientsAfter };
+  soil.contamination = result.contaminationAfter;
+  soil.organicMatter = Math.max(0, soil.organicMatter + result.organicMatterAdded);
+
+  const events: SimulationEvent[] = [
+    {
+      type: 'fertilizer-applied',
+      at: state.clock.elapsedSeconds,
+      payload: result,
+    },
+  ];
+
+  return { state: next, events };
+};
+
 export const actionHandlers: Record<string, ActionListener> = {
   'no-op': noOp,
   'set-speed': setSpeed as ActionListener,
   'harvest-leaves': harvestLeavesHandler as ActionListener,
+  'apply-water': applyWaterHandler as ActionListener,
+  'apply-fertilizer': applyFertilizerHandler as ActionListener,
 };
 
 /** Dispatch a GameAction to its handler. Raises UnknownActionError for unknown types. */
