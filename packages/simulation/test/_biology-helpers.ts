@@ -102,6 +102,10 @@ export function neutralEnvironment(overrides: Partial<EnvironmentState> = {}): E
       organicMatter: 50,
       contamination: 0,
       nutrients: { nitrogen: 50, phosphorus: 50, potassium: 50 },
+      soilWater: 100,
+      ph: 6.5,
+      compaction: 0,
+      microbialActivity: 1.0,
     },
     freshwater: {
       availability: 1000,
@@ -186,6 +190,13 @@ export function testState(treeOverrides: Partial<TreeState> = {}): GameState {
     originalTree: tree,
     world: {
       environment: neutralEnvironment(),
+      weather: {
+        condition: 'sunny',
+        temperature: 22,
+        intensity: 0.5,
+        prevCondition: null,
+        daysInCondition: 0,
+      },
       regionId: 'region:starting-plot',
     },
     economy: {
@@ -214,6 +225,7 @@ export function testState(treeOverrides: Partial<TreeState> = {}): GameState {
     progression: { research: [], achievements: [], geneticLegacy: 0 },
     history: { snapshots: [], archive: [] },
     rngState: [0, 0, 0, 0],
+    rngStreams: { weather: [0, 0, 0, 0] },
     scheduler: { events: [] },
   };
 }

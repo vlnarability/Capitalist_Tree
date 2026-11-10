@@ -42,3 +42,12 @@ export { type Storage, InMemoryStorage } from './persistence/index.js';
 // Biology module — pure functions used by BiologySystem + the harvest action
 // handler. Tests import these directly to assert biological invariants.
 export * from './biology/index.js';
+
+// Weather module — pure functions used by WeatherSystem (P2). Tests import
+// these directly to assert Markov chain + effect invariants.
+export * from './weather/index.js';
+
+// Resources module — pure functions used by ResourceSystem + the
+// apply-water / apply-fertilizer action handlers (P2). Tests import these
+// directly to assert water / nutrient / soil invariants.
+export * from './resources/index.js';

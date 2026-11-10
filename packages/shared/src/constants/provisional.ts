@@ -120,7 +120,21 @@ export const PROVISIONAL_INITIAL_INTEREST_RATE = 0;
 // accumulator for fractional leaf growth so per-step energy allocation isn't
 // wasted when it's too small to grow a whole leaf. Migration v2 -> v3
 // backfills the field with 0.
-export const CURRENT_SCHEMA_VERSION = 3;
+//
+// v4 (P2): added three new GameState shapes:
+//   - `world.weather: WeatherState` — current condition, temperature,
+//     intensity, prev condition, days-in-condition. Produced by the
+//     WeatherSystem (Markov chain over per-season transition matrices).
+//   - `rngStreams.weather: RngState` — persisted RNG sub-stream for the
+//     WeatherSystem so its Markov sequence survives save/load (TDD §18.3).
+//   - `world.environment.soil.soilWater: number` — soil water content (L)
+//     for the water-balance model.
+//   - `world.environment.soil.{ph, compaction, microbialActivity}: number`
+//     — extension-point stubs for the soil health derivation (TDD §8.3).
+// Migration v3 -> v4 backfills all new fields with neutral defaults so
+// older saves load cleanly. The migration is pure and does not touch
+// `originalTree.id` or `originalTree.isOriginal`.
+export const CURRENT_SCHEMA_VERSION = 4;
 
 // Used by migration tests to exercise the v0 -> v1 path. Real saves are
 // always written at CURRENT_SCHEMA_VERSION.

@@ -52,6 +52,17 @@ function eventToString(ev: SimulationEvent): string {
       return `defoliation: ${Math.round(ev.payload.fractionRemoved * 100)}% removed${ev.payload.repeated ? ' (repeated)' : ''}`;
     case 'biology-notification':
       return `biology: [${ev.payload.severity}] ${ev.payload.code} — ${ev.payload.message}`;
+    case 'weather-damage':
+      // P2 weather event — full UI lands in P4. Show a short summary.
+      return `weather-damage: ${ev.payload.condition} (${ev.payload.damageType}, severity ${ev.payload.severity.toFixed(2)})`;
+    case 'water-applied':
+      // P2 resource event — full UI lands in P4.
+      return `water applied: ${ev.payload.litres} L (soil water ${ev.payload.soilWaterBefore.toFixed(0)} -> ${ev.payload.soilWaterAfter.toFixed(0)})`;
+    case 'fertilizer-applied':
+      // P2 resource event — full UI lands in P4.
+      return `fertilizer applied: ${ev.payload.fertilizerId} × ${ev.payload.units} (N+${ev.payload.nutrientsAdded.nitrogen.toFixed(0)} P+${ev.payload.nutrientsAdded.phosphorus.toFixed(0)} K+${ev.payload.nutrientsAdded.potassium.toFixed(0)})`;
+    case 'resource-notification':
+      return `resource: [${ev.payload.severity}] ${ev.payload.code} — ${ev.payload.message}`;
     default: {
       // exhaustive check
       const _exhaustive: never = ev;

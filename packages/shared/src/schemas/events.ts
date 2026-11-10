@@ -5,6 +5,12 @@ import {
   defoliationEventSchema,
   biologyNotificationEventSchema,
 } from './events-biology.js';
+import {
+  weatherDamageEventSchema,
+  waterAppliedEventSchema,
+  fertilizerAppliedEventSchema,
+  resourceNotificationEventSchema,
+} from './events-resources.js';
 
 /**
  * SimulationEvent — discriminated union emitted by systems during `advance`.
@@ -94,9 +100,16 @@ export const simulationEventSchema = z.discriminatedUnion('type', [
   treeDiedEventSchema,
   defoliationEventSchema,
   biologyNotificationEventSchema,
+  weatherDamageEventSchema,
+  waterAppliedEventSchema,
+  fertilizerAppliedEventSchema,
+  resourceNotificationEventSchema,
 ]);
 export type SimulationEvent = z.infer<typeof simulationEventSchema>;
 
 // Re-export biology event variants so consumers can import them from
 // @capitalist-tree/shared without reaching into the biology submodule.
 export * from './events-biology.js';
+// Re-export resource + weather event variants so consumers can import them
+// from @capitalist-tree/shared without reaching into the resources submodule.
+export * from './events-resources.js';

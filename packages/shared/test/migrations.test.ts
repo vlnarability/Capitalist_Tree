@@ -58,6 +58,61 @@ describe('MigrationRegistry', () => {
     expect(out.originalTree.foliage.leafGrowthProgress).toBe(0);
   });
 
+  it('v3 -> v4 migration backfills world.weather, rngStreams.weather, soil.soilWater/ph/compaction/microbialActivity (P2)', () => {
+    // A v3 save predates the P2 weather + resource additions.
+    const v3State = freshState();
+    const { weather: _w, ...worldWithoutWeather } = v3State.world as typeof v3State.world & {
+      weather?: unknown;
+    };
+    const { soilWater: _sw, ph: _ph, compaction: _c, microbialActivity: _ma, ...soilWithoutP2 } =
+      v3State.world.environment.soil as typeof v3State.world.environment.soil & {
+        soilWater?: unknown;
+        ph?: unknown;
+        compaction?: unknown;
+        microbialActivity?: unknown;
+      };
+    void _w;
+    void _sw;
+    void _ph;
+    void _c;
+    void _ma;
+    const withoutP2 = {
+      ...v3State,
+      world: {
+        ...worldWithoutWeather,
+        environment: {
+          ...v3State.world.environment,
+          soil: soilWithoutP2,
+        },
+      },
+      rngStreams: undefined,
+    } as unknown as GameState;
+    const out = migrations.migrate(withoutP2, 3, CURRENT_SCHEMA_VERSION);
+    // World weather backfilled with neutral default.
+    expect(out.world.weather).toBeDefined();
+    expect(out.world.weather.condition).toBe('sunny');
+    expect(out.world.weather.temperature).toBe(18);
+    expect(out.world.weather.intensity).toBe(0.5);
+    // rngStreams.weather backfilled (zero state — WeatherSystem initializes on first tick).
+    expect(Array.isArray(out.rngStreams.weather)).toBe(true);
+    expect(out.rngStreams.weather.length).toBe(4);
+    // Soil water + pH/compaction/microbialActivity backfilled with neutral defaults.
+    expect(out.world.environment.soil.soilWater).toBeGreaterThan(0);
+    expect(out.world.environment.soil.ph).toBeCloseTo(6.5, 5);
+    expect(out.world.environment.soil.compaction).toBe(0);
+    expect(out.world.environment.soil.microbialActivity).toBeCloseTo(1.0, 5);
+  });
+
+  it('v3 -> v4 migration is idempotent on a v4 save (no field changes)', () => {
+    // A v4 save already has all P2 fields — migration should leave them alone.
+    const v4State = freshState();
+    const out = migrations.migrate(v4State, 4, CURRENT_SCHEMA_VERSION);
+    expect(out.world.weather).toEqual(v4State.world.weather);
+    expect(out.rngStreams.weather).toEqual(v4State.rngStreams.weather);
+    expect(out.world.environment.soil.soilWater).toBe(v4State.world.environment.soil.soilWater);
+    expect(out.world.environment.soil.ph).toBe(v4State.world.environment.soil.ph);
+  });
+
   it('v3 (current) saves pass through migrations unchanged', () => {
     const s = freshState();
     const out = migrations.migrate(s, CURRENT_SCHEMA_VERSION, CURRENT_SCHEMA_VERSION);
