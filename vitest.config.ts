@@ -11,7 +11,12 @@ export default defineConfig({
     },
   },
   test: {
-    include: ['packages/**/test/**/*.test.ts', 'apps/**/test/**/*.test.ts'],
+    include: [
+      'packages/**/test/**/*.test.ts',
+      'packages/**/tests/**/*.test.ts',
+      'apps/**/test/**/*.test.ts',
+      'apps/**/tests/**/*.test.ts',
+    ],
     environment: 'node',
     globals: false,
     reporters: ['default'],
