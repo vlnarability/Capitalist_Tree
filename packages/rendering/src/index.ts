@@ -39,16 +39,16 @@ export type { TreeDamageState } from './types.js';
 // Pure mapping functions (TDD §15.1, §15.2).
 export {
   buildTreeRenderData,
-  buildEnvironmentRenderData,
   deriveSeasonalAppearance,
   resolveSpeciesShape,
   mapDamageMarker,
   findSpeciesById,
 } from './tree-render-data.js';
-export type {
-  BuildTreeRenderDataOptions,
-  BuildEnvironmentRenderDataOptions,
-} from './tree-render-data.js';
+export type { BuildTreeRenderDataOptions } from './tree-render-data.js';
+export {
+  buildEnvironmentRenderData,
+} from './environment-render-data.js';
+export type { BuildEnvironmentRenderDataOptions } from './environment-render-data.js';
 
 // CurrencyVisual data + lookup (TDD §15.4, GDD §14).
 export {
