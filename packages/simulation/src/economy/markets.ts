@@ -35,7 +35,7 @@
  *
  *   ```
  *   supplyDemandFactor = clamp(
- *     1 + ELASTICITY × (demand - supply) / max(supply + demand, MIN_SCALE),
+ *     1 + ELASTICITY × ln( max(demand, MIN_SCALE) / max(supply, MIN_SCALE) ),
  *     MIN_FRACTION,
  *     MAX_MULTIPLIER
  *   )
@@ -49,6 +49,27 @@
  *   targetPrice = basePrice × supplyDemandFactor × monetaryConditionsFactor
  *   price'      = price + (targetPrice - price) × SMOOTHING
  *   ```
+ *
+ * The supply/demand factor uses a **log-ratio** form rather than the
+ * linear `(demand - supply) / (supply + demand)` difference. The log-ratio
+ * has three properties the linear form lacks (TDD §10.6):
+ *
+ *   1. It is unbounded in the raw value — extreme imbalances (supply → 0
+ *      with demand huge, or vice-versa) push the raw factor well past the
+ *      `[MIN_FRACTION, MAX_MULTIPLIER]` clamps, so the clamps actually
+ *      engage. The linear form saturates at `1 ± ELASTICITY` and never
+ *      reaches the clamps with conservative elasticity.
+ *   2. It is symmetric in ratios — a 2× demand-over-supply gives the same
+ *      |factor - 1| as a 2× supply-over-demand (the linear form has the
+ *      same symmetry on the difference, but the log form makes the
+ *      symmetry explicit and bounded on both sides).
+ *   3. It stays mild for moderate imbalances — at the game-start state
+ *      (`supply = INITIAL_SUPPLY`, `demand = 0`) the factor is
+ *      `1 + ELASTICITY × ln(MIN_SCALE / INITIAL_SUPPLY)` ≈
+ *      `1 + 0.1 × ln(10/100)` ≈ 0.77 with the starter constants. So the
+ *      initial deflationary bias is small enough that monetary growth
+ *      (issuance) can push target prices above the base — the GDD §8.5
+ *      "monetary conditions" price driver remains visible.
  *
  * `basePrice` is the market's content-defined reference price
  * (`MarketDefinition.basePrice`). The current `MarketState.price` lerps
@@ -127,14 +148,35 @@ function clamp(value: number, lo: number, hi: number): number {
 /**
  * Compute the supply/demand factor for a single market.
  *
- * `1 + ELASTICITY × (demand - supply) / max(supply + demand, MIN_SCALE)`,
- * clamped to `[MIN_FRACTION, MAX_MULTIPLIER]`.
+ * Uses the **log-ratio** form so extreme imbalances (supply → 0 or
+ * demand → 0) push the raw factor past the `[MIN_FRACTION,
+ * MAX_MULTIPLIER]` clamps, engaging them; moderate imbalances stay mild.
+ *
+ *   factor = clamp(
+ *     1 + ELASTICITY × ln( max(demand, MIN_SCALE) / max(supply, MIN_SCALE) ),
+ *     MIN_FRACTION,
+ *     MAX_MULTIPLIER
+ *   )
+ *
+ * At `demand == supply` the ratio is 1, `ln(1) == 0`, and the factor is 1.0
+ * (no price pressure). When demand doubles relative to supply, the raw
+ * factor moves by `ELASTICITY × ln(2) ≈ 0.069` (with ELASTICITY = 0.1) —
+ * mild, but compounding over many ticks of sustained pressure. When the
+ * ratio diverges by orders of magnitude (extreme cases), `ln(ratio)` grows
+ * without bound and the clamps engage (TDD §10.6 — "Resource scarcity" and
+ * "Supply" / "Demand" must be allowed to dominate price in extreme cases).
+ *
+ * `MIN_SCALE` floors both `demand` and `supply` so the ratio never divides
+ * by (near-)zero; at `supply == demand == 0` the ratio is `MIN_SCALE /
+ * MIN_SCALE = 1` and the factor is 1.0 (no pressure, no NaN).
  *
  * Pure: deterministic given the inputs.
  */
 export function computeSupplyDemandFactor(supply: number, demand: number): number {
-  const denom = Math.max(supply + demand, PROVISIONAL_ECONOMY_MARKET_MIN_SCALE);
-  const raw = 1 + PROVISIONAL_ECONOMY_MARKET_PRICE_ELASTICITY * (demand - supply) / denom;
+  const s = Math.max(supply, PROVISIONAL_ECONOMY_MARKET_MIN_SCALE);
+  const d = Math.max(demand, PROVISIONAL_ECONOMY_MARKET_MIN_SCALE);
+  const ratio = d / s;
+  const raw = 1 + PROVISIONAL_ECONOMY_MARKET_PRICE_ELASTICITY * Math.log(ratio);
   return clamp(
     raw,
     PROVISIONAL_ECONOMY_MARKET_PRICE_MIN_FRACTION,
@@ -361,7 +403,15 @@ export function updateMarkets(
   return { state: newState, events: patchedEvents };
 }
 
-/** Linear interpolation between two bigints by a fraction in [0, 1]. */
+/** Linear interpolation between two bigints by a fraction in [0, 1].
+ *
+ *  Special handling for small-price markets: if the float lerp rounds back
+ *  to the source value (e.g. lerp(10, 11, 0.25) = 10.25 → 10 — no movement),
+ *  nudge by 1 minor unit toward the target. This ensures the price always
+ *  moves when there's a gap, preventing "stuck" prices for low-base-price
+ *  markets like water (base 10) and energy (base 50). Without the nudge, a
+ *  25% smoothing fraction on a 1-unit gap would round to 0 and the price
+ *  would never move. */
 function lerpBigInt(from: bigint, to: bigint, fraction: number): bigint {
   if (from === to) return from;
   // Number-based lerp for P3b magnitudes. For very large bigints this would
@@ -369,7 +419,13 @@ function lerpBigInt(from: bigint, to: bigint, fraction: number): bigint {
   const a = Number(from);
   const b = Number(to);
   const result = a + (b - a) * fraction;
-  return BigInt(Math.max(1, Math.round(result)));
+  const rounded = Math.max(1, Math.round(result));
+  if (rounded === a && from !== to) {
+    // Lerp didn't move the price (rounding swallowed the step). Nudge by
+    // 1 minor unit toward the target so prices converge over multiple ticks.
+    return from < to ? from + 1n : from - 1n;
+  }
+  return BigInt(rounded);
 }
 
 /**

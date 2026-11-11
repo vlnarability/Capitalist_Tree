@@ -93,23 +93,32 @@ export const PROVISIONAL_ECONOMY_CATEGORY_FEE = 'fee';
 // PROVISIONAL (GDD §17: Exact inflation model)
 //
 // Per-market price elasticity — how strongly a market's price responds to
-// the (demand - supply) gap. The target price is computed as:
+// the demand/supply ratio. The target price is computed as:
 //
 //   targetPrice = basePrice × supplyDemandFactor × monetaryConditionsFactor
-//   supplyDemandFactor = 1 + ELASTICITY × (demand - supply)
-//                                  / max(supply + demand, MIN_SCALE)
+//   supplyDemandFactor = clamp(
+//     1 + ELASTICITY × ln( max(demand, MIN_SCALE) / max(supply, MIN_SCALE) ),
+//     MIN_FRACTION, MAX_MULTIPLIER
+//   )
 //
-// 0.1 = a 10% gap between demand and supply (relative to total throughput)
-// moves the price by 1% from the base. Conservative for a starter economy;
-// P5+ tuning will calibrate from playtest data.
+// 0.1 = a 2× demand-over-supply moves the price by ln(2) × 0.1 ≈ 6.9%.
+// Conservative for a starter economy; P5+ tuning will calibrate from
+// playtest data. The log form (rather than the linear difference) ensures
+// extreme imbalances (supply → 0 with demand huge, or vice-versa) push
+// the raw factor past the clamps, so the clamps actually engage — see
+// `packages/simulation/src/economy/markets.ts` for the full derivation.
 export const PROVISIONAL_ECONOMY_MARKET_PRICE_ELASTICITY = 0.1;
 
 // PROVISIONAL (GDD §17: Exact inflation model)
 //
-// Floor on the supply/demand divisor. Prevents the elasticity formula from
-// dividing by (near-)zero when a market has no recent activity (supply and
-// demand both 0). With MIN_SCALE = 10, a market with `demand=5, supply=0`
-// gets `factor = 1 + ELASTICITY × (5 - 0) / max(5, 10) = 1 + 0.05 = 1.05`.
+// Floor on the supply/demand ratio components. Prevents the elasticity
+// formula from producing NaN / ±Infinity when a market has no recent
+// activity (supply and demand both 0). Both `demand` and `supply` are
+// floored at `MIN_SCALE` before the ratio is taken: with MIN_SCALE = 10,
+// a market with `demand=5, supply=0` gets `ratio = max(5, 10) / max(0, 10)
+// = 10 / 10 = 1.0` → `factor = 1.0` (no pressure). A market with
+// `demand=100, supply=0` gets `ratio = 100 / 10 = 10` → `factor = 1 +
+// ELASTICITY × ln(10) ≈ 1.23`.
 export const PROVISIONAL_ECONOMY_MARKET_MIN_SCALE = 10;
 
 // PROVISIONAL (GDD §17: Exact inflation model)
@@ -159,17 +168,26 @@ export const PROVISIONAL_ECONOMY_MARKET_PRICE_SMOOTHING = 0.25;
 //
 // Per-tick supply refill rate (units per tick). Markets passively restock
 // each tick, representing background supplier activity. Combined with the
-// demand decay (below), this gives markets a natural equilibrium when no
-// purchases occur.
-export const PROVISIONAL_ECONOMY_MARKET_SUPPLY_REFILL_RATE = 5;
+// demand decay (below), this gives markets a natural equilibrium supply of
+// `SUPPLY_REFILL_RATE / SUPPLY_DECAY = 1 / 0.05 = 20` units when no
+// purchases occur. This is intentionally lower than INITIAL_SUPPLY (100) so
+// a fresh game's markets slowly drain toward equilibrium as the player
+// starts purchasing, providing visible supply dynamics without the market
+// immediately bouncing back to full stock after a purchase spike (which
+// would erase the demand signal before prices can respond).
+export const PROVISIONAL_ECONOMY_MARKET_SUPPLY_REFILL_RATE = 1;
 
 // PROVISIONAL (GDD §17: Exact inflation model)
 //
 // Per-tick demand decay (fraction in [0, 1]). Each tick the market's demand
 // is multiplied by `(1 - DECAY)`. A purchase adds to demand; the decay
-// gradually returns it to 0 when no further purchases occur. 0.1 = 10% of
-// the demand evaporates each tick.
-export const PROVISIONAL_ECONOMY_MARKET_DEMAND_DECAY = 0.1;
+// gradually returns it to 0 when no further purchases occur. 0.01 = 1% of
+// the demand evaporates each tick — slow enough that a single purchase
+// spike keeps the demand signal (and elevated prices) for ~50–100 ticks,
+// giving the pricing model time to actually move the price in response.
+// A faster decay (e.g. 0.1) would erase the spike before the smoothed
+// price could respond, leaving the demand signal invisible to players.
+export const PROVISIONAL_ECONOMY_MARKET_DEMAND_DECAY = 0.01;
 
 // PROVISIONAL (GDD §17: Exact inflation model)
 //
@@ -201,9 +219,9 @@ export const PROVISIONAL_ECONOMY_INFLATION_RATE_ANNUALIZATION = 525_600;
 //
 // Initial equilibrium supply for a freshly seeded market. Markets start
 // with `supply = INITIAL_SUPPLY, demand = 0`, so the supply/demand factor
-// is `1 + ELASTICITY × (0 - INITIAL_SUPPLY) / max(INITIAL_SUPPLY, MIN_SCALE)
-// = 1 - ELASTICITY` — a slight deflationary bias that's quickly overtaken
-// by the player's purchases.
+// is `1 + ELASTICITY × ln(MIN_SCALE / INITIAL_SUPPLY) = 1 + 0.1 × ln(0.1)
+// ≈ 0.77` — a mild deflationary bias that's quickly overtaken by the
+// player's purchases or by monetary-conditions growth (issuance).
 export const PROVISIONAL_ECONOMY_MARKET_INITIAL_SUPPLY = 100;
 
 // PROVISIONAL (GDD §8.1 / §17: personal vs business finances)
