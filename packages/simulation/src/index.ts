@@ -56,3 +56,9 @@ export * from './resources/index.js';
 // purchase / pay-expense action handlers. Tests import these directly to
 // assert ledger + transaction + idempotency invariants (TDD §18.1).
 export * from './economy/index.js';
+
+// Personal module (P3c) — pure functions used by PersonalSystem +
+// the pay-expense action handler. Tests import these directly to assert
+// the recurring-expenses + well-being + diminishing-returns invariants
+// (TDD §18.1, GDD §7).
+export * from './personal/index.js';
