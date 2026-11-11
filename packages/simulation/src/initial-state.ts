@@ -138,6 +138,10 @@ export function initializeState(config: GameConfig): GameState {
       health: 1,
       happiness: 0.7,
       financialSecurity: 0.5,
+      // P3c: cumulative unpaid living-expense days. Starts at 0 — no bills
+      // have come due yet. PersonalSystem increments this when a bill fires
+      // and the player cannot pay.
+      unpaidDays: 0,
       livingExpenses: {
         food: '0',
         housing: '0',

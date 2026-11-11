@@ -17,6 +17,8 @@ import {
   issuanceRejectedEventSchema,
   purchaseCompletedEventSchema,
   marketPriceChangedEventSchema,
+  expenseDueEventSchema,
+  transferCompletedEventSchema,
 } from './events-economy.js';
 
 /**
@@ -116,6 +118,8 @@ export const simulationEventSchema = z.discriminatedUnion('type', [
   issuanceRejectedEventSchema,
   purchaseCompletedEventSchema,
   marketPriceChangedEventSchema,
+  expenseDueEventSchema,
+  transferCompletedEventSchema,
 ]);
 export type SimulationEvent = z.infer<typeof simulationEventSchema>;
 

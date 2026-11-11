@@ -1,11 +1,13 @@
 import { z } from 'zod';
 import { transactionRecordSchema } from './economy.js';
+import { LIVING_EXPENSE_CATEGORIES } from './player.js';
 
 /**
- * Economy-related SimulationEvent variants (P3a — TDD §10.3, §10.4, GDD §6.2).
+ * Economy-related SimulationEvent variants (P3a/P3b/P3c — TDD §10.3, §10.4, §10.5,
+ * GDD §6.2, §7.1, §8.5).
  *
  * Added to the `SimulationEvent` discriminated union via
- * `packages/shared/src/schemas/events.ts`. P3a introduces:
+ * `packages/shared/src/schemas/events.ts`. P3a introduced:
  *
  *   - `transaction-recorded`: emitted by EconomySystem (or any system that
  *     moves money) whenever a TransactionRecord is appended to the ledger.
@@ -18,6 +20,17 @@ import { transactionRecordSchema } from './economy.js';
  *   - `issuance-rejected`: emitted when the authority refuses to issue
  *     (duplicate requestId, policy limit, invalid amount, etc.). Carries the
  *     requestId and a short machine-readable `reason` code.
+ *
+ * P3b added `purchase-completed` and `market-price-changed`.
+ *
+ * P3c adds:
+ *   - `expense-due`: emitted by the PersonalSystem when a recurring bill comes
+ *     due (auto-paid or unpaid), and by the `pay-expense` action handler
+ *     (manual pay). Carries the category, amount, paid flag, unpaid-day
+ *     counter after, and the player's resulting balance.
+ *   - `transfer-completed`: emitted by the `transfer` action handler. Carries
+ *     the source/destination accounts, amount, transaction id, and the
+ *     source's resulting balance.
  *
  * HOW TO EXTEND: add a new variant with a unique `type` literal. Do NOT
  * loosen the union with a catch-all.
@@ -160,3 +173,83 @@ export const marketPriceChangedEventSchema = z.object({
   }),
 });
 export type MarketPriceChangedEvent = z.infer<typeof marketPriceChangedEventSchema>;
+
+/**
+ * `expense-due` event — emitted by the PersonalSystem (when a recurring bill
+ * fires, auto-paid or unpaid) and by the `pay-expense` action handler
+ * (manual pay). Carries the category, the attempted amount, whether the bill
+ * was actually paid, the unpaid-day counter after, and the player's resulting
+ * balance.
+ *
+ * The PersonalSystem emits one `expense-due` event per category at each bill
+ * cycle. When `paid === true`, the event is paired with a
+ * `transaction-recorded` event carrying the corresponding `expense` sink
+ * transaction (player:personal → authority). When `paid === false`, no
+ * transaction is recorded (no money moved); the `unpaidDaysAfter` counter on
+ * the event reflects the increment applied to `player.unpaidDays`. The
+ * PersonalSystem's per-tick well-being derivation translates that counter
+ * into a physical-health penalty (GDD §7.2, §7.3).
+ *
+ * The `source` field discriminates whether the bill was auto-paid (the
+ * PersonalSystem's scheduled `bill-due` event fired) or manually paid (the
+ * `pay-expense` action handler). Both produce the same shape; the source is
+ * for audit/UI.
+ *
+ * P3c addition (TDD §18.1, GDD §7.1, §7.2).
+ */
+export const expenseDueEventSchema = z.object({
+  type: z.literal('expense-due'),
+  at: z.number().int().nonnegative(),
+  payload: z.object({
+    /** Living-expense category (GDD §7.1). */
+    category: z.enum(LIVING_EXPENSE_CATEGORIES),
+    /** Amount that was due (bigint minor units as string). */
+    amount: z.string(),
+    /** Whether the bill was actually paid (true) or recorded as unpaid
+     *  (false — insufficient funds). */
+    paid: z.boolean(),
+    /** `'auto-bill'` when the PersonalSystem's scheduled bill fired;
+     *  `'pay-expense'` when the player manually paid via the action. */
+    source: z.enum(['auto-bill', 'pay-expense']),
+    /** Player's cash balance after the operation. If `paid` is false, this
+     *  equals the pre-event balance (no money moved). */
+    playerBalanceAfter: z.string(),
+    /** `player.unpaidDays` after the operation. Mirrors the state field so
+     *  consumers can read the counter from the event without reaching into
+     *  state. */
+    unpaidDaysAfter: z.number().int().nonnegative(),
+    /** When `paid === true`, the transaction id of the corresponding
+     *  `expense` sink transaction. Absent when `paid === false`. */
+    transactionId: z.string().min(1).optional(),
+  }),
+});
+export type ExpenseDueEvent = z.infer<typeof expenseDueEventSchema>;
+
+/**
+ * `transfer-completed` event — emitted by the `transfer` action handler
+ * (P3c — TDD §10.5, GDD §8.1). Carries the source/destination accounts, the
+ * amount moved, the resulting transaction id, and the source's resulting
+ * balance. Pairs with the `transaction-recorded` event emitted by the
+ * underlying `transfer()` call.
+ *
+ * Pure data — the handler builds this from the new state + the action params.
+ * No state mutation beyond what `transfer()` already did.
+ */
+export const transferCompletedEventSchema = z.object({
+  type: z.literal('transfer-completed'),
+  at: z.number().int().nonnegative(),
+  payload: z.object({
+    /** Source account id (debited). */
+    sourceAccount: z.string().min(1),
+    /** Destination account id (credited). */
+    destinationAccount: z.string().min(1),
+    /** Amount moved (bigint minor units as string). */
+    amount: z.string(),
+    /** Transaction id (deterministic — derived from timestamp + ledger length). */
+    transactionId: z.string().min(1),
+    /** Source's resulting cash balance (after debit). Mirrored to
+     *  `player.personalCash` when the source was `player:personal`. */
+    sourceBalanceAfter: z.string(),
+  }),
+});
+export type TransferCompletedEvent = z.infer<typeof transferCompletedEventSchema>;

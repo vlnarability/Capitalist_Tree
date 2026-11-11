@@ -183,6 +183,7 @@ export function testState(treeOverrides: Partial<TreeState> = {}): GameState {
       health: 1,
       happiness: 0.7,
       financialSecurity: 0.5,
+      unpaidDays: 0,
       livingExpenses: {
         food: '0', housing: '0', utilities: '0', healthcare: '0', transportation: '0',
       },

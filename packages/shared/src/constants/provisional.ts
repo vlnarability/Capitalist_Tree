@@ -177,7 +177,21 @@ export const PROVISIONAL_INITIAL_INTEREST_RATE = 0;
 // v5 → v6 migration backfills them explicitly so consumers can rely on the
 // fields being present (not the zod default fallback). The migration is pure
 // and does NOT touch `originalTree.id` or `originalTree.isOriginal`.
-export const CURRENT_SCHEMA_VERSION = 6;
+//
+// v7 (P3c): added one new PlayerState shape for the PersonalSystem (TDD §11,
+// GDD §7):
+//   - `player.unpaidDays: number` — cumulative counter of unpaid
+//     living-expense days. Each time a bill comes due and the player cannot
+//     pay, the counter advances by PROVISIONAL_PERSONAL_BILLING_INTERVAL_DAYS
+//     (one full billing cycle of unpaid living costs). Physical health is
+//     derived with a diminishing-returns penalty from this counter (GDD §7.2,
+//     §7.3). The counter decays slowly when bills are paid on time (recovery).
+//
+// The field has a Zod `.default(0)`, so v6 saves parse cleanly under v7, but
+// the v6 → v7 migration backfills it explicitly so consumers can rely on the
+// field being present. The migration is pure and does NOT touch
+// `originalTree.id` or `originalTree.isOriginal`.
+export const CURRENT_SCHEMA_VERSION = 7;
 
 // Used by migration tests to exercise the v0 -> v1 path. Real saves are
 // always written at CURRENT_SCHEMA_VERSION.

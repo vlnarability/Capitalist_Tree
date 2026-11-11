@@ -331,3 +331,34 @@ const v5ToV6: Migration = (state: GameState): GameState => {
 };
 
 migrations.register(5, v5ToV6);
+
+// P3c: v6 -> v7 migration. Backfills one new PlayerState field for the
+// PersonalSystem (TDD §11, GDD §7):
+//   - `player.unpaidDays: number` — cumulative counter of unpaid
+//     living-expense days. Defaults to 0 (no unpaid days at migration
+//     time — the PersonalSystem starts tracking unpaid bills from the
+//     next due bill forward).
+//
+// The field has a Zod `.default(0)`, so v6 saves parse cleanly under v7, but
+// the migration backfills it explicitly so consumers can rely on the field
+// being present without re-running through zod's default pipeline. The
+// migration is idempotent under repeated application (defensive — the
+// framework doesn't re-run migrations, but tests do).
+//
+// The migration is pure and does NOT touch `originalTree.id` or
+// `originalTree.isOriginal` (GDD §16.1/16.2).
+const v6ToV7: Migration = (state: GameState): GameState => {
+  const out: GameState = { ...state };
+  const player = out.player as typeof out.player & { unpaidDays?: unknown };
+
+  if (typeof player.unpaidDays !== 'number' || !Number.isFinite(player.unpaidDays)) {
+    out.player = {
+      ...out.player,
+      unpaidDays: 0,
+    };
+  }
+
+  return out;
+};
+
+migrations.register(6, v6ToV7);

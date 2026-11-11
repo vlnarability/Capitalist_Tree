@@ -232,3 +232,178 @@ export const PROVISIONAL_ECONOMY_MARKET_INITIAL_SUPPLY = 100;
 // the market "holds" the revenue. P3c+ may drain these to the authority
 // (supplier taxes) or route to player-owned business accounts (TDD §10.5).
 export const PROVISIONAL_ECONOMY_MARKET_ACCOUNT_PREFIX = 'market:';
+
+// ============================================================================
+// P3c — PersonalSystem: recurring living expenses + well-being indicators
+// (TDD §11, GDD §7).
+//
+// All values here are @provisional per GDD §17 ("starting currency and initial
+// living expenses" + "currency issuance mechanics and monetary policy"). They
+// parameterize the PersonalSystem in
+// `packages/simulation/src/systems/personal.ts` and the pure helpers in
+// `packages/simulation/src/personal/*` — the engine never hardcodes tuning
+// numbers, only imports from here.
+// ============================================================================
+
+// PROVISIONAL (GDD §17: starting currency and initial living expenses)
+//
+// Interval between recurring living-expense bills, in simulation days. The
+// PersonalSystem schedules a `bill-due` event every BILLING_INTERVAL_DAYS sim
+// days; when the event fires, the system attempts to pay each of the 5
+// categories (food, housing, utilities, healthcare, transportation — GDD
+// §7.1) out of `player:personal` (sinking the cash to the authority).
+//
+// 30 sim days ≈ 1 sim month (at 120 sim days/year — see
+// PROVISIONAL_DAYS_PER_YEAR). Picked so a player who checks in daily sees
+// roughly one bill per real-world month at 1x speed (1 real day = 1 sim
+// day). Tunable.
+export const PROVISIONAL_PERSONAL_BILLING_INTERVAL_DAYS = 30;
+
+// PROVISIONAL (GDD §17: starting currency and initial living expenses)
+//
+// Convenience constant: BILLING_INTERVAL_DAYS expressed in sim seconds
+// (30 × 86400 = 2_592_000). Avoids recomputing `days × SECONDS_PER_DAY` at
+// every call site.
+export const PROVISIONAL_PERSONAL_BILLING_INTERVAL_SECONDS =
+  PROVISIONAL_PERSONAL_BILLING_INTERVAL_DAYS * 24 * 60 * 60;
+
+// PROVISIONAL (GDD §17: starting currency and initial living expenses)
+//
+// Per-cycle (monthly) amounts for each living-expense category, in bigint
+// minor units as string. These populate `player.livingExpenses` at game
+// start. Tuned so a fresh player with $500 (50_000 minor) starting cash can
+// survive roughly 6 cycles (6 sim months = ~half a sim year) before going
+// broke if they never harvest — that gives the player a comfortable ramp
+// to learn the harvest → currency loop (P3d integration test exercises
+// this end-to-end).
+//
+//   food:          $30 / cycle  =   3_000 minor
+//   housing:      $120 / cycle  =  12_000 minor
+//   utilities:     $40 / cycle  =   4_000 minor
+//   healthcare:    $20 / cycle  =   2_000 minor
+//   transportation:$30 / cycle  =   3_000 minor
+//   -------------------------------------------
+//   total:        $240 / cycle  =  24_000 minor
+//
+// The exact split (e.g. housing dominating) reflects typical household
+// budget proportions. P5+ tuning will calibrate from playtest data; the
+// relative weights matter more than the absolute magnitudes for the
+// well-being derivation (financial-security is normalized by the total).
+export const PROVISIONAL_PERSONAL_EXPENSE_FOOD_MINOR = '3000';
+export const PROVISIONAL_PERSONAL_EXPENSE_HOUSING_MINOR = '12000';
+export const PROVISIONAL_PERSONAL_EXPENSE_UTILITIES_MINOR = '4000';
+export const PROVISIONAL_PERSONAL_EXPENSE_HEALTHCARE_MINOR = '2000';
+export const PROVISIONAL_PERSONAL_EXPENSE_TRANSPORTATION_MINOR = '3000';
+
+// PROVISIONAL (GDD §17: starting currency and initial living expenses)
+//
+// Threshold below which the PersonalSystem emits a `low-funds` notification
+// (severity `'warning'`). When `player:personal` balance drops below this,
+// the player is at risk of being unable to pay the next bill. Tuned to one
+// billing cycle's worth of expenses (24_000 minor = $240) so the warning
+// fires when the player has exactly one bill cycle of runway left.
+export const PROVISIONAL_PERSONAL_LOW_FUNDS_THRESHOLD_MINOR = '24000';
+
+// PROVISIONAL (GDD §7.2, §7.3, §17: wealth and diminishing returns)
+//
+// Wealth scale for the financial-security derivation (the half-saturation
+// point of the saturating-hyperbola happiness function — see
+// `packages/simulation/src/personal/well-being.ts`). At this wealth level,
+// financial security is exactly 0.5.
+//
+// Set to 100_000 minor units = $1_000 nominal. At $1_000 of disposable
+// cash, the player has crossed the poverty line into "financial security"
+// (GDD §7.3 — "the difference between poverty and financial security
+// should be substantial"). The hyperbola's diminishing-returns property
+// (GDD §7.3 — "the difference between being wealthy and extraordinarily
+// wealthy should be considerably smaller") falls out of the function form:
+//
+//   security(wealth) = wealth / (wealth + SCALE)
+//
+// Marginal gain per dollar = SCALE / (wealth + SCALE)^2 — monotonically
+// decreasing in wealth. A player going from $100 → $1_000 sees +0.41
+// security; going from $1_000 → $10_000 sees +0.41 again (log-scale
+// invariance of the hyperbola — same delta per 10× step in absolute
+// terms); $10_000 → $100_000 adds only +0.08; $100_000 → $1M adds +0.009.
+// This satisfies GDD §7.3's "difference between wealthy and extraordinarily
+// wealthy should be considerably smaller".
+//
+// Real (inflation-adjusted) wealth is used in the derivation, so an
+// inflationary economy that doubles prices without doubling the player's
+// cash halves their real purchasing power (and thus their security) —
+// exposing GDD §6.3's "nominal vs real" distinction.
+export const PROVISIONAL_WELL_BEING_WEALTH_SCALE_MINOR = '100000';
+
+// PROVISIONAL (GDD §7.2, §7.3, §17: wealth and diminishing returns)
+//
+// Per-unpaid-day physical-health penalty. Each day the player cannot pay a
+// bill reduces physical health by this fraction. Clamped by
+// PROVISIONAL_WELL_BEING_UNPAID_HEALTH_PENALTY_MAX.
+//
+// 0.005 = 0.5% per unpaid day. With 30 unpaid days (one full billing cycle
+// unpaid), health drops by 15% — meaningful but recoverable. 200 unpaid
+// days (≈6.5 unpaid billing cycles) maxes out the penalty at 50% (the
+// cap below) — the player is in serious trouble but not dead (GDD §16.3:
+// tree death does not end the game; analogously, financial ruin does not
+// end the simulation either).
+export const PROVISIONAL_WELL_BEING_UNPAID_HEALTH_PENALTY_PER_DAY = 0.005;
+
+// PROVISIONAL (GDD §7.2, §7.3, §17: wealth and diminishing returns)
+//
+// Maximum fraction of physical health that unpaid days can remove. 0.5 =
+// unpaid bills can drop physical health from 1.0 to 0.5 but no further.
+// Below 0.5 the system caps the penalty — a perpetually broke player
+// stays at 0.5 health rather than spiralling to 0 (which would be
+// unrecoverable and frustrating). Other health drivers (nutrition,
+// housing, environmental exposure, pollution, stress — GDD §7.2) will
+// add their own penalties in later phases.
+export const PROVISIONAL_WELL_BEING_UNPAID_HEALTH_PENALTY_MAX = 0.5;
+
+// PROVISIONAL (GDD §7.2, §7.3, §17: wealth and diminishing returns)
+//
+// Per-tick recovery rate for `player.unpaidDays`. Each tick the PersonalSystem
+// runs, if the player's most recent bill was paid (or no bill was due this
+// tick), the unpaidDays counter decays by this fraction. 0.01 = 1% of the
+// counter evaporates per tick — slow enough that the player feels the
+// consequence of unpaid bills for ~100 ticks (~100 sim minutes) but fast
+// enough that a player who recovers financially returns to baseline within
+// a reasonable play session.
+//
+// A "decay" rather than "subtract 1 per tick" lets the recovery slow as the
+// counter approaches 0 (asymptotic), preventing the counter from going
+// negative. Math.max(0, floor(unpaidDays * (1 - 0.01))) per tick.
+export const PROVISIONAL_WELL_BEING_UNPAID_RECOVERY_PER_TICK = 0.01;
+
+// PROVISIONAL (GDD §7.2, §7.3, §17: wealth and diminishing returns)
+//
+// Weight of `financialSecurity` in the happiness derivation. Happiness is
+// a weighted blend of financial security, physical health, and a baseline
+// "leisure/relationships/environment" term (the latter is a constant
+// placeholder for P6+ EnvironmentSystem and future social systems).
+//
+//   happiness = W_SECURITY × security + W_HEALTH × health + W_BASELINE × baseline
+//
+// 0.5 = financial security contributes half of happiness. Picked so a
+// player who is financially secure but physically unhealthy (or vice
+// versa) is at ~0.65 happiness — neither thriving nor miserable. GDD §7.3
+// ("A player can become extremely rich while remaining unhappy or
+// unhealthy") is satisfied because no single driver can push happiness
+// above `1 - (sum of the other weights)` — a rich player with poor
+// health caps at `W_SECURITY + W_BASELINE = 0.7`.
+export const PROVISIONAL_WELL_BEING_HAPPINESS_WEIGHT_SECURITY = 0.5;
+
+// PROVISIONAL (GDD §7.2, §7.3, §17: wealth and diminishing returns)
+//
+// Weight of `physicalHealth` in the happiness derivation. 0.3 = physical
+// health contributes 30% of happiness.
+export const PROVISIONAL_WELL_BEING_HAPPINESS_WEIGHT_HEALTH = 0.3;
+
+// PROVISIONAL (GDD §7.2, §7.3, §17: wealth and diminishing returns)
+//
+// Baseline happiness weight — captures leisure, relationships, environment,
+// and accumulated stress (GDD §7.2 lists these as happiness drivers not yet
+// modelled by P3c). 0.2 = 20% baseline so happiness never drops below 0.2
+// even for a destitute, unhealthy player — the game remains playable.
+// P6+ EnvironmentSystem + future social systems will replace this constant
+// with real derivations.
+export const PROVISIONAL_WELL_BEING_HAPPINESS_BASELINE = 0.2;
