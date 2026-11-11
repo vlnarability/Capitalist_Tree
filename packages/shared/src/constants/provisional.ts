@@ -134,7 +134,35 @@ export const PROVISIONAL_INITIAL_INTEREST_RATE = 0;
 // Migration v3 -> v4 backfills all new fields with neutral defaults so
 // older saves load cleanly. The migration is pure and does not touch
 // `originalTree.id` or `originalTree.isOriginal`.
-export const CURRENT_SCHEMA_VERSION = 4;
+//
+// v5 (P3a): added four new fields to EconomyState for the ledger + transaction
+// system (TDD §10.3, §10.4):
+//   - `economy.accounts: AccountState[]` — explicit account ledger. The
+//     central monetary authority is virtual (the "mint") — its net position
+//     is implied by `totalIssued - totalSinks`. P3a seeds two accounts:
+//     `player:personal` (carrying the existing `player.personalCash` balance)
+//     and `external:default` (balance 0). P3b will add per-market external
+//     accounts; P3c may add business accounts.
+//   - `economy.processedRequestIds: string[]` — idempotency set for currency
+//     issuance. Every fulfilled or rejected CurrencyIssuanceRequest has its
+//     deterministic requestId recorded here so a re-processed request never
+//     double-issues money, even across save/load.
+//   - `economy.totalIssued: string` — cumulative currency ever issued by the
+//     authority (bigint minor units as string). Monotonically non-decreasing.
+//   - `economy.totalSinks: string` — cumulative currency removed from
+//     circulation via explicit monetary operations (taxes, fees, central-bank
+//     interventions). Monotonically non-decreasing.
+//
+// TransactionRecord also gains an optional `requestId: string` field for
+// audit trail — older saves don't have it; the schema accepts its absence.
+//
+// Migration v4 -> v5 backfills `accounts` from the player's existing
+// `personalCash` so the conservation invariant
+// (`sum(accounts.balance) + totalSinks === initialSupply + totalIssued`)
+// holds for legacy saves with `initialSupply = totalIssued = totalSinks = 0 +
+// player.personalCash`. The migration is pure and does NOT touch
+// `originalTree.id` or `originalTree.isOriginal`.
+export const CURRENT_SCHEMA_VERSION = 5;
 
 // Used by migration tests to exercise the v0 -> v1 path. Real saves are
 // always written at CURRENT_SCHEMA_VERSION.

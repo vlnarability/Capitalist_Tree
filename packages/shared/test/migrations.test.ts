@@ -113,7 +113,7 @@ describe('MigrationRegistry', () => {
     expect(out.world.environment.soil.ph).toBe(v4State.world.environment.soil.ph);
   });
 
-  it('v3 (current) saves pass through migrations unchanged', () => {
+  it('current-version saves pass through migrations unchanged (identity)', () => {
     const s = freshState();
     const out = migrations.migrate(s, CURRENT_SCHEMA_VERSION, CURRENT_SCHEMA_VERSION);
     // Identity — no copy when from === target.
@@ -129,7 +129,11 @@ describe('MigrationRegistry', () => {
   it('raises UnknownSchemaVersionError for a future source version (downgrade)', () => {
     const reg = new MigrationRegistry();
     const s = freshState();
-    expect(() => reg.migrate(s, 5, 1)).toThrow(UnknownSchemaVersionError);
+    // `CURRENT_SCHEMA_VERSION + 1` is a hypothetical future save whose
+    // migration the running code doesn't know about yet.
+    expect(() => reg.migrate(s, CURRENT_SCHEMA_VERSION + 1, 1)).toThrow(
+      UnknownSchemaVersionError,
+    );
   });
 
   it('raises UnknownSchemaVersionError when an intermediate migration is missing', () => {
