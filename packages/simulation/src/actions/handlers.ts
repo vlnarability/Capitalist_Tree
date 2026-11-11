@@ -43,7 +43,14 @@ import {
 } from '../biology/index.js';
 import { findFertilizerById } from '@capitalist-tree/content';
 import { applyFertilizer, applyWaterToSoil } from '../resources/index.js';
-import { applyPurchase, InsufficientFundsError, UnknownMarketError } from '../economy/index.js';
+import {
+  applyPurchase,
+  InsufficientFundsError,
+  UnknownMarketError,
+  payExpenseHandler,
+  transferHandler,
+  sellTreeHandler,
+} from '../economy/index.js';
 
 export type ActionListener<A extends GameAction = GameAction> = (
   state: GameState,
@@ -373,6 +380,9 @@ export const actionHandlers: Record<string, ActionListener> = {
   'apply-water': applyWaterHandler as ActionListener,
   'apply-fertilizer': applyFertilizerHandler as ActionListener,
   'purchase': purchaseHandler as ActionListener,
+  'pay-expense': payExpenseHandler as ActionListener,
+  'transfer': transferHandler as ActionListener,
+  'sell-tree': sellTreeHandler as ActionListener,
 };
 
 /** Dispatch a GameAction to its handler. Raises UnknownActionError for unknown types. */
