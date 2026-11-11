@@ -218,6 +218,24 @@ export function testState(treeOverrides: Partial<TreeState> = {}): GameState {
         },
       ],
       transactions: [],
+      // P3a: account ledger + idempotency set + cumulative counters.
+      accounts: [
+        {
+          id: 'player:personal',
+          type: 'player',
+          label: 'Player Personal',
+          balance: '50000',
+        },
+        {
+          id: 'external:default',
+          type: 'external',
+          label: 'External Participants',
+          balance: '0',
+        },
+      ],
+      processedRequestIds: [],
+      totalIssued: '0',
+      totalSinks: '0',
     },
     businesses: [],
     inventory: { items: [] },

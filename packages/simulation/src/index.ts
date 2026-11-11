@@ -51,3 +51,8 @@ export * from './weather/index.js';
 // apply-water / apply-fertilizer action handlers (P2). Tests import these
 // directly to assert water / nutrient / soil invariants.
 export * from './resources/index.js';
+
+// Economy module — pure functions used by EconomySystem + (in P3c) the
+// purchase / pay-expense action handlers. Tests import these directly to
+// assert ledger + transaction + idempotency invariants (TDD §18.1).
+export * from './economy/index.js';

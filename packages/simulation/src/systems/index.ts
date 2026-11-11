@@ -6,6 +6,8 @@
  *
  * P1 replaces the BiologySystem and HarvestSystem stubs with real
  * implementations. P2 replaces the WeatherSystem and ResourceSystem stubs.
+ * P3a replaces the EconomySystem stub with a real implementation that drains
+ * `originalTree.pendingIssuances` and records currency-issuance transactions.
  * The other systems remain stubs until their phases.
  */
 import { SystemRegistry } from './registry.js';
@@ -14,8 +16,8 @@ import { weatherSystem } from './weather-system.js';
 import { biologySystem } from './biology-system.js';
 import { resourceSystem } from './resource-system.js';
 import { harvestSystem } from './harvest-system.js';
+import { economySystem } from './economy.js';
 import {
-  economySystem,
   personalSystem,
   businessSystem,
   automationSystem,
@@ -48,4 +50,5 @@ export * from './weather-system.js';
 export * from './biology-system.js';
 export * from './resource-system.js';
 export * from './harvest-system.js';
+export * from './economy.js';
 export * from './stubs.js';

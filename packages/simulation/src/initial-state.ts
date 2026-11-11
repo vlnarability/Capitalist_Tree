@@ -26,6 +26,10 @@ import {
   PROVISIONAL_WEATHER_INITIAL_CONDITION,
   PROVISIONAL_WEATHER_INITIAL_INTENSITY,
   PROVISIONAL_WEATHER_DEFAULT_CLIMATE_ID,
+  PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID,
+  PROVISIONAL_ECONOMY_EXTERNAL_ACCOUNT_ID,
+  PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_LABEL,
+  PROVISIONAL_ECONOMY_EXTERNAL_ACCOUNT_LABEL,
 } from '@capitalist-tree/shared';
 import { findSpeciesById } from '@capitalist-tree/content';
 import { seasonFromDay, SECONDS_PER_DAY } from './systems/time-system.js';
@@ -228,6 +232,36 @@ export function initializeState(config: GameConfig): GameState {
         },
       ],
       transactions: [],
+      // P3a: explicit account ledger. The central monetary authority is
+      // virtual (the "mint"); `accounts` holds only real holders. Two
+      // accounts are seeded at game start:
+      //   - `player:personal` carrying the starting cash (config.startingPersonalCash).
+      //   - `external:default` placeholder for P3b markets + external suppliers.
+      accounts: [
+        {
+          id: PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID,
+          type: 'player',
+          label: PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_LABEL,
+          balance: config.startingPersonalCash,
+        },
+        {
+          id: PROVISIONAL_ECONOMY_EXTERNAL_ACCOUNT_ID,
+          type: 'external',
+          label: PROVISIONAL_ECONOMY_EXTERNAL_ACCOUNT_LABEL,
+          balance: '0',
+        },
+      ],
+      // P3a: idempotency set — every fulfilled or rejected CurrencyIssuanceRequest
+      // has its requestId recorded here so a re-processed request never
+      // double-issues money, even across save/load.
+      processedRequestIds: [],
+      // P3a: cumulative currency ever issued by the authority. Starts at 0 —
+      // the player's starting cash is treated as pre-existing money (the
+      // conservation invariant treats it as `initialSupply`, not `totalIssued`).
+      totalIssued: '0',
+      // P3a: cumulative currency removed from circulation via explicit
+      // monetary operations (taxes, fees, central-bank interventions).
+      totalSinks: '0',
     },
     businesses: [],
     inventory: {
