@@ -30,6 +30,7 @@ import type {
 } from '@capitalist-tree/shared';
 import {
   PROVISIONAL_BIOLOGY_HARVEST_STRESS_PER_LEAF_FRACTION,
+  PROVISIONAL_BIOLOGY_DEATH_DEFOLIATION_WINDOW_DAYS,
   PROVISIONAL_RESOURCE_SOIL_WATER_CAPACITY,
   UnknownActionError,
 } from '@capitalist-tree/shared';
@@ -201,7 +202,7 @@ const harvestLeavesHandler: ActionListener<HarvestLeavesAction> = (state, action
   if (fractionRemoved >= SEVERE_DEFOLIATION_FRACTION) {
     // Count prior severe defoliations within the window to flag "repeated".
     const windowSeconds =
-      60 * 24 * 60 * 60; // PROVISIONAL_BIOLOGY_DEATH_DEFOLIATION_WINDOW_DAYS days in seconds.
+      PROVISIONAL_BIOLOGY_DEATH_DEFOLIATION_WINDOW_DAYS * 24 * 60 * 60;
     const cutoff = state.clock.elapsedSeconds - windowSeconds;
     const priorCount = tree.damage.filter(
       (d) => d.type === 'severe-defoliation' && d.appliedAt < state.clock.elapsedSeconds && d.appliedAt >= cutoff,

@@ -269,3 +269,43 @@ export const PROVISIONAL_BIOLOGY_DEATH_CRITICAL_STRESS_PER_DAY = 0.05;
 // leaf energy cost, then scaled down by this safety factor so the player
 // following the recommendation doesn't push the tree into reserve depletion.
 export const PROVISIONAL_BIOLOGY_SUSTAINABLE_HARVEST_SAFETY_MARGIN = 0.8;
+
+// ============================================================================
+// P1 — Stress accumulation rates (GDD §5.1, §5.6, §17).
+//
+// Stress is a normalized [0, 1] indicator BiologySystem recomputes each tick
+// from underlying adverse-condition drivers. The four rates below tune how
+// quickly each driver pushes stress upward; the recovery rate + recovery
+// energy cost (already centralized above) tune how quickly it relaxes when
+// conditions improve. All values are @provisional per GDD §17 ("detailed
+// photosynthesis and energy allocation equations" — stress is part of the
+// same energy-balance model).
+// ============================================================================
+
+// PROVISIONAL (GDD §5.1 / §17: detailed photosynthesis and energy allocation equations)
+//
+// Stress added per day when water deficiency is severe (stored water below
+// half the daily requirement). Scaled by `(0.5 - waterFactor) * 2` so the
+// penalty grows linearly from 0 at waterFactor=0.5 to the full rate at
+// waterFactor=0.
+export const PROVISIONAL_BIOLOGY_STRESS_WATER_PER_DAY = 0.2;
+
+// PROVISIONAL (GDD §5.1 / §17: detailed photosynthesis and energy allocation equations)
+//
+// Stress added per day when any nutrient is below half its requirement
+// (Liebig-capped). Same scaling form as water.
+export const PROVISIONAL_BIOLOGY_STRESS_NUTRIENT_PER_DAY = 0.15;
+
+// PROVISIONAL (GDD §5.6 / §17: detailed photosynthesis and energy allocation equations)
+//
+// Stress added per day when reserves are critical (below
+// PROVISIONAL_BIOLOGY_DEATH_RESERVE_CRITICAL_FRACTION). Scaled by the
+// shortfall from the critical threshold.
+export const PROVISIONAL_BIOLOGY_STRESS_RESERVE_PER_DAY = 0.1;
+
+// PROVISIONAL (GDD §5.6 / §17: detailed photosynthesis and energy allocation equations)
+//
+// Stress added per active damage record per day. Damage records (severe
+// defoliation, weather damage) accumulate stress while they're on the tree;
+// the BiologySystem prunes old records via the mortality window.
+export const PROVISIONAL_BIOLOGY_STRESS_DAMAGE_PER_DAY = 0.05;

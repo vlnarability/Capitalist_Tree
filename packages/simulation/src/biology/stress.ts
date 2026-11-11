@@ -23,19 +23,14 @@ import {
   PROVISIONAL_BIOLOGY_STRESS_MAINTENANCE_MULTIPLIER,
   PROVISIONAL_BIOLOGY_STRESS_RECOVERY_ENERGY_COST,
   PROVISIONAL_BIOLOGY_STRESS_RECOVERY_RATE,
+  PROVISIONAL_BIOLOGY_STRESS_WATER_PER_DAY,
+  PROVISIONAL_BIOLOGY_STRESS_NUTRIENT_PER_DAY,
+  PROVISIONAL_BIOLOGY_STRESS_RESERVE_PER_DAY,
+  PROVISIONAL_BIOLOGY_STRESS_DAMAGE_PER_DAY,
 } from '@capitalist-tree/shared';
 import type { BiologyContext } from './types.js';
 import { dailyWaterNeed, nutrientFactor, waterFactor } from './photosynthesis.js';
 import { reserveFraction, computeReserveCapacity } from './reserves.js';
-
-/** Stress added per day when water deficiency is severe (below half need). */
-const WATER_STRESS_PER_DAY = 0.2;
-/** Stress added per day when any nutrient is below half its requirement. */
-const NUTRIENT_STRESS_PER_DAY = 0.15;
-/** Stress added per day when reserves are critical. */
-const RESERVE_STRESS_PER_DAY = 0.1;
-/** Stress added per active damage record per day (decays via damage cleanup). */
-const DAMAGE_STRESS_PER_DAY = 0.05;
 
 export interface StressUpdate {
   /** New stress value in [0, 1]. */
@@ -63,13 +58,13 @@ export function updateStress(tree: TreeState, ctx: BiologyContext): StressUpdate
   const dailyWater = dailyWaterNeed(tree, ctx.species);
   const waterF = waterFactor(tree, dailyWater);
   if (waterF < 0.5) {
-    stressAdd += WATER_STRESS_PER_DAY * (0.5 - waterF) * 2 * stepDays;
+    stressAdd += PROVISIONAL_BIOLOGY_STRESS_WATER_PER_DAY * (0.5 - waterF) * 2 * stepDays;
   }
 
   // Nutrient deficiency stress.
   const nutrientF = nutrientFactor(tree.nutrients, ctx.species.nutrientRequirement);
   if (nutrientF < 0.5) {
-    stressAdd += NUTRIENT_STRESS_PER_DAY * (0.5 - nutrientF) * 2 * stepDays;
+    stressAdd += PROVISIONAL_BIOLOGY_STRESS_NUTRIENT_PER_DAY * (0.5 - nutrientF) * 2 * stepDays;
   }
 
   // Low reserves stress.
@@ -77,7 +72,7 @@ export function updateStress(tree: TreeState, ctx: BiologyContext): StressUpdate
   const reserveFrac = reserveFraction(tree, capacity);
   if (reserveFrac < PROVISIONAL_BIOLOGY_DEATH_RESERVE_CRITICAL_FRACTION) {
     stressAdd +=
-      RESERVE_STRESS_PER_DAY *
+      PROVISIONAL_BIOLOGY_STRESS_RESERVE_PER_DAY *
       ((PROVISIONAL_BIOLOGY_DEATH_RESERVE_CRITICAL_FRACTION - reserveFrac) /
         PROVISIONAL_BIOLOGY_DEATH_RESERVE_CRITICAL_FRACTION) *
       stepDays;
@@ -86,7 +81,7 @@ export function updateStress(tree: TreeState, ctx: BiologyContext): StressUpdate
   // Active damage stress — each unresolved damage record contributes.
   // (Damage records decay naturally via age; the BiologySystem prunes them.)
   const activeDamage = tree.damage.length;
-  stressAdd += DAMAGE_STRESS_PER_DAY * activeDamage * stepDays;
+  stressAdd += PROVISIONAL_BIOLOGY_STRESS_DAMAGE_PER_DAY * activeDamage * stepDays;
 
   // Stress recovery: if no major stressors (water OK, nutrients OK, reserves
   // OK), slowly recover. Recovery costs energy — only recover if we have
