@@ -201,12 +201,12 @@ The order mirrors TDD §4.2's table and is part of the determinism contract (TDD
 
 ```text
  1. TimeSystem        — advance the clock first; everyone reads new time.   [REAL]
- 2. WeatherSystem     — produces weather other systems react to.            [STUB]
- 3. BiologySystem     — photosynthesis/growth; depends on weather + time.   [STUB]
- 4. ResourceSystem    — water/nutrients/soil; depends on weather + biology. [STUB]
- 5. HarvestSystem     — leaf removal; depends on biology.                   [STUB]
- 6. EconomySystem     — money/transactions; depends on harvest output.     [STUB]
- 7. PersonalSystem    — expenses/well-being; depends on economy.            [STUB]
+ 2. WeatherSystem     — produces weather other systems react to.            [REAL]
+ 3. BiologySystem     — photosynthesis/growth; depends on weather + time.   [REAL]
+ 4. ResourceSystem    — water/nutrients/soil; depends on weather + biology. [REAL]
+ 5. HarvestSystem     — leaf removal; depends on biology.                   [REAL]
+ 6. EconomySystem     — money/transactions; depends on harvest output.     [REAL]
+ 7. PersonalSystem    — expenses/well-being; depends on economy.            [REAL]
  8. BusinessSystem    — business operations; depends on economy.             [STUB]
  9. AutomationSystem  — automated actions; depends on resources/economy.   [STUB]
 10. EnvironmentSystem — aggregates environmental impacts.                   [STUB]
@@ -214,6 +214,13 @@ The order mirrors TDD §4.2's table and is part of the determinism contract (TDD
 12. EventSystem       — scheduled events; runs last so it sees the
                         fully-updated state for the step.                   [STUB]
 ```
+
+**Real-system status (post-P3c):** TimeSystem (P0), WeatherSystem (P2),
+BiologySystem (P1), ResourceSystem (P2), HarvestSystem (P1), EconomySystem
+(P3a/P3b — drains `pendingIssuances`, recomputes market prices + inflation
+index, see `docs/economy.md`), PersonalSystem (P3c — scheduled expenses,
+well-being derivation, low-funds notifications, see `docs/economy.md`).
+The remaining six systems are stubs (`noopSystem` from `systems/system.ts`).
 
 The scheduler is invoked by the engine AFTER all systems run (it's not a system itself) — see `packages/simulation/src/simulation.ts`.
 
