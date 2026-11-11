@@ -1,28 +1,24 @@
 /**
  * P4a unit tests — TreeRenderData mapping + types + TreeRenderer interface.
  *
- * Covers (TDD §15.1, §15.2, §15.3, §15.4; GDD §13.4, §14):
+ * Covers (TDD §15.1, §15.3, §15.4; GDD §13.4, §14):
  *   - buildTreeRenderData: mapping tests for sapling, mature, damaged,
  *     defoliated, dead, seasonal states.
- *   - buildEnvironmentRenderData: weather / season / time-of-day / soil /
- *     pollution combinations.
  *   - CurrencyVisual lookup: findCurrencyVisual / getDefaultCurrencyVisual /
  *     resolveCurrencyVisual + ALL_CURRENCY_VISUALS shape.
  *   - TreeRenderer interface conformance: the headless stub satisfies the
  *     interface, factory dispatch works, unknown kinds throw.
- *   - Snapshot tests for representative states.
+ *   - Pure helper functions (deriveSeasonalAppearance, resolveSpeciesShape,
+ *     mapDamageMarker).
+ *
+ * EnvironmentRenderData mapping tests live in environment-render-data.test.ts;
+ * shared fixtures (baseTree / baseWorld / baseClock) live in _helpers.ts.
  *
  * These tests run in node (no DOM). The rendering package's tsconfig
  * excludes DOM types — these tests follow suit.
  */
 import { describe, it, expect } from 'vitest';
-import type {
-  TreeState,
-  WorldState,
-  SimulationClock,
-  EnvironmentState,
-  TreeDamageState,
-} from '@capitalist-tree/shared';
+import type { TreeDamageState } from '@capitalist-tree/shared';
 import {
   buildTreeRenderData,
   buildEnvironmentRenderData,
@@ -44,119 +40,7 @@ import type {
   CurrencyVisual,
   CreateTreeRendererTarget,
 } from '../src/index.js';
-
-// ----------------------------------------------------------------------------
-// Test fixtures — minimal valid TreeState / WorldState / SimulationClock.
-// Kept self-contained so this test file doesn't depend on simulation's
-// _biology-helpers.ts (which would couple rendering tests to the simulation
-// package). Mirrors the patterns in packages/simulation/test/_biology-helpers.ts
-// but at the rendering layer's scope.
-// ----------------------------------------------------------------------------
-
-const SECONDS_PER_DAY = 24 * 60 * 60;
-
-function deepMerge<T>(base: T, overrides: Partial<T>): T {
-  if (!overrides) return base;
-  const out: Record<string, unknown> = { ...(base as Record<string, unknown>) };
-  for (const key of Object.keys(overrides as Record<string, unknown>)) {
-    const b = (base as Record<string, unknown>)[key];
-    const o = (overrides as Record<string, unknown>)[key];
-    if (
-      b &&
-      o &&
-      typeof b === 'object' &&
-      !Array.isArray(b) &&
-      typeof o === 'object' &&
-      !Array.isArray(o)
-    ) {
-      out[key] = deepMerge(b, o);
-    } else if (o !== undefined) {
-      out[key] = o;
-    }
-  }
-  return out as T;
-}
-
-function baseTree(overrides: Partial<TreeState> = {}): TreeState {
-  const base: TreeState = {
-    id: 'original',
-    speciesId: 'species:white-oak',
-    isOriginal: true,
-    ageDays: 100,
-    alive: true,
-    structure: {
-      height: 5,
-      trunkDiameter: 0.2,
-      branchDevelopment: 20,
-      structuralIntegrity: 1,
-    },
-    foliage: {
-      currentLeaves: 1000,
-      leafCapacity: 2050,
-      activeLeafArea: 5,
-      seasonalCondition: 1,
-      leafGrowthProgress: 0,
-    },
-    roots: { development: 0.5, absorptionCapacity: 0.5 },
-    energy: { reserves: 500, production: 0, consumption: 0 },
-    water: { stored: 25, capacity: 50 },
-    nutrients: { nitrogen: 5, phosphorus: 2, potassium: 4 },
-    health: 1,
-    stress: 0,
-    damage: [],
-    pendingIssuances: [],
-  };
-  return deepMerge(base, overrides);
-}
-
-function baseEnvironment(overrides: Partial<EnvironmentState> = {}): EnvironmentState {
-  const base: EnvironmentState = {
-    atmosphere: { co2Concentration: 410, emissions: 0, sequestration: 0 },
-    soil: {
-      health: 0.9,
-      organicMatter: 50,
-      contamination: 0,
-      nutrients: { nitrogen: 50, phosphorus: 50, potassium: 50 },
-      soilWater: 100,
-      ph: 6.5,
-      compaction: 0,
-      microbialActivity: 1.0,
-    },
-    freshwater: { availability: 1000, groundwater: 500, contamination: 0 },
-    biodiversity: { index: 0.8, speciesPopulations: [] },
-    forestCoverage: 0.3,
-    ecosystemResilience: 0.8,
-    globalTemperature: 22,
-  };
-  return deepMerge(base, overrides);
-}
-
-function baseWorld(overrides: Partial<WorldState> = {}): WorldState {
-  const base: WorldState = {
-    environment: baseEnvironment(),
-    weather: {
-      condition: 'sunny',
-      temperature: 22,
-      intensity: 0.5,
-      prevCondition: null,
-      daysInCondition: 0,
-    },
-    regionId: 'region:starting-plot',
-  };
-  return deepMerge(base, overrides);
-}
-
-function baseClock(overrides: Partial<SimulationClock> = {}): SimulationClock {
-  const base: SimulationClock = {
-    elapsedSeconds: 0,
-    day: 0,
-    season: 'summer',
-    timeOfDay: 0.5,
-    speedMultiplier: 1,
-    paused: false,
-  };
-  return deepMerge(base, overrides);
-}
+import { baseTree, baseWorld, baseClock } from './_helpers.js';
 
 // ----------------------------------------------------------------------------
 // 1. buildTreeRenderData — mapping tests.
@@ -393,169 +277,7 @@ describe('buildTreeRenderData', () => {
 });
 
 // ----------------------------------------------------------------------------
-// 2. buildEnvironmentRenderData — mapping tests.
-// ----------------------------------------------------------------------------
-
-describe('buildEnvironmentRenderData', () => {
-  it('maps a sunny midday summer world 1:1', () => {
-    const world = baseWorld();
-    const clock = baseClock({ season: 'summer', timeOfDay: 0.5 });
-    const out = buildEnvironmentRenderData(world, clock);
-
-    expect(out.soilCondition).toBe(0.9);
-    expect(out.soilContamination).toBe(0);
-    expect(out.weatherCondition).toBe('sunny');
-    expect(out.weatherIntensity).toBe(0.5);
-    expect(out.timeOfDay).toBe(0.5);
-    expect(out.season).toBe('summer');
-    expect(out.co2Level).toBe(410);
-    expect(out.biodiversityLevel).toBe(0.8);
-    // pollutionLevel derived from CO2 (ambient = 0) + emissions (0) → 0
-    expect(out.pollutionLevel).toBe(0);
-  });
-
-  it('maps weather conditions through unchanged', () => {
-    const conditions = [
-      'sunny',
-      'cloudy',
-      'rain',
-      'heavy-rain',
-      'drought',
-      'frost',
-      'heat-wave',
-      'wind',
-      'severe-storm',
-    ] as const;
-    for (const c of conditions) {
-      const world = baseWorld({ weather: { ...baseWorld().weather, condition: c } });
-      const out = buildEnvironmentRenderData(world, baseClock());
-      expect(out.weatherCondition).toBe(c);
-    }
-  });
-
-  it('derives soilContamination normalised against FULL_DEGRADE (100)', () => {
-    const world = baseWorld({
-      environment: {
-        ...baseWorld().environment,
-        soil: { ...baseWorld().environment.soil, contamination: 50 },
-      },
-    });
-    const out = buildEnvironmentRenderData(world, baseClock());
-    expect(out.soilContamination).toBeCloseTo(0.5, 6);
-  });
-
-  it('clamps soilContamination at 1 when contamination exceeds FULL_DEGRADE', () => {
-    const world = baseWorld({
-      environment: {
-        ...baseWorld().environment,
-        soil: { ...baseWorld().environment.soil, contamination: 250 },
-      },
-    });
-    const out = buildEnvironmentRenderData(world, baseClock());
-    expect(out.soilContamination).toBe(1);
-  });
-
-  it('maps all four seasons through clock.season', () => {
-    for (const s of ['spring', 'summer', 'autumn', 'winter'] as const) {
-      const out = buildEnvironmentRenderData(baseWorld(), baseClock({ season: s }));
-      expect(out.season).toBe(s);
-    }
-  });
-
-  it('maps timeOfDay through clock.timeOfDay', () => {
-    // midnight = 0, dawn = 0.25, noon = 0.5, dusk = 0.75
-    for (const tod of [0, 0.25, 0.5, 0.75]) {
-      const out = buildEnvironmentRenderData(baseWorld(), baseClock({ timeOfDay: tod }));
-      expect(out.timeOfDay).toBe(tod);
-    }
-  });
-
-  it('derives pollutionLevel from CO2 above the floor (410 ppm)', () => {
-    const world = baseWorld({
-      environment: {
-        ...baseWorld().environment,
-        atmosphere: { ...baseWorld().environment.atmosphere, co2Concentration: 505 },
-      },
-    });
-    // co2Floor=410, co2Sat=600 → 505-410=95; 95/190 = 0.5
-    // emissions=0 → emissionsPollution=0
-    // pollution = max(0.5, 0) = 0.5
-    const out = buildEnvironmentRenderData(world, baseClock());
-    expect(out.pollutionLevel).toBeCloseTo(0.5, 6);
-  });
-
-  it('saturates pollutionLevel at 1 when CO2 far exceeds the saturation point', () => {
-    const world = baseWorld({
-      environment: {
-        ...baseWorld().environment,
-        atmosphere: { ...baseWorld().environment.atmosphere, co2Concentration: 1000 },
-      },
-    });
-    const out = buildEnvironmentRenderData(world, baseClock());
-    expect(out.pollutionLevel).toBe(1);
-  });
-
-  it('treats sequestration (negative emissions) as zero pollution contribution', () => {
-    const world = baseWorld({
-      environment: {
-        ...baseWorld().environment,
-        atmosphere: {
-          ...baseWorld().environment.atmosphere,
-          co2Concentration: 410,
-          emissions: -50, // sequestration
-        },
-      },
-    });
-    const out = buildEnvironmentRenderData(world, baseClock());
-    expect(out.pollutionLevel).toBe(0);
-  });
-
-  it('does NOT mutate the input world or clock', () => {
-    const world = baseWorld();
-    const clock = baseClock();
-    const worldBefore = JSON.stringify(world);
-    const clockBefore = JSON.stringify(clock);
-    buildEnvironmentRenderData(world, clock);
-    expect(JSON.stringify(world)).toBe(worldBefore);
-    expect(JSON.stringify(clock)).toBe(clockBefore);
-  });
-
-  it('snapshot test: representative cloudy winter night with pollution', () => {
-    const world = baseWorld({
-      environment: {
-        ...baseWorld().environment,
-        soil: { ...baseWorld().environment.soil, health: 0.6, contamination: 30 },
-        atmosphere: { ...baseWorld().environment.atmosphere, co2Concentration: 510 },
-        biodiversity: { ...baseWorld().environment.biodiversity, index: 0.4 },
-      },
-      weather: {
-        condition: 'cloudy',
-        temperature: 5,
-        intensity: 0.7,
-        prevCondition: 'sunny',
-        daysInCondition: 2,
-      },
-    });
-    const clock = baseClock({ season: 'winter', timeOfDay: 0.0 });
-    const out = buildEnvironmentRenderData(world, clock);
-    expect(out).toMatchInlineSnapshot(`
-      {
-        "biodiversityLevel": 0.4,
-        "co2Level": 510,
-        "pollutionLevel": 0.5263157894736842,
-        "season": "winter",
-        "soilCondition": 0.6,
-        "soilContamination": 0.3,
-        "timeOfDay": 0,
-        "weatherCondition": "cloudy",
-        "weatherIntensity": 0.7,
-      }
-    `);
-  });
-});
-
-// ----------------------------------------------------------------------------
-// 3. CurrencyVisual lookup tests.
+// 2. CurrencyVisual lookup tests (TDD §15.4, GDD §14).
 // ----------------------------------------------------------------------------
 
 describe('CurrencyVisual data', () => {
@@ -635,7 +357,7 @@ describe('CurrencyVisual data', () => {
 });
 
 // ----------------------------------------------------------------------------
-// 4. TreeRenderer interface conformance + factory.
+// 3. TreeRenderer interface conformance + factory (TDD §15.3).
 // ----------------------------------------------------------------------------
 
 describe('TreeRenderer interface + factory', () => {
@@ -721,7 +443,7 @@ describe('TreeRenderer interface + factory', () => {
 });
 
 // ----------------------------------------------------------------------------
-// 5. Pure helper functions (deriveSeasonalAppearance, resolveSpeciesShape,
+// 4. Pure helper functions (deriveSeasonalAppearance, resolveSpeciesShape,
 //    mapDamageMarker).
 // ----------------------------------------------------------------------------
 
@@ -766,95 +488,3 @@ describe('pure helpers', () => {
     });
   });
 });
-
-// ----------------------------------------------------------------------------
-// 6. Cross-cutting: representative-state snapshot for a full pipeline.
-// ----------------------------------------------------------------------------
-
-describe('representative state pipeline', () => {
-  it('buildTreeRenderData + buildEnvironmentRenderData produce stable snapshots', () => {
-    // A dead winter tree in a contaminated, polluted environment — the worst
-    // case the renderer will need to draw.
-    const tree = baseTree({
-      alive: false,
-      ageDays: 365 * 5,
-      structure: { height: 8, trunkDiameter: 0.4, branchDevelopment: 30, structuralIntegrity: 0.6 },
-      foliage: {
-        currentLeaves: 0,
-        leafCapacity: 3200,
-        activeLeafArea: 0,
-        seasonalCondition: 0,
-        leafGrowthProgress: 0,
-      },
-      stress: 1,
-      damage: [
-        { type: 'severe-defoliation', severity: 0.8, appliedAt: 100 },
-        { type: 'severe-defoliation', severity: 0.6, appliedAt: 130 },
-      ],
-    });
-    const world = baseWorld({
-      environment: {
-        ...baseWorld().environment,
-        soil: { ...baseWorld().environment.soil, health: 0.3, contamination: 80 },
-        atmosphere: { ...baseWorld().environment.atmosphere, co2Concentration: 600, emissions: 40 },
-        biodiversity: { ...baseWorld().environment.biodiversity, index: 0.2 },
-      },
-      weather: {
-        condition: 'severe-storm',
-        temperature: 2,
-        intensity: 0.9,
-        prevCondition: 'heavy-rain',
-        daysInCondition: 1,
-      },
-    });
-    const clock = baseClock({ season: 'winter', timeOfDay: 0.05 });
-
-    const treeRender = buildTreeRenderData(tree, { season: 'winter' });
-    const envRender = buildEnvironmentRenderData(world, clock);
-
-    expect(treeRender).toMatchInlineSnapshot(`
-      {
-        "ageDays": 1825,
-        "alive": false,
-        "branchDevelopment": 30,
-        "damage": [
-          {
-            "appliedAt": 100,
-            "severity": 0.8,
-            "type": "severe-defoliation",
-          },
-          {
-            "appliedAt": 130,
-            "severity": 0.6,
-            "type": "severe-defoliation",
-          },
-        ],
-        "foliageCondition": 0,
-        "foliageDensity": 0,
-        "height": 8,
-        "leafCount": 0,
-        "seasonalAppearance": "winter-bare",
-        "speciesId": "species:white-oak",
-        "speciesShape": "broadleaf-round",
-        "trunkDiameter": 0.4,
-      }
-    `);
-    expect(envRender).toMatchInlineSnapshot(`
-      {
-        "biodiversityLevel": 0.2,
-        "co2Level": 600,
-        "pollutionLevel": 1,
-        "season": "winter",
-        "soilCondition": 0.3,
-        "soilContamination": 0.8,
-        "timeOfDay": 0.05,
-        "weatherCondition": "severe-storm",
-        "weatherIntensity": 0.9,
-      }
-    `);
-  });
-});
-
-// Silence the unused-import warning for SECONDS_PER_DAY (kept for parity with
-// other test files in the repo; will be used when extending tests in P4b).
-void SECONDS_PER_DAY;
