@@ -246,7 +246,14 @@ importers:
         specifier: workspace:*
         version: link:../shared
 
-  packages/rendering: {}
+  packages/rendering:
+    dependencies:
+      '@capitalist-tree/content':
+        specifier: workspace:*
+        version: link:../content
+      '@capitalist-tree/shared':
+        specifier: workspace:*
+        version: link:../shared
 
   packages/shared:
     dependencies:
