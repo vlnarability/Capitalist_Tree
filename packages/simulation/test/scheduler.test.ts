@@ -12,6 +12,16 @@ function ev(id: string, at: number): ScheduledEvent {
   return { id, at, kind: 'custom', payload: { id } };
 }
 
+/** Filter the scheduler state to just the test-event ids (excluding
+ *  PersonalSystem's auto-scheduled `bill-due` events — those are an
+ *  internal detail of P3c and don't affect the scheduler's own
+ *  semantics, which is what this test file is verifying). */
+function testEventIds(state: GameState): string[] {
+  return state.scheduler.events
+    .filter((e) => e.kind !== 'bill-due')
+    .map((e) => e.id);
+}
+
 describe('EventScheduler', () => {
   it('due(now) returns events in time order', () => {
     let s = freshState();
@@ -46,14 +56,22 @@ describe('EventScheduler', () => {
     s = schedule(s, ev('e1', at));
     // Advance 1 step.
     const r = engine.advance(s, 60);
-    const fired = r.events.filter((e) => e.type === 'scheduled-event');
+    const fired = r.events.filter(
+      (e) =>
+        e.type === 'scheduled-event' &&
+        // The PersonalSystem also schedules bill-due events; filter to just
+        // the test's custom event so the assertion is meaningful.
+        (e as { payload?: { eventId?: string } }).payload?.eventId === 'e1',
+    );
     expect(fired.length).toBe(1);
     if (fired[0] && fired[0].type === 'scheduled-event') {
       expect(fired[0].payload.eventId).toBe('e1');
       expect(fired[0].payload.kind).toBe('custom');
     }
-    // Event should be removed from the scheduler in the returned state.
-    expect(r.state.scheduler.events).toEqual([]);
+    // The test event should be removed from the scheduler. (The PersonalSystem
+    // may have scheduled a future `bill-due` event during this tick — that's
+    // expected behaviour and is filtered out here.)
+    expect(testEventIds(r.state)).toEqual([]);
   });
 
   it('does not fire events scheduled for the future', () => {
@@ -61,8 +79,15 @@ describe('EventScheduler', () => {
     const at = s.clock.elapsedSeconds + 600; // 10 steps ahead
     s = schedule(s, ev('future', at));
     const r = engine.advance(s, 60);
-    const fired = r.events.filter((e) => e.type === 'scheduled-event');
+    const fired = r.events.filter(
+      (e) =>
+        e.type === 'scheduled-event' &&
+        (e as { payload?: { eventId?: string } }).payload?.eventId === 'future',
+    );
     expect(fired.length).toBe(0);
-    expect(r.state.scheduler.events.length).toBe(1);
+    // The test's future event should remain in the scheduler. The
+    // PersonalSystem may have added its own `bill-due` event too — filter
+    // that out for the assertion.
+    expect(testEventIds(r.state)).toEqual(['future']);
   });
 });

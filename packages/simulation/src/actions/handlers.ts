@@ -26,6 +26,7 @@ import type {
   ApplyFertilizerAction,
   FertilizerApplicationResult,
   WaterApplicationResult,
+  PurchaseAction,
 } from '@capitalist-tree/shared';
 import {
   PROVISIONAL_BIOLOGY_HARVEST_STRESS_PER_LEAF_FRACTION,
@@ -42,6 +43,14 @@ import {
 } from '../biology/index.js';
 import { findFertilizerById } from '@capitalist-tree/content';
 import { applyFertilizer, applyWaterToSoil } from '../resources/index.js';
+import {
+  applyPurchase,
+  InsufficientFundsError,
+  UnknownMarketError,
+  payExpenseHandler,
+  transferHandler,
+  sellTreeHandler,
+} from '../economy/index.js';
 
 export type ActionListener<A extends GameAction = GameAction> = (
   state: GameState,
@@ -324,12 +333,56 @@ const applyFertilizerHandler: ActionListener<ApplyFertilizerAction> = (state, ac
   return { state: next, events };
 };
 
+/**
+ * `purchase` action handler (P3b — TDD §10.5, §10.6, GDD §8.5).
+ *
+ * Player buys `quantity` units of a commodity from a market. Cash flows
+ * from `player:personal` to `market:<id>` via P3a's `transfer()` (category
+ * `'purchase'`). Inventory is credited with
+ * `{ resourceId: market.commodityId, quantity }` (incrementing if the
+ * resource is already in inventory). Market supply is drawn down by
+ * `quantity`; market demand is bumped by `quantity` (the active-buyer
+ * signal that will raise prices on the next EconomySystem tick).
+ *
+ * Invariants enforced by the pure `applyPurchase` function:
+ *   - Market exists (throws `UnknownMarketError` otherwise).
+ *   - Player has sufficient funds (throws `InsufficientFundsError`
+ *     otherwise — the underlying `transfer()` enforces this).
+ *   - Transaction recorded with category `'purchase'` and the correct
+ *     source/destination accounts.
+ *   - Money never silently created or destroyed — the transfer is a
+ *     real-account-to-real-account transfer; conservation invariant holds.
+ *
+ * Emits a `transaction-recorded` event (carried from `transfer()`) plus a
+ * `purchase-completed` event carrying the full result (unit price, total
+ * cost, post-purchase market snapshot, resulting player balance).
+ */
+const purchaseHandler: ActionListener<PurchaseAction> = (state, action) => {
+  const result = applyPurchase(state, {
+    marketId: action.payload.marketId,
+    quantity: action.payload.quantity,
+    timestamp: state.clock.elapsedSeconds,
+  });
+  return { state: result.state, events: result.events };
+};
+
+// Re-export the typed errors so the action layer (or a UI) can catch them.
+// The errors are NOT part of the saved GameState — they are runtime-only
+// signals. The handler above lets them propagate to `executeAction`, which
+// surfaces them as exceptions for the engine caller to handle (P3c may
+// wrap them into `notification` events for the UI).
+export { InsufficientFundsError, UnknownMarketError };
+
 export const actionHandlers: Record<string, ActionListener> = {
   'no-op': noOp,
   'set-speed': setSpeed as ActionListener,
   'harvest-leaves': harvestLeavesHandler as ActionListener,
   'apply-water': applyWaterHandler as ActionListener,
   'apply-fertilizer': applyFertilizerHandler as ActionListener,
+  'purchase': purchaseHandler as ActionListener,
+  'pay-expense': payExpenseHandler as ActionListener,
+  'transfer': transferHandler as ActionListener,
+  'sell-tree': sellTreeHandler as ActionListener,
 };
 
 /** Dispatch a GameAction to its handler. Raises UnknownActionError for unknown types. */

@@ -102,6 +102,7 @@ export function baseState(overrides: Partial<GameState> = {}): GameState {
     economy: {
       monetarySupply: '50000',
       inflationRate: 0,
+      inflationIndex: 1.0,
       interestRate: 0,
       monetaryAuthority: {
         monetarySupply: '50000',
@@ -115,9 +116,28 @@ export function baseState(overrides: Partial<GameState> = {}): GameState {
           price: '1',
           supply: 0,
           demand: 0,
+          lastPriceUpdate: 0,
         },
       ],
       transactions: [],
+      // P3a: account ledger + idempotency set + cumulative counters.
+      accounts: [
+        {
+          id: 'player:personal',
+          type: 'player',
+          label: 'Player Personal',
+          balance: '50000',
+        },
+        {
+          id: 'external:default',
+          type: 'external',
+          label: 'External Participants',
+          balance: '0',
+        },
+      ],
+      processedRequestIds: [],
+      totalIssued: '0',
+      totalSinks: '0',
     },
     businesses: [],
     inventory: { items: [] },

@@ -53,3 +53,57 @@ export class SimulationInvariantError extends Error {
     this.name = 'SimulationInvariantError';
   }
 }
+
+/**
+ * The original tree cannot be sold or transferred (GDD §16.1, §16.2; TDD §18.4,
+ * TDD §21.12). Thrown by the `sell-tree` action handler when `target === 'original'`
+ * (or `target === state.originalTree.id`, which is `'original'` by the schema
+ * invariant).
+ *
+ * The schema-layer `superRefine` on `gameStateSchema` catches *persisted*
+ * corruption (a save where `originalTree.isOriginal === false`); this runtime
+ * error catches *action attempts* (e.g. a buggy UI dispatching a "sell"
+ * action against the original tree). Together they enforce the GDD §16.1/§16.2
+ * constraint at both layers.
+ *
+ * P3c addition (TDD §18.4 — "No accidental sale or transfer of the original
+ * tree"). The error is a real `class` so callers can use `instanceof` for
+ * routing (e.g. the UI shows a "You can't sell the original tree" toast
+ * instead of crashing).
+ */
+export class OriginalTreeNotTransferableError extends Error {
+  readonly treeId: string;
+
+  constructor(treeId: string) {
+    super(
+      `The original tree ("${treeId}") cannot be sold or transferred (GDD §16.1, §16.2). ` +
+        `The original tree is sacred — it survives generations and major game progression.`,
+    );
+    this.name = 'OriginalTreeNotTransferableError';
+    this.treeId = treeId;
+  }
+}
+
+/**
+ * A `sell-tree` action targeted a non-original tree (future P8 — additional
+ * trees, business-owned orchards). P3c only knows about the original tree;
+ * selling non-original trees is not yet implemented. Thrown rather than
+ * silently no-op'ing so the caller gets a clear signal that the action had
+ * no effect (and a UI can avoid offering the option until P8 lands).
+ *
+ * P3c addition. P8 will replace this throw with a real sale flow that
+ * transfers the tree's value to the player's cash + records a `tree-sold`
+ * transaction.
+ */
+export class TreeSaleNotImplementedError extends Error {
+  readonly treeId: string;
+
+  constructor(treeId: string) {
+    super(
+      `Selling tree "${treeId}" is not implemented yet (P3c). Only the original tree ` +
+        `is recognized by P3c; selling additional trees arrives in P8 (Expansion and Economy).`,
+    );
+    this.name = 'TreeSaleNotImplementedError';
+    this.treeId = treeId;
+  }
+}

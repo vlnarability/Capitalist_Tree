@@ -134,7 +134,64 @@ export const PROVISIONAL_INITIAL_INTEREST_RATE = 0;
 // Migration v3 -> v4 backfills all new fields with neutral defaults so
 // older saves load cleanly. The migration is pure and does not touch
 // `originalTree.id` or `originalTree.isOriginal`.
-export const CURRENT_SCHEMA_VERSION = 4;
+//
+// v5 (P3a): added four new fields to EconomyState for the ledger + transaction
+// system (TDD §10.3, §10.4):
+//   - `economy.accounts: AccountState[]` — explicit account ledger. The
+//     central monetary authority is virtual (the "mint") — its net position
+//     is implied by `totalIssued - totalSinks`. P3a seeds two accounts:
+//     `player:personal` (carrying the existing `player.personalCash` balance)
+//     and `external:default` (balance 0). P3b will add per-market external
+//     accounts; P3c may add business accounts.
+//   - `economy.processedRequestIds: string[]` — idempotency set for currency
+//     issuance. Every fulfilled or rejected CurrencyIssuanceRequest has its
+//     deterministic requestId recorded here so a re-processed request never
+//     double-issues money, even across save/load.
+//   - `economy.totalIssued: string` — cumulative currency ever issued by the
+//     authority (bigint minor units as string). Monotonically non-decreasing.
+//   - `economy.totalSinks: string` — cumulative currency removed from
+//     circulation via explicit monetary operations (taxes, fees, central-bank
+//     interventions). Monotonically non-decreasing.
+//
+// TransactionRecord also gains an optional `requestId: string` field for
+// audit trail — older saves don't have it; the schema accepts its absence.
+//
+// Migration v4 -> v5 backfills `accounts` from the player's existing
+// `personalCash` so the conservation invariant
+// (`sum(accounts.balance) + totalSinks === initialSupply + totalIssued`)
+// holds for legacy saves with `initialSupply = totalIssued = totalSinks = 0 +
+// player.personalCash`. The migration is pure and does NOT touch
+// `originalTree.id` or `originalTree.isOriginal`.
+//
+// v6 (P3b): added two new EconomyState shapes for the market pricing + inflation
+// index (TDD §10.6, GDD §8.5, §6.3):
+//   - `economy.inflationIndex: number` — Laspeyres-style basket index of
+//     current market prices vs their base prices. `1.0` at game start;
+//     rises when prices rise. P5's UI divides nominal currency amounts by
+//     this index to display "real" purchasing power. Defaults to `1.0`.
+//   - `economy.markets[*].lastPriceUpdate: number` — simulation second at
+//     which a market's `price` was last recomputed by the EconomySystem.
+//     Defaults to `0` (game start).
+//
+// Both fields have Zod defaults, so v5 saves parse cleanly under v6, but the
+// v5 → v6 migration backfills them explicitly so consumers can rely on the
+// fields being present (not the zod default fallback). The migration is pure
+// and does NOT touch `originalTree.id` or `originalTree.isOriginal`.
+//
+// v7 (P3c): added one new PlayerState shape for the PersonalSystem (TDD §11,
+// GDD §7):
+//   - `player.unpaidDays: number` — cumulative counter of unpaid
+//     living-expense days. Each time a bill comes due and the player cannot
+//     pay, the counter advances by PROVISIONAL_PERSONAL_BILLING_INTERVAL_DAYS
+//     (one full billing cycle of unpaid living costs). Physical health is
+//     derived with a diminishing-returns penalty from this counter (GDD §7.2,
+//     §7.3). The counter decays slowly when bills are paid on time (recovery).
+//
+// The field has a Zod `.default(0)`, so v6 saves parse cleanly under v7, but
+// the v6 → v7 migration backfills it explicitly so consumers can rely on the
+// field being present. The migration is pure and does NOT touch
+// `originalTree.id` or `originalTree.isOriginal`.
+export const CURRENT_SCHEMA_VERSION = 7;
 
 // Used by migration tests to exercise the v0 -> v1 path. Real saves are
 // always written at CURRENT_SCHEMA_VERSION.

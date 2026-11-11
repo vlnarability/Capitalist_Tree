@@ -13,6 +13,7 @@
 import {
   type GameConfig,
   type GameState,
+  type MarketState,
   PROVISIONAL_DEFAULT_CURRENCY_ID,
   PROVISIONAL_DAYS_PER_YEAR,
   PROVISIONAL_INITIAL_INFLATION_RATE,
@@ -26,8 +27,14 @@ import {
   PROVISIONAL_WEATHER_INITIAL_CONDITION,
   PROVISIONAL_WEATHER_INITIAL_INTENSITY,
   PROVISIONAL_WEATHER_DEFAULT_CLIMATE_ID,
+  PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID,
+  PROVISIONAL_ECONOMY_EXTERNAL_ACCOUNT_ID,
+  PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_LABEL,
+  PROVISIONAL_ECONOMY_EXTERNAL_ACCOUNT_LABEL,
+  PROVISIONAL_ECONOMY_MARKET_ACCOUNT_PREFIX,
+  PROVISIONAL_ECONOMY_MARKET_INITIAL_SUPPLY,
 } from '@capitalist-tree/shared';
-import { findSpeciesById } from '@capitalist-tree/content';
+import { findSpeciesById, ALL_MARKETS } from '@capitalist-tree/content';
 import { seasonFromDay, SECONDS_PER_DAY } from './systems/time-system.js';
 import { Rng } from './rng.js';
 
@@ -79,6 +86,33 @@ export function initializeState(config: GameConfig): GameState {
   const startTempC = 18;
   void PROVISIONAL_WEATHER_DEFAULT_CLIMATE_ID;
 
+  // P3b: seed the 5 commodity markets from content definitions
+  // (water, fertilizer, seeds, food, energy — GDD §8.5). Each market starts
+  // with `price = basePrice` (so the inflation index = 1.0 at game start),
+  // `supply = PROVISIONAL_ECONOMY_MARKET_INITIAL_SUPPLY`, and
+  // `demand = 0`. The EconomySystem recomputes prices each tick based on
+  // supply/demand + monetary conditions.
+  const markets: MarketState[] = ALL_MARKETS.map((def) => ({
+    id: def.id,
+    commodityId: def.commodityId,
+    price: def.basePrice,
+    supply: PROVISIONAL_ECONOMY_MARKET_INITIAL_SUPPLY,
+    demand: 0,
+    lastPriceUpdate: 0,
+  }));
+
+  // P3b: per-market external accounts. Each market has a dedicated
+  // `market:<id>` account that holds the revenue from purchases — the
+  // player's cash transfers from `player:personal` to the market's account.
+  // P3c+ may drain these to the authority (supplier taxes) or route to
+  // player-owned business accounts (TDD §10.5).
+  const marketAccounts = ALL_MARKETS.map((def) => ({
+    id: `${PROVISIONAL_ECONOMY_MARKET_ACCOUNT_PREFIX}${def.id.replace(/^market:/, '')}`,
+    type: 'external' as const,
+    label: `Market — ${def.id.replace(/^market:/, '')}`,
+    balance: '0',
+  }));
+
   const state: GameState = {
     metadata: {
       saveId: config.saveId,
@@ -104,6 +138,10 @@ export function initializeState(config: GameConfig): GameState {
       health: 1,
       happiness: 0.7,
       financialSecurity: 0.5,
+      // P3c: cumulative unpaid living-expense days. Starts at 0 — no bills
+      // have come due yet. PersonalSystem increments this when a bill fires
+      // and the player cannot pay.
+      unpaidDays: 0,
       livingExpenses: {
         food: '0',
         housing: '0',
@@ -212,22 +250,53 @@ export function initializeState(config: GameConfig): GameState {
     economy: {
       monetarySupply: config.startingPersonalCash,
       inflationRate: PROVISIONAL_INITIAL_INFLATION_RATE,
+      // P3b: starts at 1.0 (all markets priced at base). The EconomySystem
+      // recomputes this each tick from the basket of market prices.
+      inflationIndex: 1.0,
       interestRate: PROVISIONAL_INITIAL_INTEREST_RATE,
       monetaryAuthority: {
         monetarySupply: config.startingPersonalCash,
         interestRate: PROVISIONAL_INITIAL_INTEREST_RATE,
         inflationTarget: 0.02,
       },
-      markets: [
-        {
-          id: 'market:default',
-          commodityId: config.currencyId,
-          price: '1',
-          supply: 0,
-          demand: 0,
-        },
-      ],
+      markets,
       transactions: [],
+      // P3a: explicit account ledger. The central monetary authority is
+      // virtual (the "mint"); `accounts` holds only real holders. Seeded at
+      // game start with:
+      //   - `player:personal` carrying the starting cash.
+      //   - `external:default` placeholder (kept for backward-compat with
+      //     P3a tests that transfer money there).
+      //   - `market:water` / `market:fertilizer` / `market:seeds` /
+      //     `market:food` / `market:energy` — one per commodity market
+      //     (P3b). Each market holds the revenue from purchases until
+      //     drained (P3c+ supplier taxes / business routing).
+      accounts: [
+        {
+          id: PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID,
+          type: 'player',
+          label: PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_LABEL,
+          balance: config.startingPersonalCash,
+        },
+        {
+          id: PROVISIONAL_ECONOMY_EXTERNAL_ACCOUNT_ID,
+          type: 'external',
+          label: PROVISIONAL_ECONOMY_EXTERNAL_ACCOUNT_LABEL,
+          balance: '0',
+        },
+        ...marketAccounts,
+      ],
+      // P3a: idempotency set — every fulfilled or rejected CurrencyIssuanceRequest
+      // has its requestId recorded here so a re-processed request never
+      // double-issues money, even across save/load.
+      processedRequestIds: [],
+      // P3a: cumulative currency ever issued by the authority. Starts at 0 —
+      // the player's starting cash is treated as pre-existing money (the
+      // conservation invariant treats it as `initialSupply`, not `totalIssued`).
+      totalIssued: '0',
+      // P3a: cumulative currency removed from circulation via explicit
+      // monetary operations (taxes, fees, central-bank interventions).
+      totalSinks: '0',
     },
     businesses: [],
     inventory: {

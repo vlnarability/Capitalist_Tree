@@ -63,6 +63,27 @@ function eventToString(ev: SimulationEvent): string {
       return `fertilizer applied: ${ev.payload.fertilizerId} × ${ev.payload.units} (N+${ev.payload.nutrientsAdded.nitrogen.toFixed(0)} P+${ev.payload.nutrientsAdded.phosphorus.toFixed(0)} K+${ev.payload.nutrientsAdded.potassium.toFixed(0)})`;
     case 'resource-notification':
       return `resource: [${ev.payload.severity}] ${ev.payload.code} — ${ev.payload.message}`;
+    case 'transaction-recorded':
+      // P3a economy event — full UI lands in P4. Show a short summary.
+      return `txn: ${ev.payload.record.sourceAccount} -> ${ev.payload.record.destinationAccount} = ${ev.payload.record.amount} (${ev.payload.record.category})`;
+    case 'issuance-authorized':
+      // P3a economy event — full UI lands in P4.
+      return `issuance: +${ev.payload.amount} to ${ev.payload.destinationAccount} (req ${ev.payload.requestId})`;
+    case 'issuance-rejected':
+      // P3a economy event — full UI lands in P4.
+      return `issuance rejected: ${ev.payload.reason} (req ${ev.payload.requestId})`;
+    case 'purchase-completed':
+      // P3b economy event — full UI lands in P4.
+      return `purchase: ${ev.payload.quantity} × ${ev.payload.commodityId} = ${ev.payload.totalCost} (txn ${ev.payload.transactionId})`;
+    case 'market-price-changed':
+      // P3b economy event — full UI lands in P4.
+      return `price: ${ev.payload.marketId} ${ev.payload.oldPrice} -> ${ev.payload.newPrice} (idx ${ev.payload.inflationIndexAfter.toFixed(3)})`;
+    case 'expense-due':
+      // P3c personal event — full UI lands in P4.
+      return `expense: ${ev.payload.category} ${ev.payload.paid ? 'paid' : 'UNPAID'} ${ev.payload.amount} (unpaid days ${ev.payload.unpaidDaysAfter})`;
+    case 'transfer-completed':
+      // P3c economy event — full UI lands in P4.
+      return `transfer: ${ev.payload.sourceAccount} -> ${ev.payload.destinationAccount} = ${ev.payload.amount} (txn ${ev.payload.transactionId})`;
     default: {
       // exhaustive check
       const _exhaustive: never = ev;

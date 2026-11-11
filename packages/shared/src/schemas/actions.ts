@@ -2,6 +2,12 @@ import { z } from 'zod';
 import { PROVISIONAL_SPEED_MULTIPLIERS } from '../constants/provisional.js';
 import { harvestLeavesActionSchema } from './actions-biology.js';
 import { applyWaterActionSchema, applyFertilizerActionSchema } from './actions-resources.js';
+import {
+  purchaseActionSchema,
+  payExpenseActionSchema,
+  transferActionSchema,
+  sellTreeActionSchema,
+} from './actions-economy.js';
 
 /**
  * GameAction — discriminated union of player actions handled by
@@ -40,6 +46,10 @@ export const gameActionSchema = z.discriminatedUnion('type', [
   harvestLeavesActionSchema,
   applyWaterActionSchema,
   applyFertilizerActionSchema,
+  purchaseActionSchema,
+  payExpenseActionSchema,
+  transferActionSchema,
+  sellTreeActionSchema,
 ]);
 export type GameAction = z.infer<typeof gameActionSchema>;
 export type NoOpAction = z.infer<typeof noOpActionSchema>;
@@ -52,3 +62,6 @@ export * from './actions-biology.js';
 // Re-export resource action variants so consumers can `import { ApplyWaterAction }`
 // etc. from @capitalist-tree/shared without reaching into the resources submodule.
 export * from './actions-resources.js';
+// Re-export economy action variants so consumers can `import { PurchaseAction }`
+// etc. from @capitalist-tree/shared without reaching into the economy submodule.
+export * from './actions-economy.js';
