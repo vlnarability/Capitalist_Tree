@@ -63,6 +63,15 @@ function eventToString(ev: SimulationEvent): string {
       return `fertilizer applied: ${ev.payload.fertilizerId} × ${ev.payload.units} (N+${ev.payload.nutrientsAdded.nitrogen.toFixed(0)} P+${ev.payload.nutrientsAdded.phosphorus.toFixed(0)} K+${ev.payload.nutrientsAdded.potassium.toFixed(0)})`;
     case 'resource-notification':
       return `resource: [${ev.payload.severity}] ${ev.payload.code} — ${ev.payload.message}`;
+    case 'transaction-recorded':
+      // P3a economy event — full UI lands in P4. Show a short summary.
+      return `txn: ${ev.payload.record.sourceAccount} -> ${ev.payload.record.destinationAccount} = ${ev.payload.record.amount} (${ev.payload.record.category})`;
+    case 'issuance-authorized':
+      // P3a economy event — full UI lands in P4.
+      return `issuance: +${ev.payload.amount} to ${ev.payload.destinationAccount} (req ${ev.payload.requestId})`;
+    case 'issuance-rejected':
+      // P3a economy event — full UI lands in P4.
+      return `issuance rejected: ${ev.payload.reason} (req ${ev.payload.requestId})`;
     default: {
       // exhaustive check
       const _exhaustive: never = ev;
