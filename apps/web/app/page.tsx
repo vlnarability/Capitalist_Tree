@@ -72,6 +72,12 @@ function eventToString(ev: SimulationEvent): string {
     case 'issuance-rejected':
       // P3a economy event — full UI lands in P4.
       return `issuance rejected: ${ev.payload.reason} (req ${ev.payload.requestId})`;
+    case 'purchase-completed':
+      // P3b economy event — full UI lands in P4.
+      return `purchase: ${ev.payload.quantity} × ${ev.payload.commodityId} = ${ev.payload.totalCost} (txn ${ev.payload.transactionId})`;
+    case 'market-price-changed':
+      // P3b economy event — full UI lands in P4.
+      return `price: ${ev.payload.marketId} ${ev.payload.oldPrice} -> ${ev.payload.newPrice} (idx ${ev.payload.inflationIndexAfter.toFixed(3)})`;
     default: {
       // exhaustive check
       const _exhaustive: never = ev;

@@ -860,11 +860,46 @@ describe('migration v4 -> v5 (P3a)', () => {
     expect(migrated.economy.totalSinks).toBe('0');
   });
 
-  it('is idempotent on a v5 save', () => {
-    const v5 = freshState();
-    const out = migrations.migrate(v5, 5, CURRENT_SCHEMA_VERSION);
+  it('is idempotent on a current-version save', () => {
+    const v = freshState();
+    const out = migrations.migrate(v, CURRENT_SCHEMA_VERSION, CURRENT_SCHEMA_VERSION);
     // Identity — no copy when from === target.
-    expect(out).toBe(v5);
+    expect(out).toBe(v);
+  });
+
+  it('v5 -> v6 migration backfills economy.inflationIndex + markets[*].lastPriceUpdate (P3b)', () => {
+    // Construct a v5-like state by stripping the P3b additions.
+    const v6 = freshState();
+    const v5Like = {
+      ...v6,
+      economy: {
+        ...v6.economy,
+        // Strip inflationIndex (P3b) and lastPriceUpdate on each market.
+        inflationIndex: undefined,
+        markets: v6.economy.markets.map((m) => {
+          const { lastPriceUpdate: _lpu, ...rest } = m;
+          void _lpu;
+          return rest;
+        }),
+      },
+    } as unknown as GameState;
+    const migrated = migrations.migrate(v5Like, 5, CURRENT_SCHEMA_VERSION);
+    // inflationIndex backfilled to 1.0.
+    expect(migrated.economy.inflationIndex).toBe(1.0);
+    // Every market has lastPriceUpdate = 0.
+    for (const m of migrated.economy.markets) {
+      expect(m.lastPriceUpdate).toBe(0);
+    }
+    // Conservation invariant still holds.
+    expect(conservationDiscrepancy(migrated, INITIAL_SUPPLY)).toBe(0n);
+  });
+
+  it('v5 -> v6 migration is idempotent on a v6 save (no field changes)', () => {
+    const v6 = freshState();
+    const out = migrations.migrate(v6, 6, CURRENT_SCHEMA_VERSION);
+    // Migration runs but applies no patches (all fields already present).
+    // Result is deeply equal to the input.
+    expect(out).toEqual(v6);
   });
 
   it('deserialize round-trips a v5 state', () => {

@@ -270,3 +270,64 @@ const v4ToV5: Migration = (state: GameState): GameState => {
 };
 
 migrations.register(4, v4ToV5);
+
+// P3b: v5 -> v6 migration. Backfills two new EconomyState shapes for the
+// market pricing + inflation index (TDD §10.6, GDD §8.5, §6.3):
+//   - `economy.inflationIndex: number` — Laspeyres-style basket index of
+//     current market prices vs their base prices. `1.0` at game start.
+//     Defaults to `1.0` (no inflation observed yet on a fresh migration).
+//   - `economy.markets[*].lastPriceUpdate: number` — simulation second at
+//     which a market's `price` was last recomputed by the EconomySystem.
+//     Defaults to `0` for each existing market entry.
+//
+// Both fields have Zod `.default(...)` so v5 saves already parse cleanly
+// under v6, but the migration backfills them explicitly so consumers can
+// rely on the fields being present without re-running through zod's default
+// pipeline. The migration is idempotent under repeated application
+// (defensive — the framework doesn't re-run migrations, but tests do).
+//
+// The migration does NOT add the 5 P3b commodity markets (water, fertilizer,
+// seeds, food, energy) to legacy saves — only the new initial-state does.
+// Old saves keep their existing markets (usually the single placeholder
+// `market:default` currency market) and continue playing. New games started
+// under v6 get the 5 commodity markets via `initializeState()`.
+//
+// The migration is pure and does NOT touch `originalTree.id` or
+// `originalTree.isOriginal` (GDD §16.1/16.2).
+const v5ToV6: Migration = (state: GameState): GameState => {
+  const out: GameState = { ...state };
+  const economy = out.economy as typeof out.economy & {
+    inflationIndex?: unknown;
+  };
+
+  const patch: Record<string, unknown> = {};
+
+  // 1. inflationIndex — backfill with 1.0 if missing.
+  if (typeof economy.inflationIndex !== 'number' || !isFinite(economy.inflationIndex)) {
+    patch.inflationIndex = 1.0;
+  }
+
+  // 2. markets[*].lastPriceUpdate — backfill with 0 if any market is missing it.
+  if (Array.isArray(out.economy.markets)) {
+    let mutated = false;
+    const patchedMarkets = out.economy.markets.map((m) => {
+      const withMaybe = m as typeof m & { lastPriceUpdate?: unknown };
+      if (typeof withMaybe.lastPriceUpdate !== 'number') {
+        mutated = true;
+        return { ...m, lastPriceUpdate: 0 };
+      }
+      return m;
+    });
+    if (mutated) {
+      patch.markets = patchedMarkets;
+    }
+  }
+
+  if (Object.keys(patch).length > 0) {
+    out.economy = { ...out.economy, ...patch } as typeof out.economy;
+  }
+
+  return out;
+};
+
+migrations.register(5, v5ToV6);

@@ -102,6 +102,7 @@ export function baseState(overrides: Partial<GameState> = {}): GameState {
     economy: {
       monetarySupply: '50000',
       inflationRate: 0,
+      inflationIndex: 1.0,
       interestRate: 0,
       monetaryAuthority: {
         monetarySupply: '50000',
@@ -115,6 +116,7 @@ export function baseState(overrides: Partial<GameState> = {}): GameState {
           price: '1',
           supply: 0,
           demand: 0,
+          lastPriceUpdate: 0,
         },
       ],
       transactions: [],

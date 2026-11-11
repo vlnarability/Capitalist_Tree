@@ -162,7 +162,22 @@ export const PROVISIONAL_INITIAL_INTEREST_RATE = 0;
 // holds for legacy saves with `initialSupply = totalIssued = totalSinks = 0 +
 // player.personalCash`. The migration is pure and does NOT touch
 // `originalTree.id` or `originalTree.isOriginal`.
-export const CURRENT_SCHEMA_VERSION = 5;
+//
+// v6 (P3b): added two new EconomyState shapes for the market pricing + inflation
+// index (TDD §10.6, GDD §8.5, §6.3):
+//   - `economy.inflationIndex: number` — Laspeyres-style basket index of
+//     current market prices vs their base prices. `1.0` at game start;
+//     rises when prices rise. P5's UI divides nominal currency amounts by
+//     this index to display "real" purchasing power. Defaults to `1.0`.
+//   - `economy.markets[*].lastPriceUpdate: number` — simulation second at
+//     which a market's `price` was last recomputed by the EconomySystem.
+//     Defaults to `0` (game start).
+//
+// Both fields have Zod defaults, so v5 saves parse cleanly under v6, but the
+// v5 → v6 migration backfills them explicitly so consumers can rely on the
+// fields being present (not the zod default fallback). The migration is pure
+// and does NOT touch `originalTree.id` or `originalTree.isOriginal`.
+export const CURRENT_SCHEMA_VERSION = 6;
 
 // Used by migration tests to exercise the v0 -> v1 path. Real saves are
 // always written at CURRENT_SCHEMA_VERSION.

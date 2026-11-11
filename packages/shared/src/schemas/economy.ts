@@ -80,12 +80,44 @@ export const monetaryAuthorityStateSchema = z.object({
 });
 export type MonetaryAuthorityState = z.infer<typeof monetaryAuthorityStateSchema>;
 
+/**
+ * Market state (TDD §10.6, GDD §8.5 — Market Simulation).
+ *
+ * A single commodity market tracked on `economy.markets`. Each market's
+ * `price` is a bigint-as-string in minor currency units (TDD §10.1). The
+ * pricing model lives in `packages/simulation/src/economy/markets.ts` —
+ * supply/demand + monetary conditions drive per-tick price updates, and the
+ * inflation index is *derived* from the basket of market prices rather
+ * than applied as a global multiplier (TDD §10.6 — "Inflation should be
+ * calculated from an appropriate price index rather than applied as a
+ * universal multiplier to every item").
+ *
+ * P3b additions over P0/P3a:
+ *   - `lastPriceUpdate`: simulation second at which `price` was last
+ *     recomputed by the EconomySystem. Lets the UI show "stale" prices
+ *     during paused periods and lets the migration backfill `0` for
+ *     legacy saves (P3b v5 → v6).
+ *
+ * The market's `commodityId` doubles as the inventory `resourceId` when the
+ * player purchases from it — the purchase action credits
+ * `{ resourceId: market.commodityId, quantity }` to `inventory.items`. The
+ * P2 `apply-water` / `apply-fertilizer` actions consume from this inventory
+ * (P3c wires the deduction). P3b only verifies the ids match so the
+ * purchase→apply chain is consistent end-to-end (TDD §10.5).
+ */
 export const marketStateSchema = z.object({
+  /** Unique market id, e.g. `'market:water'`, `'market:fertilizer'`. */
   id: z.string().min(1),
+  /** Commodity id. Doubles as the inventory `resourceId` for purchase→apply. */
   commodityId: z.string().min(1),
+  /** Current price in bigint minor units (TDD §10.1), serialized as string. */
   price: z.string(),
+  /** Current supply (abstract units — number, not money). */
   supply: z.number(),
+  /** Current demand (abstract units — number, not money). */
   demand: z.number(),
+  /** Simulation second at which `price` was last recomputed. P3b. */
+  lastPriceUpdate: z.number().int().nonnegative().default(0),
 });
 export type MarketState = z.infer<typeof marketStateSchema>;
 
@@ -126,7 +158,25 @@ export const economyStateSchema = z.object({
    *  convenience — derived invariant: `monetarySupply === sum(accounts.balance)`.
    *  P3a: bigint minor units as string. */
   monetarySupply: z.string(),
+  /**
+   * Inflation rate (annualized fraction) — derived from the price index
+   * (TDD §10.6). P3b's EconomySystem recomputes this each tick from the
+   * basket of market prices vs their base prices. P0–P3a left this at 0;
+   * P3b populates it from real price data.
+   *
+   * The rate is exposed for the UI / future PersonalSystem so the player
+   * experiences nominal income growth vs actual purchasing power (GDD §6.3).
+   */
   inflationRate: z.number(),
+  /**
+   * Inflation index — Laspeyres-style basket index of current market prices
+   * vs their base prices (TDD §10.6). `1.0` at game start (all prices ==
+   * base prices); rises when prices rise. P5's UI divides nominal currency
+   * amounts by this index to display "real" purchasing power.
+   *
+   * P3b addition; backfilled to `1.0` for legacy saves (v5 → v6 migration).
+   */
+  inflationIndex: z.number().positive().default(1.0),
   interestRate: z.number(),
   monetaryAuthority: monetaryAuthorityStateSchema,
   markets: z.array(marketStateSchema),

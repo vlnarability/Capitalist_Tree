@@ -80,3 +80,137 @@ export const PROVISIONAL_ECONOMY_CATEGORY_PURCHASE = 'purchase';
 export const PROVISIONAL_ECONOMY_CATEGORY_EXPENSE = 'expense';
 export const PROVISIONAL_ECONOMY_CATEGORY_TAX = 'tax';
 export const PROVISIONAL_ECONOMY_CATEGORY_FEE = 'fee';
+
+// ============================================================================
+// P3b — Market pricing + inflation index (TDD §10.6, GDD §8.5, §6.3).
+//
+// All values here are @provisional per GDD §17 ("Exact inflation model" +
+// "currency issuance mechanics and monetary policy"). They parameterize the
+// pricing model in packages/simulation/src/economy/markets.ts — the engine
+// never hardcodes tuning numbers, only imports from here.
+// ============================================================================
+
+// PROVISIONAL (GDD §17: Exact inflation model)
+//
+// Per-market price elasticity — how strongly a market's price responds to
+// the (demand - supply) gap. The target price is computed as:
+//
+//   targetPrice = basePrice × supplyDemandFactor × monetaryConditionsFactor
+//   supplyDemandFactor = 1 + ELASTICITY × (demand - supply)
+//                                  / max(supply + demand, MIN_SCALE)
+//
+// 0.1 = a 10% gap between demand and supply (relative to total throughput)
+// moves the price by 1% from the base. Conservative for a starter economy;
+// P5+ tuning will calibrate from playtest data.
+export const PROVISIONAL_ECONOMY_MARKET_PRICE_ELASTICITY = 0.1;
+
+// PROVISIONAL (GDD §17: Exact inflation model)
+//
+// Floor on the supply/demand divisor. Prevents the elasticity formula from
+// dividing by (near-)zero when a market has no recent activity (supply and
+// demand both 0). With MIN_SCALE = 10, a market with `demand=5, supply=0`
+// gets `factor = 1 + ELASTICITY × (5 - 0) / max(5, 10) = 1 + 0.05 = 1.05`.
+export const PROVISIONAL_ECONOMY_MARKET_MIN_SCALE = 10;
+
+// PROVISIONAL (GDD §17: Exact inflation model)
+//
+// Floor on the supply/demand pricing factor. `supplyDemandFactor` is clamped
+// to `[MIN_FACTOR, MAX_MULTIPLIER]` before multiplying into the target price.
+// 0.5 = price can fall to half its base (oversupply crash). Tuned for a
+// forgiving starter economy.
+export const PROVISIONAL_ECONOMY_MARKET_PRICE_MIN_FRACTION = 0.5;
+
+// PROVISIONAL (GDD §17: Exact inflation model)
+//
+// Ceiling on the supply/demand pricing factor. 2.0 = price can rise to
+// double its base (acute scarcity). Tuned so a sapling-era player can
+// still afford water during a drought.
+export const PROVISIONAL_ECONOMY_MARKET_PRICE_MAX_MULTIPLIER = 2.0;
+
+// PROVISIONAL (GDD §17: Exact inflation model)
+//
+// Monetary conditions elasticity — how strongly market prices respond to a
+// change in the money supply relative to the starting supply. The target
+// price multiplier is:
+//
+//   monetaryConditionsFactor = 1 + MONETARY_CONDITIONS_ELASTICITY
+//                                      × (monetarySupply / initialSupply - 1)
+//
+// 0.5 = a 100% growth in money supply (vs the starting supply) raises all
+// prices by 50% (capped to MAX_MULTIPLIER per-market). Captures the GDD §8.5
+// rule that "monetary conditions" feed into prices (TDD §10.6 lists
+// "monetary conditions" as a price driver).
+export const PROVISIONAL_ECONOMY_MONETARY_CONDITIONS_ELASTICITY = 0.5;
+
+// PROVISIONAL (GDD §17: Exact inflation model)
+//
+// Price smoothing factor in [0, 1]. Each tick the market's `price` lerps
+// toward the `targetPrice`:
+//
+//   price' = price + (targetPrice - price) × SMOOTHING
+//
+// 0.25 = 25% of the gap closes per tick. With SIMULATION_STEP_SECONDS = 60,
+// prices converge to ~95% of target within ~8 ticks (~8 sim-minutes). Slower
+// smoothing makes the economy feel sticky; faster smoothing makes prices
+// swing wildly on each purchase. 0.25 is a starter value.
+export const PROVISIONAL_ECONOMY_MARKET_PRICE_SMOOTHING = 0.25;
+
+// PROVISIONAL (GDD §17: Exact inflation model)
+//
+// Per-tick supply refill rate (units per tick). Markets passively restock
+// each tick, representing background supplier activity. Combined with the
+// demand decay (below), this gives markets a natural equilibrium when no
+// purchases occur.
+export const PROVISIONAL_ECONOMY_MARKET_SUPPLY_REFILL_RATE = 5;
+
+// PROVISIONAL (GDD §17: Exact inflation model)
+//
+// Per-tick demand decay (fraction in [0, 1]). Each tick the market's demand
+// is multiplied by `(1 - DECAY)`. A purchase adds to demand; the decay
+// gradually returns it to 0 when no further purchases occur. 0.1 = 10% of
+// the demand evaporates each tick.
+export const PROVISIONAL_ECONOMY_MARKET_DEMAND_DECAY = 0.1;
+
+// PROVISIONAL (GDD §17: Exact inflation model)
+//
+// Per-tick supply decay (fraction in [0, 1]). Symmetric to demand decay —
+// markets with no demand slowly spoil / rotate stock. 0.05 = 5% of supply
+// evaporates each tick. Lower than demand decay so markets don't drain
+// themselves when nothing happens.
+export const PROVISIONAL_ECONOMY_MARKET_SUPPLY_DECAY = 0.05;
+
+// PROVISIONAL (GDD §17: Exact inflation model)
+//
+// Annualization factor for the derived inflation rate. Each tick, the
+// EconomySystem computes `inflationIndex` (Laspeyres basket of current
+// prices / base prices) and derives `inflationRate` as:
+//
+//   inflationRate = (indexNow / indexPrev - 1) × ANNUALIZATION
+//
+// With SIMULATION_STEP_SECONDS = 60 (1 sim-minute) and
+// PROVISIONAL_REAL_TO_SIM_SECONDS = 60, one real second = one sim second;
+// one real minute = one sim minute. So one tick = 1 real minute = 1/525600
+// of a year. ANNUALIZATION = 525600 expresses the per-tick index change
+// as an annualized rate for display purposes (the UI may show "2.4%/yr").
+//
+// This is purely cosmetic — the per-tick index change is what drives real
+// purchasing power (the basket index itself, not the annualized rate).
+export const PROVISIONAL_ECONOMY_INFLATION_RATE_ANNUALIZATION = 525_600;
+
+// PROVISIONAL (GDD §17: Exact inflation model)
+//
+// Initial equilibrium supply for a freshly seeded market. Markets start
+// with `supply = INITIAL_SUPPLY, demand = 0`, so the supply/demand factor
+// is `1 + ELASTICITY × (0 - INITIAL_SUPPLY) / max(INITIAL_SUPPLY, MIN_SCALE)
+// = 1 - ELASTICITY` — a slight deflationary bias that's quickly overtaken
+// by the player's purchases.
+export const PROVISIONAL_ECONOMY_MARKET_INITIAL_SUPPLY = 100;
+
+// PROVISIONAL (GDD §8.1 / §17: personal vs business finances)
+//
+// Account id prefix for per-market external accounts. Each market has a
+// dedicated external account (`market:water`, `market:fertilizer`, ...).
+// Purchases transfer cash from `player:personal` to the market's account —
+// the market "holds" the revenue. P3c+ may drain these to the authority
+// (supplier taxes) or route to player-owned business accounts (TDD §10.5).
+export const PROVISIONAL_ECONOMY_MARKET_ACCOUNT_PREFIX = 'market:';
