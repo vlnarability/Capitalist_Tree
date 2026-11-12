@@ -44,6 +44,13 @@
  *   - `UnknownSchemaVersionError` / `SaveValidationError` → code `'save-corrupt'`
  *     severity `'critical'` (filtered out — surfaced at save/load time,
  *     not via dispatch).
+ *   - `OfflineClockTamperedError` (P6a/P6d2) → code `'offline-clock-tampered'`
+ *     severity `'critical'` — a clock rollback beyond the catch-up tolerance.
+ *     Surfaced as a "your clock changed — refusing to catch up" toast by the
+ *     catch-up-on-load trigger (`lib/persistence/offline-catch-up-trigger.ts`)
+ *     rather than via `safeDispatch` (the error originates outside the engine's
+ *     `executeAction` path), but the mapping lives here so all typed errors have
+ *     one canonical notification bridge.
  *   - Any other `Error` (not in the typed-error union) — **re-thrown**.
  *     The wrapper does NOT swallow unknown errors; a programming bug should
  *     still surface as an unhandled rejection so it gets caught by tests +
@@ -80,6 +87,7 @@
  */
 import type { GameAction, SimulationEvent } from '@capitalist-tree/shared';
 import {
+  OfflineClockTamperedError,
   OriginalTreeNotTransferableError,
   SaveValidationError,
   SimulationInvariantError,
@@ -235,6 +243,17 @@ export function errorToNotification(
       severity: 'critical',
       code: 'save-corrupt',
       message: err.message,
+      at,
+    };
+  }
+  if (err instanceof OfflineClockTamperedError) {
+    return {
+      severity: 'critical',
+      code: 'offline-clock-tampered',
+      message:
+        `Your system clock moved backwards by ${err.backwardsMs} ms while you ` +
+        `were away. Offline catch-up was refused to avoid corrupting your ` +
+        `game — your save is intact. (GDD §4.2, TDD §14.4)`,
       at,
     };
   }

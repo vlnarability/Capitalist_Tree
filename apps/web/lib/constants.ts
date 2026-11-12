@@ -91,3 +91,29 @@ export const PROVISIONAL_UI_LOOP_FRAME_DT_MAX_MS = 250;
 // tune this to e.g. 100ms if profiling shows selector-level updates are
 // still too frequent at 60x speed.
 export const PROVISIONAL_UI_COMMIT_THROTTLE_MS = 0;
+
+// PROVISIONAL (GDD §4.2 + §17: Offline Progression safeguards).
+//
+// Real-world elapsed-ms threshold below which the offline catch-up
+// processor is NOT run on save load (P6d2 — TDD §14.4). A save loaded
+// within this window of its `metadata.lastSimulatedAt` is treated as
+// "fresh": the live rAF loop simply resumes, no "while you were away"
+// modal is shown. Above the threshold, `useSimulationLoop` invokes
+// `runOfflineCatchUp(state, nowMs)` (P6a); if the resulting summary has
+// `chunksRun > 0`, the summary is parked on the UI slice and the
+// OfflineModal renders.
+//
+// 60 real seconds was chosen so:
+//   - Brief tab-switches / window-blurs (a few seconds) don't trigger a
+//     modal — the player just keeps playing.
+//   - A real-world minute is the smallest gap a returning player would
+//     notice as "I was away"; below that, the catch-up would produce 0
+//     chunks anyway (60 real s × 60 sim s/real s = 3_600 sim s < the
+//     86_400-sim-s chunk size), so the threshold also saves a wasted
+//     `planOfflineCatchUp` call.
+//   - A longer absence (a real hour → 2 chunks, a real day → 60 chunks)
+//     crosses the threshold and the modal surfaces the deltas.
+//
+// When this is promoted from "provisional" to "decided" via playtesting,
+// move it to a sibling `decided.ts` and drop the `PROVISIONAL_` prefix.
+export const PROVISIONAL_OFFLINE_PROMPT_THRESHOLD_MS = 60_000;

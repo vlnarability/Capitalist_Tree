@@ -362,3 +362,68 @@ const v6ToV7: Migration = (state: GameState): GameState => {
 };
 
 migrations.register(6, v6ToV7);
+
+// P6b1: v7 -> v8 migration. Extends each `AutomationState` entry with three
+// new optional fields for the condition-based automation engine (TDD §12,
+// GDD §9):
+//   - `automation[*].policy: AutomationPolicy` — optional discriminated-union
+//     trigger (threshold | event | schedule). Absent on P0–P6a interval-only
+//     automations.
+//   - `automation[*].lastRunAt: number` — sim seconds of last execution.
+//   - `automation[*].cooldownSeconds: number` — min gap between runs.
+//
+// All three fields are optional (no Zod default), so v7 saves parse cleanly
+// under v8. The migration backfills `lastRunAt: 0` and `cooldownSeconds: 0`
+// on each existing automation entry explicitly (so consumers can rely on the
+// fields being present without re-running the zod default pipeline) and
+// leaves `policy` absent when missing — a discriminated union has no natural
+// default, and `policy: undefined` serializes to absent in JSON anyway. This
+// matches the convention of v6 -> v7 (explicit backfill of optional fields so
+// consumers don't depend on zod's default fallback).
+//
+// Each field is backfilled only if missing — fields already present on a v8
+// save (or a v7 save hand-patched with a policy) are left untouched. This
+// makes the migration idempotent under repeated application (defensive — the
+// framework doesn't re-run migrations, but tests do).
+//
+// The migration is pure and does NOT touch `originalTree.id` or
+// `originalTree.isOriginal` (GDD §16.1/16.2).
+const v7ToV8: Migration = (state: GameState): GameState => {
+  const out: GameState = { ...state };
+  if (!Array.isArray(out.automation) || out.automation.length === 0) {
+    return out;
+  }
+
+  let mutated = false;
+  const patchedAutomation = out.automation.map((entry) => {
+    const withMaybe = entry as typeof entry & {
+      lastRunAt?: unknown;
+      cooldownSeconds?: unknown;
+    };
+    const patch: Record<string, unknown> = {};
+    if (typeof withMaybe.lastRunAt !== 'number' || !Number.isFinite(withMaybe.lastRunAt)) {
+      patch.lastRunAt = 0;
+    }
+    if (
+      typeof withMaybe.cooldownSeconds !== 'number' ||
+      !Number.isFinite(withMaybe.cooldownSeconds)
+    ) {
+      patch.cooldownSeconds = 0;
+    }
+    // `policy` is left absent when missing — no natural default for a
+    // discriminated union, and absent == `undefined` after JSON round-trip.
+    if (Object.keys(patch).length === 0) {
+      return entry;
+    }
+    mutated = true;
+    return { ...entry, ...patch };
+  });
+
+  if (mutated) {
+    out.automation = patchedAutomation;
+  }
+
+  return out;
+};
+
+migrations.register(7, v7ToV8);

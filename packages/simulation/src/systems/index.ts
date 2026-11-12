@@ -10,8 +10,9 @@
  * `originalTree.pendingIssuances` and records currency-issuance transactions.
  * P3c replaces the PersonalSystem stub with a real implementation that
  * schedules recurring living-expense bills, derives well-being indicators,
- * and emits financial-event notifications. The other systems remain stubs
- * until their phases.
+ * and emits financial-event notifications. P6b2 replaces the AutomationSystem
+ * stub with a real implementation that evaluates each automation's policy
+ * each tick and executes its action via the normal action dispatch pipeline.
  */
 import { SystemRegistry } from './registry.js';
 import { timeSystem } from './time-system.js';
@@ -21,9 +22,9 @@ import { resourceSystem } from './resource-system.js';
 import { harvestSystem } from './harvest-system.js';
 import { economySystem } from './economy.js';
 import { personalSystem } from './personal.js';
+import { automationSystem } from './automation.js';
 import {
   businessSystem,
-  automationSystem,
   environmentSystem,
   progressionSystem,
   eventSystem,
@@ -55,4 +56,5 @@ export * from './resource-system.js';
 export * from './harvest-system.js';
 export * from './economy.js';
 export * from './personal.js';
+export * from './automation.js';
 export * from './stubs.js';

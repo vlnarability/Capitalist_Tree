@@ -8,6 +8,12 @@ import {
   transferActionSchema,
   sellTreeActionSchema,
 } from './actions-economy.js';
+import {
+  setAutomationPolicyActionSchema,
+  enableAutomationActionSchema,
+  disableAutomationActionSchema,
+  purchaseEquipmentActionSchema,
+} from './actions-automation.js';
 
 /**
  * GameAction — discriminated union of player actions handled by
@@ -50,6 +56,10 @@ export const gameActionSchema = z.discriminatedUnion('type', [
   payExpenseActionSchema,
   transferActionSchema,
   sellTreeActionSchema,
+  setAutomationPolicyActionSchema,
+  enableAutomationActionSchema,
+  disableAutomationActionSchema,
+  purchaseEquipmentActionSchema,
 ]);
 export type GameAction = z.infer<typeof gameActionSchema>;
 export type NoOpAction = z.infer<typeof noOpActionSchema>;
@@ -65,3 +75,7 @@ export * from './actions-resources.js';
 // Re-export economy action variants so consumers can `import { PurchaseAction }`
 // etc. from @capitalist-tree/shared without reaching into the economy submodule.
 export * from './actions-economy.js';
+// P6b1: re-export automation action variants so consumers can import
+// `SetAutomationPolicyAction` etc. from @capitalist-tree/shared without
+// reaching into the automation submodule.
+export * from './actions-automation.js';

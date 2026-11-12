@@ -85,6 +85,8 @@ import {
   PurchaseControls,
   CurrencyCosmeticPicker,
 } from '../components/economy';
+import { AutomationPanel } from '../components/automation';
+import { OfflineModal } from '../components/offline';
 
 // ----------------------------------------------------------------------------
 // Page component.
@@ -185,6 +187,16 @@ export default function HomePage(): ReactElement {
           <NotificationsPanel />
         </div>
       </div>
+
+      {/* P6d2 — GDD §4.2 / TDD §14.4: "While You Were Away" modal. Renders
+          only when the catch-up-on-load trigger parked an OfflineSummary on
+          the UI slice (a stale save was loaded and runOfflineCatchUp produced
+          a non-zero-chunk summary). The modal reads
+          `ui.pendingOfflineSummary` and clears it on Continue — it never
+          runs simulation logic (the catch-up already ran at load). Returns
+          null when no summary is parked, so this mount is a no-op most of
+          the time. */}
+      <OfflineModal />
 
       {/* Top row: speed + save/load controls + the advanced-view toggle.
           Always visible — the player should be able to pause / save /
@@ -301,6 +313,14 @@ export default function HomePage(): ReactElement {
           </Panel>
           <Panel title="Currency" icon="💵" hint="Cosmetic only">
             <CurrencyCosmeticPicker />
+          </Panel>
+          {/* P6d1 — GDD §9 / TDD §12: equipment shop + active automations +
+              policy configurator. The panel reads state and dispatches
+              purchase-equipment / enable-automation / disable-automation /
+              set-automation-policy — it never runs automation logic directly
+              (the AutomationSystem owns evaluation + execution). */}
+          <Panel title="Automation" icon="🤖" hint="GDD §9 / TDD §12">
+            <AutomationPanel />
           </Panel>
         </div>
       ) : null}

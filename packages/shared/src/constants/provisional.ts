@@ -18,11 +18,17 @@
 
 // PROVISIONAL (GDD §17: Exact real-time-to-simulation-time relationship)
 //
-// At 1x speed:
+// At 1x speed (factor 60 — 1 real second = 60 simulation seconds):
 //   1 real second  = 1 simulation minute (= 60 sim seconds)
-//   1 real minute  = 1 simulation hour
-//   1 real hour    = 1 simulation day (24 sim hours)
-//   1 real day     = 1 simulation month (30 sim days)
+//   1 real minute  = 1 simulation hour (3_600 sim sec)
+//   1 real hour    = 2.5 simulation days (216_000 sim sec)
+//   1 real day     = 2 simulation months (60 sim days = 5_184_000 sim sec)
+//
+// Note: an earlier draft of this comment read "1 real hour = 1 simulation
+// day" and "1 real day = 1 simulation month", which corresponds to factor
+// 24, not factor 60. The VALUE below (60) was always correct; only the
+// comment math was wrong. See packages/shared/src/constants/offline.ts for
+// the chunk-count consequences (30 real days = 1_800 chunks at factor 60).
 //
 // This is the relationship between wall-clock time and in-game time when the
 // speed multiplier is 1. The TimeSystem does NOT use this directly; it is the
@@ -191,7 +197,30 @@ export const PROVISIONAL_INITIAL_INTEREST_RATE = 0;
 // the v6 → v7 migration backfills it explicitly so consumers can rely on the
 // field being present. The migration is pure and does NOT touch
 // `originalTree.id` or `originalTree.isOriginal`.
-export const CURRENT_SCHEMA_VERSION = 7;
+//
+// v8 (P6b1): extended `AutomationState` with three optional fields for the
+// condition-based automation engine (TDD §12, GDD §9):
+//   - `automation[*].policy: AutomationPolicy` — an optional discriminated-
+//     union trigger (`threshold` | `event` | `schedule`) that selects *when*
+//     an automation runs, beyond the P0 `schedule` (interval/at) cadence.
+//     Absent on P0–P6a interval-only automations; present when the automation
+//     reacts to thresholds or events.
+//   - `automation[*].lastRunAt: number` — simulation seconds of the last
+//     execution. The AutomationSystem (P6b2) uses it with `cooldownSeconds`
+//     to skip runs that would fire too soon.
+//   - `automation[*].cooldownSeconds: number` — minimum gap (sim seconds)
+//     between two executions. Prevents a persistently-true threshold from
+//     firing every tick.
+//
+// All three fields are optional (no Zod default) so P0–P6a interval-only
+// automations parse cleanly under v8. The v7 → v8 migration backfills
+// `lastRunAt: 0` and `cooldownSeconds: 0` on each existing automation entry
+// explicitly (so consumers can rely on their presence without re-running the
+// zod pipeline) and leaves `policy` absent when missing — a discriminated
+// union has no natural default, and `policy: undefined` serializes to absent
+// in JSON anyway. The migration is idempotent and does NOT touch
+// `originalTree.id` or `originalTree.isOriginal` (GDD §16.1/16.2).
+export const CURRENT_SCHEMA_VERSION = 8;
 
 // Used by migration tests to exercise the v0 -> v1 path. Real saves are
 // always written at CURRENT_SCHEMA_VERSION.

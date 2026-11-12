@@ -35,10 +35,15 @@
 import type {
   ApplyFertilizerAction,
   ApplyWaterAction,
+  AutomationPolicy,
+  DisableAutomationAction,
+  EnableAutomationAction,
   HarvestLeavesAction,
   LivingExpenseCategory,
   PayExpenseAction,
   PurchaseAction,
+  PurchaseEquipmentAction,
+  SetAutomationPolicyAction,
   SetSpeedAction,
 } from '@capitalist-tree/shared';
 import { PROVISIONAL_SPEED_MULTIPLIERS, PROVISIONAL_SPEED_PAUSED } from '@capitalist-tree/shared';
@@ -238,4 +243,76 @@ export function setCurrencyCosmetic(currencyId: string): SetCurrencyCosmeticActi
     throw new Error('setCurrencyCosmetic: currencyId must be a non-empty string.');
   }
   return { type: 'set-currency-cosmetic', payload: { currencyId } };
+}
+
+// ----------------------------------------------------------------------------
+// Automation factories (P6d1 — `purchase-equipment`, `enable-automation`,
+// `disable-automation`, `set-automation-policy` GameActions — TDD §12, GDD §9).
+//
+// The AutomationPanel (P6d1) dispatches these via the store's `dispatch`. The
+// engine's action handlers (P6b2) own the actual mutation — debit cash,
+// append/enable/disable automation, attach a policy. The factories only
+// validate inputs at the boundary + return plain action objects (rule 1 +
+// rule 6: UI dispatches actions, never mutates state directly).
+// ----------------------------------------------------------------------------
+
+/**
+ * Build a `purchase-equipment` action (P6b1/P6b2 — TDD §12, GDD §9). Buys the
+ * equipment with id `equipmentId` (must be registered in
+ * `packages/content/src/equipment/`) and serves `targetId` (the tree/plot —
+ * defaults to the original tree's id at the call site). The handler debits
+ * `definition.cost` from `player:personal` and appends an `AutomationState`
+ * derived from the definition.
+ */
+export function purchaseEquipment(
+  equipmentId: string,
+  targetId: string,
+): PurchaseEquipmentAction {
+  if (!equipmentId) {
+    throw new Error('purchaseEquipment: equipmentId must be a non-empty string.');
+  }
+  if (!targetId) {
+    throw new Error('purchaseEquipment: targetId must be a non-empty string.');
+  }
+  return { type: 'purchase-equipment', payload: { equipmentId, targetId } };
+}
+
+/**
+ * Build an `enable-automation` action (P6b2). Flips `AutomationState.enabled`
+ * to true. Idempotent on an already-enabled automation. `automationId` MUST
+ * match an entry in `state.automation`.
+ */
+export function enableAutomation(automationId: string): EnableAutomationAction {
+  if (!automationId) {
+    throw new Error('enableAutomation: automationId must be a non-empty string.');
+  }
+  return { type: 'enable-automation', payload: { automationId } };
+}
+
+/**
+ * Build a `disable-automation` action (P6b2). Flips `AutomationState.enabled`
+ * to false (pause without removing). Idempotent. The automation retains its
+ * policy + schedule so re-enabling resumes the same configuration.
+ */
+export function disableAutomation(automationId: string): DisableAutomationAction {
+  if (!automationId) {
+    throw new Error('disableAutomation: automationId must be a non-empty string.');
+  }
+  return { type: 'disable-automation', payload: { automationId } };
+}
+
+/**
+ * Build a `set-automation-policy` action (P6b2). Attaches/replaces the
+ * condition-based trigger on the automation with id `automationId`. The
+ * handler validates that the automation's equipment supports the policy's
+ * `kind` (content gate) before storing `policy` on the `AutomationState`.
+ */
+export function setAutomationPolicy(
+  automationId: string,
+  policy: AutomationPolicy,
+): SetAutomationPolicyAction {
+  if (!automationId) {
+    throw new Error('setAutomationPolicy: automationId must be a non-empty string.');
+  }
+  return { type: 'set-automation-policy', payload: { automationId, policy } };
 }

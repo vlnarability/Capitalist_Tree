@@ -65,6 +65,7 @@ import {
   PROVISIONAL_UI_COMMIT_THROTTLE_MS,
   PROVISIONAL_UI_LOOP_FRAME_DT_MAX_MS,
 } from '../lib/constants';
+import { applyCatchUpOnLoad } from '../lib/persistence/offline-catch-up-trigger';
 
 // ----------------------------------------------------------------------------
 // Public types.
@@ -158,6 +159,17 @@ export function useSimulationLoop(
       if (cancelled) return;
       if (!state) {
         state = engine.initialize(initialConfigRef.current);
+      } else {
+        // P6d2 — a save was loaded. Run the offline catch-up if the save is
+        // stale (elapsed real-ms > PROVISIONAL_OFFLINE_PROMPT_THRESHOLD_MS).
+        // `Date.now()` is the spec-allowed single read at save/load time
+        // (TDD §18.1); the catch-up processor itself is pure + deterministic
+        // given (state, nowMs). A tampered clock is routed to a notification.
+        const catchUpResult = applyCatchUpOnLoad(state, Date.now(), useGameStore.getState());
+        state = catchUpResult.state;
+        if (catchUpResult.summary !== null) {
+          useGameStore.getState().setPendingOfflineSummary(catchUpResult.summary);
+        }
       }
       if (cancelled) return;
       stateRef.current = state;
@@ -298,10 +310,19 @@ export function useSimulationLoop(
     if (!s) return;
     const loaded = await s.load();
     if (!loaded) return;
-    stateRef.current = loaded;
+    // P6d2 — re-run the offline catch-up on manual Load (same path as boot).
+    // A stale save catches up; a tampered clock surfaces a notification; a
+    // fresh save just resumes. The parked summary (if any) renders the
+    // OfflineModal.
+    const catchUpResult = applyCatchUpOnLoad(loaded, Date.now(), useGameStore.getState());
+    const state = catchUpResult.state;
+    stateRef.current = state;
     accumulatorRef.current = 0;
     setAccumulator(0);
-    useGameStore.getState().commitSimState(loaded, []);
+    useGameStore.getState().commitSimState(state, []);
+    if (catchUpResult.summary !== null) {
+      useGameStore.getState().setPendingOfflineSummary(catchUpResult.summary);
+    }
   }, []);
 
   const newGame = useCallback((config: GameConfig) => {
@@ -310,6 +331,9 @@ export function useSimulationLoop(
     accumulatorRef.current = 0;
     setAccumulator(0);
     useGameStore.getState().commitSimState(fresh, []);
+    // P6d2 — a fresh game has no "while you were away" report. Clear any
+    // parked summary so a stale modal from a previous load doesn't linger.
+    useGameStore.getState().clearPendingOfflineSummary();
   }, []);
 
   return {

@@ -7,6 +7,7 @@ export * from './economy.js';
 export * from './business.js';
 export * from './inventory.js';
 export * from './automation.js';
+export * from './equipment.js';
 export * from './progression.js';
 export * from './history.js';
 export * from './rng.js';

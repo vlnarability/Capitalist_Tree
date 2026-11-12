@@ -113,6 +113,106 @@ describe('MigrationRegistry', () => {
     expect(out.world.environment.soil.ph).toBe(v4State.world.environment.soil.ph);
   });
 
+  it('v7 -> v8 migration backfills automation[*].lastRunAt + cooldownSeconds (P6b1)', () => {
+    // A v7 save predates the P6b1 automation policy/cooldown fields. It has
+    // an automation entry written by P0–P6a (interval-only, no policy).
+    const v7State = freshState();
+    const v7Automation = [
+      {
+        id: 'automation:test-sprinkler',
+        type: 'irrigation',
+        enabled: true,
+        targetId: 'original',
+        schedule: { kind: 'interval', value: 3600 },
+        resourceConsumption: [{ resourceId: 'resource:water', amount: 5 }],
+        energyConsumption: 0.5,
+        maintenanceCost: '5',
+        environmentalImpact: {
+          carbonEmissions: 0.05,
+          waterConsumption: 1.2,
+          soilDegradation: 0,
+          pollution: 0,
+          landDisturbance: 0,
+          biodiversityImpact: 0,
+        },
+        // No policy / lastRunAt / cooldownSeconds — these are the P6b1 fields.
+      },
+    ];
+    const withoutP6b1 = {
+      ...v7State,
+      automation: v7Automation,
+    } as unknown as GameState;
+    const out = migrations.migrate(withoutP6b1, 7, CURRENT_SCHEMA_VERSION);
+    expect(out.automation).toHaveLength(1);
+    // lastRunAt + cooldownSeconds backfilled explicitly.
+    expect(out.automation[0].lastRunAt).toBe(0);
+    expect(out.automation[0].cooldownSeconds).toBe(0);
+    // policy left absent — no natural default for a discriminated union.
+    expect(out.automation[0].policy).toBeUndefined();
+    // Existing fields are preserved (backward compatible).
+    expect(out.automation[0].id).toBe('automation:test-sprinkler');
+    expect(out.automation[0].schedule).toEqual({ kind: 'interval', value: 3600 });
+    expect(out.automation[0].maintenanceCost).toBe('5');
+  });
+
+  it('v7 -> v8 migration preserves an existing policy (hand-patched save)', () => {
+    // A v7 save that someone hand-patched with a policy must keep it — the
+    // migration only backfills missing fields, it never overwrites.
+    const v7State = freshState();
+    const thresholdPolicy = {
+      kind: 'threshold',
+      condition: { field: 'world.environment.soil.soilWater', op: '<', value: 30 },
+      action: 'apply-water',
+      actionParams: { litres: 10 },
+    };
+    const withPolicy = {
+      ...v7State,
+      automation: [
+        {
+          id: 'automation:test-sprinkler',
+          type: 'irrigation',
+          enabled: true,
+          targetId: 'original',
+          schedule: { kind: 'interval', value: 3600 },
+          resourceConsumption: [{ resourceId: 'resource:water', amount: 5 }],
+          energyConsumption: 0.5,
+          maintenanceCost: '5',
+          environmentalImpact: {
+            carbonEmissions: 0.05,
+            waterConsumption: 1.2,
+            soilDegradation: 0,
+            pollution: 0,
+            landDisturbance: 0,
+            biodiversityImpact: 0,
+          },
+          policy: thresholdPolicy,
+          lastRunAt: 12345,
+          cooldownSeconds: 600,
+        },
+      ],
+    } as unknown as GameState;
+    const out = migrations.migrate(withPolicy, 7, CURRENT_SCHEMA_VERSION);
+    expect(out.automation[0].policy).toEqual(thresholdPolicy);
+    expect(out.automation[0].lastRunAt).toBe(12345);
+    expect(out.automation[0].cooldownSeconds).toBe(600);
+  });
+
+  it('v7 -> v8 migration is idempotent on a v8 save (no field changes)', () => {
+    // A v8 save already has all P6b1 fields — migration should leave them alone.
+    const v8State = freshState();
+    const out = migrations.migrate(v8State, 8, CURRENT_SCHEMA_VERSION);
+    // Identity — from === target.
+    expect(out).toBe(v8State);
+  });
+
+  it('v7 -> v8 migration is a no-op on an empty automation list', () => {
+    // P0–P6a saves start with `automation: []` — nothing to backfill.
+    const v7State = freshState();
+    expect(v7State.automation).toEqual([]);
+    const out = migrations.migrate(v7State, 7, CURRENT_SCHEMA_VERSION);
+    expect(out.automation).toEqual([]);
+  });
+
   it('current-version saves pass through migrations unchanged (identity)', () => {
     const s = freshState();
     const out = migrations.migrate(s, CURRENT_SCHEMA_VERSION, CURRENT_SCHEMA_VERSION);
