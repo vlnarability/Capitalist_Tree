@@ -1,6 +1,77 @@
-// @capitalist-tree/rendering — stub.
+// @capitalist-tree/rendering — public API (P4a + P4b).
 //
-// P0 ships an empty placeholder. P4 (Rendering) will populate this package
-// with the tree and environment renderers. The renderer reads simulation
-// state and NEVER writes to it (TDD §1.8, §15).
-export const RENDERING_PACKAGE_NOT_IMPLEMENTED = true;
+// P4a ships the TreeRenderData / EnvironmentRenderData / CurrencyVisual
+// data contracts and the TreeRenderer interface + HeadlessTreeRenderer stub.
+// P4b adds the CanvasTreeRenderer — a procedural Canvas 2D renderer driven by
+// a deterministic LCG. The simulation produces `TreeState` / `WorldState` /
+// `SimulationClock`; this package transforms those into pure visual-data
+// snapshots via `buildTreeRenderData` / `buildEnvironmentRenderData`, which
+// the renderer (P4b Canvas, P4c environment + currency visuals, P4d React
+// wrapper) consumes.
+//
+// Rule 6 (TDD §15.1, GDD §6.1): rendering reads state, NEVER writes.
+// Everything in this package is a pure read of simulation state.
+//
+// Phase status:
+//   - P4a: types + mapping + interface + headless renderer.
+//   - P4b (this branch): CanvasTreeRenderer implementation.
+//   - P4c: environment + currency visuals rendering (TBD).
+//   - P4d: React wrapper + demo page (TBD).
+
+// Public types (TDD §15.1–§15.4, GDD §13.4, §14).
+export type {
+  TreeRenderData,
+  EnvironmentRenderData,
+  SeasonalAppearance,
+  SpeciesShape,
+  DamageMarker,
+  CurrencyDenomination,
+  CurrencyVisual,
+  TreeRenderer,
+  TreeRendererTarget,
+  CreateTreeRendererTarget,
+  TreeViewProps,
+} from './types.js';
+
+// Re-export TreeDamageState so consumers building DamageMarkers from raw
+// TreeState.damage entries don't need a second import (re-exported from
+// types.ts which itself re-exports from @capitalist-tree/shared).
+export type { TreeDamageState } from './types.js';
+
+// Pure mapping functions (TDD §15.1, §15.2).
+export {
+  buildTreeRenderData,
+  deriveSeasonalAppearance,
+  resolveSpeciesShape,
+  mapDamageMarker,
+  findSpeciesById,
+} from './tree-render-data.js';
+export type { BuildTreeRenderDataOptions } from './tree-render-data.js';
+export {
+  buildEnvironmentRenderData,
+} from './environment-render-data.js';
+export type { BuildEnvironmentRenderDataOptions } from './environment-render-data.js';
+
+// CurrencyVisual data + lookup (TDD §15.4, GDD §14).
+export {
+  LEAF_BANKNOTE,
+  GOLD_LEAF,
+  EURO_LEAF,
+  ALL_CURRENCY_VISUALS,
+  findCurrencyVisual,
+  getDefaultCurrencyVisual,
+  resolveCurrencyVisual,
+} from './currency-visuals.js';
+
+// TreeRenderer factory + headless implementation (TDD §15.3).
+export { createTreeRenderer } from './renderer-factory.js';
+export { HeadlessTreeRenderer } from './headless-renderer.js';
+export type { HeadlessRenderSnapshot } from './headless-renderer.js';
+// P4b: Canvas TreeRenderer implementation (TDD §15.3, GDD §13.4 procedural
+// tree structure). The CanvasTreeRenderer draws to an HTMLCanvasElement's 2D
+// context; the duck-typed `CanvasLike` surface lets tests pass mock objects.
+export { CanvasTreeRenderer } from './canvas-tree-renderer.js';
+export type { CanvasTreeRendererOptions, CanvasLike } from './canvas-tree-renderer.js';
+
+// Provisional visual tuning constants (GDD §13.4, §14, §17).
+export * from './constants/index.js';
