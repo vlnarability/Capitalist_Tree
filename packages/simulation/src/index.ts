@@ -63,6 +63,14 @@ export * from './economy/index.js';
 // (TDD §18.1, GDD §7).
 export * from './personal/index.js';
 
+// Automation module (P6b2 — TDD §12, GDD §9). Pure helpers used by the
+// AutomationSystem (policy evaluation + execution) and the four automation
+// action handlers (set-automation-policy / enable-automation /
+// disable-automation / purchase-equipment). Tests import these directly to
+// assert the policy evaluation + execution + purchase + determinism
+// invariants (TDD §18.1, GDD §95 pillar 4).
+export * from './automation/index.js';
+
 // Offline catch-up module (P6a — TDD §14.4, GDD §4.2). The catch-up
 // processor is a pure function over existing GameState (no schema change,
 // no migration bump). The `OfflineSummary` / event types it produces live

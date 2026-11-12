@@ -52,6 +52,12 @@ import {
   transferHandler,
   sellTreeHandler,
 } from '../economy/index.js';
+import {
+  setAutomationPolicyHandler,
+  enableAutomationHandler,
+  disableAutomationHandler,
+  purchaseEquipmentHandler,
+} from '../automation/actions.js';
 
 export type ActionListener<A extends GameAction = GameAction> = (
   state: GameState,
@@ -384,6 +390,10 @@ export const actionHandlers: Record<string, ActionListener> = {
   'pay-expense': payExpenseHandler as ActionListener,
   'transfer': transferHandler as ActionListener,
   'sell-tree': sellTreeHandler as ActionListener,
+  'set-automation-policy': setAutomationPolicyHandler as ActionListener,
+  'enable-automation': enableAutomationHandler as ActionListener,
+  'disable-automation': disableAutomationHandler as ActionListener,
+  'purchase-equipment': purchaseEquipmentHandler as ActionListener,
 };
 
 /** Dispatch a GameAction to its handler. Raises UnknownActionError for unknown types. */
