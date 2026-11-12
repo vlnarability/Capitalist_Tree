@@ -195,7 +195,8 @@ describe('evaluatePolicy', () => {
   });
 
   it('cooldown does not block once elapsed', () => {
-    const state = freshState();
+    let state = freshState();
+    state = setSoilWater(state, 20); // threshold met
     // lastRunAt=60, cooldown=60 → 60+60=120. now=120 → not > 120 → OK.
     const automation = makeAutomation({
       id: 'a5',
