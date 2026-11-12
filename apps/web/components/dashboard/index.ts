@@ -34,3 +34,11 @@ export {
   AdvancedViewToggle,
   type AdvancedViewToggleProps,
 } from './AdvancedViewToggle';
+// P5d: actionable notifications panel — renders `ui.notifications` filtered
+// to actionable codes (GDD §13.5). Each entry has a dismiss button; the
+// panel collapses to null when empty so the page doesn't reserve space.
+export {
+  NotificationsPanel,
+  type NotificationsPanelProps,
+  ACTIONABLE_NOTIFICATION_CODES,
+} from './NotificationsPanel';
