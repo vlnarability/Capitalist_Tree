@@ -30,6 +30,7 @@ import {
   selectAdvancedView,
   selectNotifications,
   selectSelectedCurrencyId,
+  selectReducedMotionOverride,
   selectEvents,
 } from '../../stores/game-store';
 import {
@@ -65,6 +66,11 @@ function publishState(state: GameState): void {
 describe('game-store (P5a) — initial state', () => {
   beforeEach(() => {
     __resetGameStoreForTests();
+  });
+
+  it('initial state has reducedMotionOverride = "auto"', () => {
+    const s = useGameStore.getState();
+    expect(s.ui.reducedMotionOverride).toBe('auto');
   });
 
   it('starts with null simState, empty events, idle engineStatus, default UI', () => {
@@ -202,6 +208,20 @@ describe('game-store (P5a) — UI mutators NEVER touch simState', () => {
     expect(useGameStore.getState().simState?.economy.markets[0]?.commodityId).toBe(
       before?.economy.markets[0]?.commodityId,
     );
+  });
+
+  it('P5d: setReducedMotionOverride leaves simState reference unchanged', () => {
+    publishState(freshState());
+    const before = useGameStore.getState().simState;
+    useGameStore.getState().setReducedMotionOverride('on');
+    expect(useGameStore.getState().simState).toBe(before);
+    expect(useGameStore.getState().ui.reducedMotionOverride).toBe('on');
+    // Default is 'auto'.
+    useGameStore.getState().setReducedMotionOverride('auto');
+    expect(useGameStore.getState().ui.reducedMotionOverride).toBe('auto');
+    // 'off' forces motion-enabled.
+    useGameStore.getState().setReducedMotionOverride('off');
+    expect(useGameStore.getState().ui.reducedMotionOverride).toBe('off');
   });
 
   it('pushNotification leaves simState reference unchanged', () => {
@@ -348,6 +368,16 @@ describe('game-store (P5a) — selectors return sub-slices', () => {
     expect(selectSelectedCurrencyId(s)).toBe(PROVISIONAL_UI_DEFAULT_CURRENCY_VISUAL_ID);
     expect(selectNotifications(s)).toEqual([]);
     expect(selectEvents(s)).toEqual([]);
+  });
+
+  it('P5d: selectReducedMotionOverride returns the current override value', () => {
+    publishState(freshState());
+    // Default.
+    expect(selectReducedMotionOverride(useGameStore.getState())).toBe('auto');
+    useGameStore.getState().setReducedMotionOverride('on');
+    expect(selectReducedMotionOverride(useGameStore.getState())).toBe('on');
+    useGameStore.getState().setReducedMotionOverride('off');
+    expect(selectReducedMotionOverride(useGameStore.getState())).toBe('off');
   });
 });
 

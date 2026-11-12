@@ -122,6 +122,23 @@ export interface UiNotification {
  * visibility"). Everything here is presentation / UX state — never read by
  * the engine, never persisted to a save (only the `ui.selectedCurrencyId`
  * could be persisted as a display preference; P5a leaves that to P5b).
+ *
+ * P5d additions:
+ *   - `reducedMotionOverride` — `'auto' | 'on' | 'off'`. The UI's
+ *     `useReducedMotion` hook reads this together with the browser's
+ *     `prefers-reduced-motion` media query to decide whether to disable
+ *     non-essential UI animations (WCAG 2.1 AA / 2.3.3 Animation from
+ *     Interactions — GDD §13 doesn't yet have a dedicated accessibility
+ *     section; docs/ui.md §"Accessibility decisions" notes the gap +
+ *     the WCAG criteria this satisfies).
+ *     - `'auto'` (default): follow the OS preference via `matchMedia`.
+ *     - `'on'`: force motion-reduced regardless of the OS setting.
+ *     - `'off'`: force motion-enabled regardless of the OS setting
+ *       (use sparingly — should respect explicit user override only).
+ *
+ *     P4's `TreeView` does NOT yet consume the hook (its rAF loop animates
+ *     branch-sway + particles unconditionally). Documented as a gap in
+ *     docs/ui.md §"Accessibility decisions" + R-P5d-2.
  */
 export interface GameUiState {
   /** GDD §13.3: advanced interface toggle. False = simplified view. */
@@ -136,6 +153,13 @@ export interface GameUiState {
    * NOT modify the underlying monetary value.
    */
   readonly selectedCurrencyId: string;
+  /**
+   * P5d — WCAG 2.1 AA / 2.3.3: in-game reduced-motion override.
+   * `'auto'` (default) follows the OS `prefers-reduced-motion` media query;
+   * `'on'` / `'off'` force the value regardless of the OS setting. Consumed
+   * by `useReducedMotion()`; P4's TreeView is not yet wired (R-P5d-2).
+   */
+  readonly reducedMotionOverride: 'auto' | 'on' | 'off';
 }
 
 /**
@@ -163,6 +187,11 @@ export interface GameStoreState {
   setAdvancedView: (enabled: boolean) => void;
   setSelectedTab: (tab: string) => void;
   setCurrencyCosmetic: (currencyId: string) => void;
+  /**
+   * P5d — set the in-game reduced-motion override. `'auto'` follows the OS
+   * `prefers-reduced-motion` setting; `'on'` / `'off'` force the value.
+   */
+  setReducedMotionOverride: (mode: 'auto' | 'on' | 'off') => void;
   pushNotification: (n: Omit<UiNotification, 'id' | 'createdAtMs'>) => UiNotification;
   dismissNotification: (id: string) => void;
   clearNotifications: () => void;
@@ -243,6 +272,15 @@ export function selectNotifications(state: GameStoreState): readonly UiNotificat
 export function selectSelectedCurrencyId(state: GameStoreState): string {
   return state.ui.selectedCurrencyId;
 }
+/**
+ * P5d — read the in-game reduced-motion override. The `useReducedMotion`
+ * hook combines this with the OS `prefers-reduced-motion` media query.
+ */
+export function selectReducedMotionOverride(
+  state: GameStoreState,
+): 'auto' | 'on' | 'off' {
+  return state.ui.reducedMotionOverride;
+}
 export function selectEngineStatus(state: GameStoreState): EngineStatus {
   return state.engineStatus;
 }
@@ -260,6 +298,7 @@ export function initialGameUiState(): GameUiState {
     selectedTab: PROVISIONAL_UI_DEFAULT_TAB,
     notifications: [],
     selectedCurrencyId: PROVISIONAL_UI_DEFAULT_CURRENCY_VISUAL_ID,
+    reducedMotionOverride: 'auto',
   };
 }
 
@@ -345,6 +384,16 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
 
   setCurrencyCosmetic: (currencyId) =>
     set((s) => ({ ui: { ...s.ui, selectedCurrencyId: currencyId } })),
+
+  /**
+   * P5d — set the in-game reduced-motion override. `'auto'` follows the OS
+   * `prefers-reduced-motion` setting via `matchMedia`; `'on'` / `'off'`
+   * force the value. The `useReducedMotion()` hook reads this together with
+   * the OS media query to compute the final boolean. UI mutator only —
+   * `simState` is referentially unchanged (rule 6).
+   */
+  setReducedMotionOverride: (mode) =>
+    set((s) => ({ ui: { ...s.ui, reducedMotionOverride: mode } })),
 
   pushNotification: (n) => {
     const notif: UiNotification = {
