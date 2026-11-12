@@ -41,9 +41,11 @@
  * actions to configure automations, but never runs them.
  */
 import type { GameState, SimulationEvent } from '@capitalist-tree/shared';
+import { SOLAR_PANEL } from '@capitalist-tree/content';
 import type { System, SystemContext, SystemResult } from './system.js';
 import { deepCopy } from '../deep-copy.js';
 import { evaluatePolicy, executeAutomation } from '../automation/index.js';
+import { generateSolarEnergy } from '../environment/index.js';
 
 export const automationSystem: System = {
   id: 'AutomationSystem',
@@ -54,6 +56,41 @@ export const automationSystem: System = {
     // No automations — fast path.
     if (next.automation.length === 0) {
       return { state: next, events };
+    }
+
+    // P7c — passive solar energy generation pre-pass (resolves R-P6-3). Solar
+    // panels generate continuously (every tick the panel is enabled), NOT on
+    // the action fire cadence — energy generation is a continuous physical
+    // process while the action cadence is discrete (a panel produces whenever
+    // the sun shines, regardless of whether its own schedule policy fires).
+    // Count enabled solar-panel automations + bank generation into
+    // energy.stored (capped at capacity; the EnvironmentSystem at slot #10
+    // derives capacity from active batteries next). The pre-pass runs BEFORE
+    // the fire loop so an energy-hungry automation firing this tick sees the
+    // freshly banked solar (and can be debited by executeAutomation). Pure:
+    // mutates only the deep-copied env; deterministic given (state, ctx).
+    const panelCount = next.automation.filter(
+      (a) => a.enabled && a.type === SOLAR_PANEL.id,
+    ).length;
+    if (panelCount > 0) {
+      const env = next.world.environment;
+      const stored = generateSolarEnergy(
+        env,
+        panelCount,
+        next.world.weather,
+        ctx.now,
+        ctx.stepSeconds,
+      );
+      next = {
+        ...next,
+        world: {
+          ...next.world,
+          environment: {
+            ...env,
+            energy: { ...env.energy, stored },
+          },
+        },
+      };
     }
 
     // Fork the deterministic sub-stream for the automation path. Currently

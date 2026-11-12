@@ -27,17 +27,20 @@
  *          silently, because the action it fed already moved the
  *          corresponding physical quantity, e.g. apply-water added water to
  *          soil).
- *        - `energyConsumption`: @provisional — there is no energy pool on
- *          `EnvironmentState` yet (P6+ will add one with the energy
- *          equipment). The consumption is recorded in the
- *          `automation-triggered` event payload for audit but no state field
- *          is debited. See PROVISIONAL note below.
+ *        - `energyConsumption`: P7c — the energy pool now exists
+ *          (`EnvironmentState.energy`, P7a). Before the action runs, the
+ *          per-fire draw (`energyConsumption × stepSeconds / 86400`) is pre-
+ *          checked against `environment.energy.stored`; if the pool is short,
+ *          the automation is skipped with reason `insufficient-resources` (the
+ *          frozen reason enum has no `insufficient-energy` variant — energy is
+ *          a resource) and `lastRunAt` is NOT advanced. On a successful fire,
+ *          the draw is debited from `stored` (clamped at 0). Resolves R-P6-3.
  *        - `environmentalImpact`: pro-rated per tick
- *          (`impact × stepSeconds / 86400`) and accumulated onto the closest
- *          existing `EnvironmentState` accumulators (atmosphere.emissions,
- *          soil.contamination, soil.health, freshwater.availability,
- *          biodiversity.index). @provisional field mapping — GDD §9.1 lists
- *          more impact channels than the current EnvironmentState exposes.
+ *          (`impact × stepSeconds / 86400`) and routed onto the
+ *          `EnvironmentState` accumulators by the centralized pure helper
+ *          `environment/impact.ts` `applyEnvironmentalImpact`. P7c routes all
+ *          six GDD §9.1 channels, including `landDisturbance →
+ *          landUse.degraded` (which P6b2 left payload-only — R-P6-4).
  *        - `maintenanceCost`: pro-rated per tick
  *          (`cost × stepSeconds / 86400`, bigint floor division) and moved
  *          via `ledger.transfer` from `player:personal` to the virtual
@@ -73,6 +76,7 @@ import {
   parseAmount,
   isRequestProcessed,
 } from '../economy/ledger.js';
+import { applyEnvironmentalImpact, hasEnergy, debitEnergy } from '../environment/index.js';
 
 /** Maintenance transaction category (free-form string — categories are NOT
  *  Zod enums per `packages/shared/src/constants/economy.ts`). */
@@ -149,44 +153,15 @@ function deductResources(
 }
 
 /**
- * Accumulate the automation's environmental impact onto the EnvironmentState,
- * pro-rated by the step fraction of a sim day.
+ * Accumulate the automation's environmental impact onto the EnvironmentState.
  *
- * @provisional Field mapping — GDD §9.1 lists seven impact channels
- * (electricity, fossil fuel, manufacturing emissions, resource extraction,
- * land disruption, chemical pollution, water consumption); the current
- * EnvironmentState exposes fewer accumulators. The mapping below routes each
- * channel to the closest existing field. `landDisturbance` has no current
- * target (a `landUse` field is a P6+ addition) and is recorded in the event
- * payload only.
+ * P7c extracts this routing into a centralized pure helper
+ * (`environment/impact.ts` `applyEnvironmentalImpact`) that routes all six
+ * GDD §9.1 channels — including `landDisturbance → landUse.degraded`, which
+ * P6b2 left payload-only (R-P6-4, docs/offline-automation.md §6.4). See that
+ * module for the full mapping + the rationale for centralizing it. The helper
+ * is pure (returns a new env, never mutates its input).
  */
-function applyEnvironmentalImpact(
-  env: GameState['world']['environment'],
-  impact: AutomationState['environmentalImpact'],
-  stepSeconds: number,
-): void {
-  const fraction = stepSeconds / SECONDS_PER_DAY;
-  env.atmosphere = {
-    ...env.atmosphere,
-    emissions: env.atmosphere.emissions + impact.carbonEmissions * fraction,
-  };
-  env.freshwater = {
-    ...env.freshwater,
-    availability: Math.max(0, env.freshwater.availability - impact.waterConsumption * fraction),
-  };
-  env.soil = {
-    ...env.soil,
-    contamination: Math.max(0, env.soil.contamination + impact.pollution * fraction),
-    health: Math.max(0, Math.min(1, env.soil.health - impact.soilDegradation * fraction)),
-  };
-  env.biodiversity = {
-    ...env.biodiversity,
-    index: Math.max(0, Math.min(1, env.biodiversity.index - impact.biodiversityImpact * fraction)),
-  };
-  // landDisturbance: no target field on EnvironmentState yet — @provisional
-  // (P6+ land-use model). The value is carried in the automation-triggered
-  // event payload for audit.
-}
 
 /**
  * Move the per-tick maintenance cost from `player:personal` to the virtual
@@ -301,6 +276,23 @@ export function executeAutomation(
     return { state, events };
   }
 
+  // 1b. Pre-check the energy pool (P7c — resolves R-P6-3). If the automation
+  //     has a positive `energyConsumption` and the pool has less than the
+  //     per-fire draw, skip with reason `insufficient-resources` (the frozen
+  //     `automation-skipped` reason enum has no `insufficient-energy` variant,
+  //     so the energy shortfall reuses the resources reason — energy IS a
+  //     resource). `lastRunAt` is NOT advanced (retries next tick when the
+  //     pool is replenished by solar generation). Equipment with
+  //     `energyConsumption <= 0` (solar-panel, battery, harvester-t1) passes.
+  if (automation.energyConsumption > 0 && !hasEnergy(state.world.environment, automation.energyConsumption, stepSeconds)) {
+    events.push({
+      type: 'automation-skipped',
+      at: now,
+      payload: { automationId, reason: 'insufficient-resources' },
+    });
+    return { state, events };
+  }
+
   // 2. Build + dispatch the action.
   const actionSpec = buildAction(automation);
   let next: GameState = state;
@@ -327,15 +319,30 @@ export function executeAutomation(
   // 3. Apply resource consumption (deduct from inventory).
   next = { ...next, inventory: deductResources(next, automation) };
 
-  // 4. Apply environmental impact (pillar 4 — GDD §9.1, §95).
+  // 4. Debit the energy pool for this fire (P7c — resolves R-P6-3) + apply
+  //    the automation's environmental impact (pillar 4 — GDD §9.1, §95). The
+  //    energy debit is the per-fire draw (`energyConsumption × dtDays`, see
+  //    `computeEnergyDebit`), debited from `environment.energy.stored` (clamped
+  //    at 0). The impact routing — incl. `landDisturbance → landUse.degraded`,
+  //    which P6b2 left payload-only (R-P6-4) — is centralized in
+  //    `environment/impact.ts`; both are pure transforms over the environment.
+  //    The pre-check (step 1b) already guaranteed the pool covers the draw.
   next = {
     ...next,
     world: {
       ...next.world,
       environment: (() => {
-        const env = structuredClone(next.world.environment);
-        applyEnvironmentalImpact(env, automation.environmentalImpact, stepSeconds);
-        return env;
+        let env = next.world.environment;
+        if (automation.energyConsumption > 0) {
+          env = {
+            ...env,
+            energy: {
+              ...env.energy,
+              stored: debitEnergy(env, automation.energyConsumption, stepSeconds),
+            },
+          };
+        }
+        return applyEnvironmentalImpact(env, automation.environmentalImpact, stepSeconds);
       })(),
     },
   };

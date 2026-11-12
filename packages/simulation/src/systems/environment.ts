@@ -43,14 +43,24 @@
  *      channel is the GDD §13.5 actionable-event channel).
  *
  * ENERGY POOL: P7a added `environment.energy` { stored, capacity,
- * generationRate, consumptionRate }. P7b does NOT wire energy generation /
- * consumption (that is P7c — see docs/offline-automation.md §6.3). The
- * EnvironmentSystem leaves `energy` untouched; the field exists so the data
- * path is in place.
+ * generationRate, consumptionRate }. P7c wires the passive/baseline energy
+ * path here (resolves R-P6-3, docs/offline-automation.md §6.3): each tick the
+ * EnvironmentSystem (a) derives `capacity` from the count of active battery
+ * automations (`deriveEnergyCapacity` — each battery raises the ceiling) and
+ * (b) debits the player's baseline ambient consumption
+ * (`applyBaselineEnergyConsumption`). Solar generation + on-fire
+ * `energyConsumption` debits are applied by the AutomationSystem (slot #9)
+ * before this system runs. The `generationRate` / `consumptionRate` fields are
+ * left at their P7a defaults (P7c uses event-driven `stored` mutation, not a
+ * continuous-rate model) — @provisional, reserved for a future continuous-rate
+ * energy model (GDD §17).
  *
  * LAND USE: P7a added `environment.landUse` { developed, degraded, protected }.
- * P7c routes `landDisturbance` from automation into `degraded`. P7b leaves
- * `landUse` untouched (reads only).
+ * P7c routes `landDisturbance` from automation into `degraded` (resolves
+ * R-P6-4) via the centralized `environment/impact.ts` `applyEnvironmentalImpact`
+ * helper, called by `executeAutomation` on each fire. The EnvironmentSystem
+ * does not re-apply (would double-count); it reads `landUse` as populated by
+ * the AutomationSystem.
  *
  * The system is pure: it deep-copies the input state, mutates the copy, and
  * returns the new state. The input is NEVER mutated (TDD §4.1).
@@ -59,6 +69,7 @@
  * evolution independently. This system is the single engine-side driver.
  */
 import type { GameState, SimulationEvent } from '@capitalist-tree/shared';
+import { BATTERY } from '@capitalist-tree/content';
 import type { System, SystemContext, SystemResult } from './system.js';
 import { deepCopy } from '../deep-copy.js';
 import {
@@ -69,6 +80,8 @@ import {
   stepFreshwater,
   stepSoil,
   stepBiodiversity,
+  deriveEnergyCapacity,
+  applyBaselineEnergyConsumption,
   PROVISIONAL_ENV_BASELINE_TEMP_C,
 } from '../environment/index.js';
 
@@ -271,6 +284,26 @@ export const environmentSystem: System = {
     // 10. Ecosystem resilience (derived from biodiversity + forestCoverage +
     //     soil.health).
     env.ecosystemResilience = deriveEcosystemResilience(env);
+
+    // 10b. Energy pool reconciliation (P7c — resolves R-P6-3). (a) Derive the
+    //      effective capacity from active battery automations (each battery
+    //      raises the storage ceiling — passive effect). (b) Apply the player's
+    //      baseline energy consumption (ambient draw) for this tick. Solar
+    //      generation was already banked by the AutomationSystem (slot #9, this
+    //      tick); automation `energyConsumption` is debited on-fire by
+    //      `executeAutomation`. The EnvironmentSystem owns the passive/baseline
+    //      energy path. Both transforms are pure; clamping (stored ≥ 0,
+    //      capacity ≥ default) is inside the helpers. The `landUse` field is
+    //      populated by the AutomationSystem's impact routing (R-P6-4) — read
+    //      only here.
+    const batteryCount = next.automation.filter(
+      (a) => a.enabled && a.type === BATTERY.id,
+    ).length;
+    env.energy = {
+      ...env.energy,
+      capacity: deriveEnergyCapacity(batteryCount),
+      stored: applyBaselineEnergyConsumption(env, dtSeconds),
+    };
 
     // 11. Threshold notifications (GDD §10.3 environmental feedback).
     pushEnvironmentNotifications(env, ctx.now, events);

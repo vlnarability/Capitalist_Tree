@@ -42,3 +42,5 @@ export * from './climate.js';
 export * from './water.js';
 export * from './soil.js';
 export * from './biodiversity.js';
+export * from './impact.js';
+export * from './energy.js';
