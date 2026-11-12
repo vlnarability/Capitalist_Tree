@@ -13,6 +13,9 @@
  * and emits financial-event notifications. P6b2 replaces the AutomationSystem
  * stub with a real implementation that evaluates each automation's policy
  * each tick and executes its action via the normal action dispatch pipeline.
+ * P7b replaces the EnvironmentSystem stub with a real implementation that
+ * advances the atmosphere / climate / freshwater / soil / biodiversity
+ * subsystems each tick and derives forestCoverage + ecosystemResilience.
  */
 import { SystemRegistry } from './registry.js';
 import { timeSystem } from './time-system.js';
@@ -23,9 +26,9 @@ import { harvestSystem } from './harvest-system.js';
 import { economySystem } from './economy.js';
 import { personalSystem } from './personal.js';
 import { automationSystem } from './automation.js';
+import { environmentSystem } from './environment.js';
 import {
   businessSystem,
-  environmentSystem,
   progressionSystem,
   eventSystem,
 } from './stubs.js';
@@ -57,4 +60,5 @@ export * from './harvest-system.js';
 export * from './economy.js';
 export * from './personal.js';
 export * from './automation.js';
+export * from './environment.js';
 export * from './stubs.js';

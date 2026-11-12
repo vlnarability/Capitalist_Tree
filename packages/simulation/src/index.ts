@@ -76,3 +76,10 @@ export * from './automation/index.js';
 // no migration bump). The `OfflineSummary` / event types it produces live
 // in @capitalist-tree/shared.
 export * from './offline/index.js';
+
+// Environment module (P7b — TDD §13 Environment System, §5.5, §9.2; GDD §10,
+// §28, §59–67, §170). Pure helpers used by the EnvironmentSystem (registry
+// slot #10) to advance the atmosphere / climate / freshwater / soil /
+// biodiversity subsystems each tick. Tests import these directly to assert
+// the climate + biodiversity + soil invariants (TDD §18.1, §18.4 conservation).
+export * from './environment/index.js';
