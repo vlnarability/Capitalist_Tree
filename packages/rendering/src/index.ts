@@ -65,10 +65,11 @@ export {
 export { createTreeRenderer } from './renderer-factory.js';
 export { HeadlessTreeRenderer } from './headless-renderer.js';
 export type { HeadlessRenderSnapshot } from './headless-renderer.js';
+// P4b: Canvas TreeRenderer implementation (TDD §15.3, GDD §13.4 procedural
+// tree structure). The CanvasTreeRenderer draws to an HTMLCanvasElement's 2D
+// context; the duck-typed `CanvasLike` surface lets tests pass mock objects.
+export { CanvasTreeRenderer } from './canvas-tree-renderer.js';
+export type { CanvasTreeRendererOptions, CanvasLike } from './canvas-tree-renderer.js';
 
 // Provisional visual tuning constants (GDD §13.4, §14, §17).
 export * from './constants/index.js';
-
-// Sentinel retained for backwards-compatibility with P0 (some import paths
-// may still reference the placeholder). Will be removed in P4b.
-export const RENDERING_PACKAGE_NOT_IMPLEMENTED = false;
