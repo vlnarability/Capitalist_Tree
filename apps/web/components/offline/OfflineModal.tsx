@@ -60,26 +60,16 @@ import { OfflineDeltaRow } from './OfflineDeltaRow';
 const SECONDS_PER_DAY = 24 * 60 * 60;
 
 /**
- * Format a single in-game day counter (0-indexed per the clock schema) as a
- * 1-indexed "Year X Day Y" label. Year 1 is the first 120 sim days
- * (`PROVISIONAL_DAYS_PER_YEAR`); Year 2 starts at day 120, etc.
- *
- * Pure. Mirrors the AutomationPanel's 1-indexed `Day N` convention but adds
- * the year prefix the offline summary needs (a 30-real-day absence ≈ 15 sim
- * years at factor 60 — the year matters).
- */
-function formatDayLabel(day: number): string {
-  if (!Number.isFinite(day) || day < 0) return 'Day 1';
-  const year = Math.floor(day / PROVISIONAL_DAYS_PER_YEAR) + 1;
-  const dayOfYear = (day % PROVISIONAL_DAYS_PER_YEAR) + 1;
-  return `Year ${year} Day ${dayOfYear}`;
-}
-
-/**
  * Format the catch-up's day bounds as a human range. When both bounds fall in
  * the same sim year, the year prefix is collapsed (e.g. "Day 5 → Day 47");
  * when the absence spans a year boundary, both carry the year
  * (e.g. "Year 1 Day 5 → Year 2 Day 12"). Pure.
+ *
+ * Year 1 is the first `PROVISIONAL_DAYS_PER_YEAR` (120) sim days; Year 2
+ * starts at day 120, etc. Days are 1-indexed for display (the clock schema's
+ * `day` starts at 0) — mirrors the AutomationPanel's 1-indexed `Day N`
+ * convention but adds the year prefix the offline summary needs (a 30-real-
+ * day absence ≈ 15 sim years at factor 60).
  */
 function formatDayRange(fromDay: number, toDay: number): string {
   if (!Number.isFinite(fromDay) || !Number.isFinite(toDay)) {
@@ -183,22 +173,31 @@ function biologicalRows(summary: OfflineSummary): readonly RowSpec[] {
 
 function environmentalRows(summary: OfflineSummary): readonly RowSpec[] {
   const e = summary.environmental;
-  const mk = (label: string, d: OfflineSummaryDelta, fmt: (n: number) => string, goodTone?: 'normal' | 'inverted'): RowSpec => ({
-    label,
-    before: fmt(d.before),
-    after: fmt(d.after),
-    deltaText: formatSignedDelta(d.delta),
-    delta: d.delta,
-    goodTone,
-  });
+  const mk = (
+    label: string,
+    d: OfflineSummaryDelta,
+    fmt: (n: number) => string,
+    invert: boolean = false,
+  ): RowSpec => {
+    const base: RowSpec = {
+      label,
+      before: fmt(d.before),
+      after: fmt(d.after),
+      deltaText: formatSignedDelta(d.delta),
+      delta: d.delta,
+    };
+    // Only spread `goodTone` when inverting — exactOptionalPropertyTypes
+    // rejects an explicit `undefined` on the optional field.
+    return invert ? { ...base, goodTone: 'inverted' as const } : base;
+  };
   return [
     mk('Soil Water', e.soilWater, formatPercent),
     mk('Freshwater Availability', e.freshwaterAvailability, formatPercent),
     mk('Biodiversity Index', e.biodiversityIndex, formatPercent),
     mk('Forest Coverage', e.forestCoverage, formatPercent),
-    // Temperature + CO2 rising is bad — invert the tone.
-    mk('Global Temperature', e.globalTemperature, (n) => `${n.toFixed(2)}°C`, 'inverted'),
-    mk('CO₂ Concentration', e.co2Concentration, (n) => `${Math.round(n)} ppm`, 'inverted'),
+    // Temperature + CO₂ rising is bad — invert the tone.
+    mk('Global Temperature', e.globalTemperature, (n) => `${n.toFixed(2)}°C`, true),
+    mk('CO₂ Concentration', e.co2Concentration, (n) => `${Math.round(n)} ppm`, true),
   ];
 }
 

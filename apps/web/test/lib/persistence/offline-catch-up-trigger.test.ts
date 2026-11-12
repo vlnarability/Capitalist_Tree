@@ -48,19 +48,22 @@ function staleState(nowMs: number, staleMs: number): GameState {
 }
 
 /** A minimal stub store for `applyCatchUpOnLoad` — records pushNotification calls. */
-function stubStore(simState: GameState | null = null): CatchUpOnLoadStore & {
-  notifications: ReturnType<CatchUpOnLoadStore['pushNotification']>[];
-} {
-  const notifications: Array<Record<string, unknown>> = [];
-  return {
+type NotificationPayload = Parameters<CatchUpOnLoadStore['pushNotification']>[0];
+interface RecordingStore extends CatchUpOnLoadStore {
+  readonly notifications: readonly NotificationPayload[];
+}
+function stubStore(simState: GameState | null = null): RecordingStore {
+  const notifications: NotificationPayload[] = [];
+  const store: RecordingStore = {
     simState,
-    pushNotification: (n) => {
-      notifications.push(n as Record<string, unknown>);
+    pushNotification: (n: NotificationPayload) => {
+      notifications.push(n);
     },
-    notifications,
-  } as unknown as CatchUpOnLoadStore & {
-    notifications: ReturnType<CatchUpOnLoadStore['pushNotification']>[];
+    get notifications() {
+      return notifications;
+    },
   };
+  return store;
 }
 
 // ----------------------------------------------------------------------------
