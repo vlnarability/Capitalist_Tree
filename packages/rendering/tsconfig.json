@@ -4,6 +4,13 @@
     "rootDir": "./src",
     "outDir": "./dist",
     "baseUrl": ".",
+    // P4b: include DOM lib so CanvasTreeRenderer can use HTMLCanvasElement /
+    // CanvasRenderingContext2D / etc. The data-mapping modules (tree-render-data,
+    // environment-render-data) remain DOM-free at runtime — only the Canvas
+    // renderer touches these types. Tests run under vitest's `node` environment
+    // and pass mock objects cast to the DOM types; the lib only affects
+    // type-checking, not runtime behaviour.
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "paths": {
       "@shared/*": ["../shared/src/*"],
       "@rendering/*": ["./src/*"]
