@@ -13,7 +13,7 @@
 //   - fertilizers/       : Fertilizer compositions (TDD §8.2)              [P2]
 //   - monetary-policy/   : Issuance policy + caps (TDD §10.3, GDD §6.2)    [P3a]
 //   - markets/           : Commodity market definitions (GDD §8.5)          [P3b]
-//   - equipment/         : Equipment definitions (TDD §12)                [P5]
+//   - equipment/         : Equipment definitions (TDD §12)                [P6b1]
 //   - weather/           : Weather event definitions (GDD §4.3, TDD §9)     [P2]
 //   - upgrades/          : Upgrade definitions (GDD §11)                    [P6+]
 //
@@ -23,3 +23,4 @@ export * from './weather/index.js';
 export * from './fertilizers/index.js';
 export * from './monetary-policy/index.js';
 export * from './markets/index.js';
+export * from './equipment/index.js';

@@ -191,7 +191,30 @@ export const PROVISIONAL_INITIAL_INTEREST_RATE = 0;
 // the v6 → v7 migration backfills it explicitly so consumers can rely on the
 // field being present. The migration is pure and does NOT touch
 // `originalTree.id` or `originalTree.isOriginal`.
-export const CURRENT_SCHEMA_VERSION = 7;
+//
+// v8 (P6b1): extended `AutomationState` with three optional fields for the
+// condition-based automation engine (TDD §12, GDD §9):
+//   - `automation[*].policy: AutomationPolicy` — an optional discriminated-
+//     union trigger (`threshold` | `event` | `schedule`) that selects *when*
+//     an automation runs, beyond the P0 `schedule` (interval/at) cadence.
+//     Absent on P0–P6a interval-only automations; present when the automation
+//     reacts to thresholds or events.
+//   - `automation[*].lastRunAt: number` — simulation seconds of the last
+//     execution. The AutomationSystem (P6b2) uses it with `cooldownSeconds`
+//     to skip runs that would fire too soon.
+//   - `automation[*].cooldownSeconds: number` — minimum gap (sim seconds)
+//     between two executions. Prevents a persistently-true threshold from
+//     firing every tick.
+//
+// All three fields are optional (no Zod default) so P0–P6a interval-only
+// automations parse cleanly under v8. The v7 → v8 migration backfills
+// `lastRunAt: 0` and `cooldownSeconds: 0` on each existing automation entry
+// explicitly (so consumers can rely on their presence without re-running the
+// zod pipeline) and leaves `policy` absent when missing — a discriminated
+// union has no natural default, and `policy: undefined` serializes to absent
+// in JSON anyway. The migration is idempotent and does NOT touch
+// `originalTree.id` or `originalTree.isOriginal` (GDD §16.1/16.2).
+export const CURRENT_SCHEMA_VERSION = 8;
 
 // Used by migration tests to exercise the v0 -> v1 path. Real saves are
 // always written at CURRENT_SCHEMA_VERSION.
