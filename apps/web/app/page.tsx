@@ -85,6 +85,7 @@ import {
   PurchaseControls,
   CurrencyCosmeticPicker,
 } from '../components/economy';
+import { AutomationPanel } from '../components/automation';
 
 // ----------------------------------------------------------------------------
 // Page component.
@@ -301,6 +302,14 @@ export default function HomePage(): ReactElement {
           </Panel>
           <Panel title="Currency" icon="💵" hint="Cosmetic only">
             <CurrencyCosmeticPicker />
+          </Panel>
+          {/* P6d1 — GDD §9 / TDD §12: equipment shop + active automations +
+              policy configurator. The panel reads state and dispatches
+              purchase-equipment / enable-automation / disable-automation /
+              set-automation-policy — it never runs automation logic directly
+              (the AutomationSystem owns evaluation + execution). */}
+          <Panel title="Automation" icon="🤖" hint="GDD §9 / TDD §12">
+            <AutomationPanel />
           </Panel>
         </div>
       ) : null}
