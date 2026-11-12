@@ -220,7 +220,36 @@ export const PROVISIONAL_INITIAL_INTEREST_RATE = 0;
 // union has no natural default, and `policy: undefined` serializes to absent
 // in JSON anyway. The migration is idempotent and does NOT touch
 // `originalTree.id` or `originalTree.isOriginal` (GDD §16.1/16.2).
-export const CURRENT_SCHEMA_VERSION = 8;
+//
+// v9 (P7a): extended `EnvironmentState` with the energy pool, land-use
+// accumulators, the other major GHGs/aerosols, and the derived climate /
+// sea-level fields for the EnvironmentSystem (TDD §13, §5.5, §9.2; GDD §10,
+// §28, §59–67, §170; resolves R-P6-3 / R-P6-4 from
+// docs/offline-automation.md §6.3 / §6.4):
+//   - `atmosphere.methaneConcentration`, `atmosphere.nitrousOxideConcentration`,
+//     `atmosphere.aerosols: number` — the other major GHGs + aerosols for a
+//     richer climate model (GDD §170). Methane/N2O are potent GHGs; aerosols
+//     are net-cooling (negative = cooling). Defaults 1.9 / 0.33 / 0.
+//   - `climateForcing: number` — net radiative forcing in W/m^2, derived by
+//     the EnvironmentSystem (P7b) from the GHG concentrations. Default 0.
+//   - `seaLevelRise: number` — mm above baseline, long-term consequence of
+//     warming (GDD §170). Default 0.
+//   - `energy: { stored, capacity, generationRate, consumptionRate }` — the
+//     energy pool P6 lacked (R-P6-3). The `solar-panel`/`battery` equipment
+//     (P6b1) generates into / raises capacity for this pool; automation
+//     `energyConsumption` debits `stored` (wired in P7c). Default
+//     `{ stored: 0, capacity: PROVISIONAL_ENERGY_BATTERY_CAPACITY_DEFAULT,
+//     generationRate: 0, consumptionRate: 0 }`.
+//   - `landUse: { developed, degraded, protected }` — land-use accumulators
+//     (R-P6-4) so `landDisturbance` has a target field. Defaults all 0.
+//
+// All v9 fields have Zod `.default(...)` so v8 saves parse cleanly under v9
+// even without re-running the migration, and the v8 → v9 migration backfills
+// them explicitly so consumers can rely on their presence (matching the
+// v3 → v4 / v5 → v6 / v6 → v7 convention). The migration is idempotent and
+// does NOT touch `originalTree.id` or `originalTree.isOriginal`
+// (GDD §16.1/16.2).
+export const CURRENT_SCHEMA_VERSION = 9;
 
 // Used by migration tests to exercise the v0 -> v1 path. Real saves are
 // always written at CURRENT_SCHEMA_VERSION.

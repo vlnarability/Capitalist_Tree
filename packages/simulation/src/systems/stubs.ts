@@ -17,15 +17,18 @@
  * P6b2 has REPLACED the AutomationSystem (see `automation.ts`) stub with a
  * real implementation that evaluates each automation's policy each tick and
  * executes its action via the normal action dispatch pipeline.
+ * P7b has REPLACED the EnvironmentSystem (see `environment.ts`) stub with a
+ * real implementation that advances the atmosphere / climate / freshwater /
+ * soil / biodiversity subsystems each tick and derives forestCoverage +
+ * ecosystemResilience.
  *
  * These are no longer exported from this file — `systems/index.ts` imports
  * them from their dedicated modules.
  *
- * The remaining stubs (business, environment, progression, event) are
- * no-ops until their phases:
+ * The remaining stubs (business, progression, event) are no-ops until their
+ * phases:
  *
  *   - BusinessSystem    — P7
- *   - EnvironmentSystem — P6
  *   - ProgressionSystem — P6+/P8
  *   - EventSystem       — P3+
  *
@@ -39,6 +42,5 @@ import type { System } from './system.js';
 import { noopSystem } from './system.js';
 
 export const businessSystem: System = noopSystem('BusinessSystem');
-export const environmentSystem: System = noopSystem('EnvironmentSystem');
 export const progressionSystem: System = noopSystem('ProgressionSystem');
 export const eventSystem: System = noopSystem('EventSystem');

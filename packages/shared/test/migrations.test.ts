@@ -5,6 +5,7 @@ import {
   migrations,
   CURRENT_SCHEMA_VERSION,
   deserialize,
+  PROVISIONAL_ENERGY_BATTERY_CAPACITY_DEFAULT,
   type GameState,
   type SaveEnvelope,
 } from '../src/index.js';
@@ -198,11 +199,14 @@ describe('MigrationRegistry', () => {
   });
 
   it('v7 -> v8 migration is idempotent on a v8 save (no field changes)', () => {
-    // A v8 save already has all P6b1 fields — migration should leave them alone.
+    // A v8 save already has all P6b1 fields. Migrating to the current version
+    // (v9+) runs later migrations but must not touch the v8 fields. With
+    // CURRENT_SCHEMA_VERSION = 9 this runs the v8 -> v9 step, which shallow-
+    // copies but applies no patches to a current-shape state, so the result
+    // is deep-equal to the input (not reference-equal — the migration copies).
     const v8State = freshState();
     const out = migrations.migrate(v8State, 8, CURRENT_SCHEMA_VERSION);
-    // Identity — from === target.
-    expect(out).toBe(v8State);
+    expect(out).toEqual(v8State);
   });
 
   it('v7 -> v8 migration is a no-op on an empty automation list', () => {
@@ -211,6 +215,142 @@ describe('MigrationRegistry', () => {
     expect(v7State.automation).toEqual([]);
     const out = migrations.migrate(v7State, 7, CURRENT_SCHEMA_VERSION);
     expect(out.automation).toEqual([]);
+  });
+
+  it('v8 -> v9 migration backfills environment energy/landUse/climate fields (P7a)', () => {
+    // A v8 save predates the P7a EnvironmentState additions: atmosphere is
+    // missing methane/nitrousOxide/aerosols, and environment is missing
+    // climateForcing/seaLevelRise/energy/landUse. Simulate that by stripping
+    // the v9 fields from a current-shape fixture.
+    const v8State = freshState();
+    const {
+      methaneConcentration: _m,
+      nitrousOxideConcentration: _n,
+      aerosols: _a,
+      ...atmosphereWithoutV9
+    } = v8State.world.environment.atmosphere;
+    void _m;
+    void _n;
+    void _a;
+    const {
+      climateForcing: _cf,
+      seaLevelRise: _slr,
+      energy: _e,
+      landUse: _lu,
+      ...environmentWithoutV9
+    } = v8State.world.environment;
+    void _cf;
+    void _slr;
+    void _e;
+    void _lu;
+    const withoutP7a = {
+      ...v8State,
+      world: {
+        ...v8State.world,
+        environment: {
+          ...environmentWithoutV9,
+          atmosphere: atmosphereWithoutV9,
+        },
+      },
+    } as unknown as GameState;
+    const out = migrations.migrate(withoutP7a, 8, CURRENT_SCHEMA_VERSION);
+    // Atmosphere GHG/aerosol fields backfilled with real-world-ish baselines.
+    expect(out.world.environment.atmosphere.methaneConcentration).toBeCloseTo(1.9, 5);
+    expect(out.world.environment.atmosphere.nitrousOxideConcentration).toBeCloseTo(0.33, 5);
+    expect(out.world.environment.atmosphere.aerosols).toBe(0);
+    // Derived climate + long-term consequence fields backfilled to neutral.
+    expect(out.world.environment.climateForcing).toBe(0);
+    expect(out.world.environment.seaLevelRise).toBe(0);
+    // Energy pool (resolves R-P6-3): stored 0 (no free energy), capacity the
+    // battery default, rates 0.
+    expect(out.world.environment.energy).toEqual({
+      stored: 0,
+      capacity: PROVISIONAL_ENERGY_BATTERY_CAPACITY_DEFAULT,
+      generationRate: 0,
+      consumptionRate: 0,
+    });
+    // Land-use accumulators (resolves R-P6-4): all zero.
+    expect(out.world.environment.landUse).toEqual({
+      developed: 0,
+      degraded: 0,
+      protected: 0,
+    });
+    // Existing fields are preserved (backward compatible).
+    expect(out.world.environment.atmosphere.co2Concentration).toBe(410);
+    expect(out.world.environment.atmosphere.emissions).toBe(0);
+    expect(out.world.environment.globalTemperature).toBe(14);
+    expect(out.world.environment.soil.soilWater).toBe(100);
+  });
+
+  it('v8 -> v9 migration preserves hand-patched energy/climate/landUse values', () => {
+    // A v8 save someone hand-patched with non-default energy/climate/landUse
+    // values must keep them — the migration only backfills missing fields, it
+    // never overwrites.
+    const v8State = freshState();
+    const handPatched = {
+      ...v8State,
+      world: {
+        ...v8State.world,
+        environment: {
+          ...v8State.world.environment,
+          atmosphere: {
+            ...v8State.world.environment.atmosphere,
+            methaneConcentration: 2.5,
+            nitrousOxideConcentration: 0.5,
+            aerosols: -0.1,
+          },
+          climateForcing: 1.2,
+          seaLevelRise: 50,
+          energy: { stored: 30, capacity: 200, generationRate: 5, consumptionRate: 8 },
+          landUse: { developed: 0.3, degraded: 0.1, protected: 0.2 },
+        },
+      },
+    } as unknown as GameState;
+    const out = migrations.migrate(handPatched, 8, CURRENT_SCHEMA_VERSION);
+    expect(out.world.environment.atmosphere.methaneConcentration).toBeCloseTo(2.5, 5);
+    expect(out.world.environment.atmosphere.nitrousOxideConcentration).toBeCloseTo(0.5, 5);
+    expect(out.world.environment.atmosphere.aerosols).toBe(-0.1);
+    expect(out.world.environment.climateForcing).toBe(1.2);
+    expect(out.world.environment.seaLevelRise).toBe(50);
+    expect(out.world.environment.energy).toEqual({
+      stored: 30,
+      capacity: 200,
+      generationRate: 5,
+      consumptionRate: 8,
+    });
+    expect(out.world.environment.landUse).toEqual({
+      developed: 0.3,
+      degraded: 0.1,
+      protected: 0.2,
+    });
+  });
+
+  it('v8 -> v9 migration is idempotent on a v9 save (no field changes)', () => {
+    // A v9 save already has all P7a fields. Migrating from 8 to current (9)
+    // runs the v8 -> v9 step, which shallow-copies but applies no patches to a
+    // current-shape state, so the result is deep-equal to the input.
+    const v9State = freshState();
+    const out = migrations.migrate(v9State, 8, CURRENT_SCHEMA_VERSION);
+    expect(out).toEqual(v9State);
+  });
+
+  it('v8 -> v9 migration is a no-op when world.environment is missing', () => {
+    // Defensive: a malformed save lacking world.environment must not crash the
+    // migration — it returns the state unchanged and lets strict validation
+    // report the malformation downstream.
+    const v8State = freshState();
+    const { environment: _env, ...worldWithoutEnv } = v8State.world as typeof v8State.world & {
+      environment?: unknown;
+    };
+    void _env;
+    const withoutEnv = {
+      ...v8State,
+      world: worldWithoutEnv,
+    } as unknown as GameState;
+    const out = migrations.migrate(withoutEnv, 8, CURRENT_SCHEMA_VERSION);
+    // No throw, and world is still without environment (migration didn't add it).
+    expect(out.world).toEqual(worldWithoutEnv);
+    expect((out.world as { environment?: unknown }).environment).toBeUndefined();
   });
 
   it('current-version saves pass through migrations unchanged (identity)', () => {

@@ -40,6 +40,7 @@ import type {
   DisableAutomationAction,
   PurchaseEquipmentAction,
   EquipmentDefinition,
+  ResourceCost,
 } from '@capitalist-tree/shared';
 import {
   PROVISIONAL_ECONOMY_AUTHORITY_ACCOUNT_ID,
@@ -73,6 +74,58 @@ const SECONDS_PER_DAY = 24 * 60 * 60;
  * @provisional — GDD §17 tuning.
  */
 const DEFAULT_PURCHASE_SCHEDULE = { kind: 'interval' as const, value: SECONDS_PER_DAY };
+
+// @provisional (GDD §17: automation cost/effectiveness balance) — per-fire
+// resource amounts used to derive `AutomationState.resourceConsumption` from
+// an equipment's `supportedActions` at purchase time (P7c — resolves R-P6-6,
+// docs/offline-automation.md §6.6). The exact per-fire draw depends on the
+// policy's `actionParams` (e.g. `apply-water` litres), which are not known at
+// purchase; these nominal values gate the inventory pre-check ("does the
+// player have water / fertilizer to run this?") until a future phase derives
+// the amount from the policy's actionParams at fire time. Promote to decided
+// shared constants once playtesting calibrates the per-fire resource draw.
+const PROVISIONAL_AUTOMATION_WATER_PER_FIRE = 5; // resource:water units / fire
+const PROVISIONAL_AUTOMATION_FERTILIZER_PER_FIRE = 1; // resource:fertilizer units / fire
+
+/**
+ * Derive an automation's `resourceConsumption` from its equipment's
+ * `supportedActions` (P7c — resolves R-P6-6).
+ *
+ * P6b2 seeded `resourceConsumption: []` for every freshly-purchased automation,
+ * so automations that feed a resource-consuming action (e.g. `apply-water`)
+ * did not pre-check inventory for the resource itself — the action handler
+ * still gated on its own pool (soil water), but the inventory accounting was
+ * empty. P7c derives the array from `supportedActions`:
+ *
+ *   - `apply-water`     → `resource:water` (PROVISIONAL_AUTOMATION_WATER_PER_FIRE)
+ *   - `apply-fertilizer`→ `resource:fertilizer` (PROVISIONAL_AUTOMATION_FERTILIZER_PER_FIRE)
+ *   - `harvest-leaves`  → (none — harvesting produces `pendingIssuances`
+ *     currency, it consumes no inventory resource)
+ *   - monitoring/energy equipment (empty `supportedActions`) → (none)
+ *
+ * Duplicate actions on one equipment merge by `resourceId` (sum amounts) so a
+ * theoretical `['apply-water', 'apply-water']` doesn't double-declare. Pure:
+ * takes the definition, returns the array. @provisional — future actions
+ * (`apply-pesticide`, etc.) add their own mapping here.
+ */
+function deriveResourceConsumption(equipment: EquipmentDefinition): ResourceCost[] {
+  const merged = new Map<string, number>();
+  for (const action of equipment.supportedActions) {
+    if (action === 'apply-water') {
+      merged.set(
+        'resource:water',
+        (merged.get('resource:water') ?? 0) + PROVISIONAL_AUTOMATION_WATER_PER_FIRE,
+      );
+    } else if (action === 'apply-fertilizer') {
+      merged.set(
+        'resource:fertilizer',
+        (merged.get('resource:fertilizer') ?? 0) + PROVISIONAL_AUTOMATION_FERTILIZER_PER_FIRE,
+      );
+    }
+    // 'harvest-leaves' + unknown actions: no inventory resource consumed.
+  }
+  return [...merged.entries()].map(([resourceId, amount]) => ({ resourceId, amount }));
+}
 
 /**
  * Look up the automation by id. Throws `UnknownAutomationError` if not found.
@@ -339,9 +392,11 @@ export const purchaseEquipmentHandler: ActionListener<PurchaseEquipmentAction> =
     enabled: true,
     targetId,
     schedule: { ...DEFAULT_PURCHASE_SCHEDULE },
-    // @provisional: resourceConsumption derived from supportedActions in a
-    // future phase (e.g. irrigation → resource:water). Empty for now.
-    resourceConsumption: [],
+    // P7c — derived from the equipment's supportedActions (resolves R-P6-6).
+    // Irrigation → resource:water; fertilization → resource:fertilizer;
+    // harvesting / monitoring / energy → [] (they produce currency / readings /
+    // power, not consume inventory resources). See deriveResourceConsumption.
+    resourceConsumption: deriveResourceConsumption(definition),
     energyConsumption: definition.baseEnergyConsumption,
     maintenanceCost: definition.baseMaintenanceCost,
     environmentalImpact: { ...definition.baseEnvironmentalImpact },

@@ -74,13 +74,19 @@ energy allocation, etc. all read the same underlying values). ResourceSystem
 is the **only writer** to soil/tree water + nutrients; BiologySystem reads but
 never writes those fields.
 
-**Backwards-compat shim:** P1's BiologySystem reads `environment.globalTemperature`
-for the temperature Liebig factor. P2's WeatherSystem mirrors the per-step
-local temperature (`state.world.weather.temperature`) to
+**Backwards-compat shim (RESOLVED in P7d — see R-P2-1):** P1's BiologySystem
+reads `environment.globalTemperature` for the temperature Liebig factor. P2's
+WeatherSystem originally mirrored the per-step local temperature
+(`state.world.weather.temperature`) to
 `state.world.environment.globalTemperature` each tick so the existing biology
-code keeps working unchanged. The shim is documented at R-P2-1 below; a future
-refactor of biology to read `state.world.weather.temperature` directly will
-retire it.
+code kept working unchanged. P7d removed the mirror (the EnvironmentSystem,
+slot #10, now owns `globalTemperature` via the climate model — see
+`docs/environment.md` §6): the previous per-tick overwrite dominated the
+climate-driven trajectory. BiologySystem now reads the climate-scale
+`globalTemperature` (seeded at 18 °C by initial-state, evolved by
+`stepTemperature`); a future refactor of biology to read
+`state.world.weather.temperature` directly remains open but no longer blocks
+the climate model.
 
 ---
 
@@ -479,9 +485,12 @@ Each step:
    intensity-modulated).
 6. Update `state.world.weather.{condition, temperature, intensity,
    prevCondition, daysInCondition}`.
-7. **Mirror** the local temperature to
-   `state.world.environment.globalTemperature` for P1 backwards compatibility
-   (see R-P2-1).
+7. **R-P2-1 (resolved P7d):** NO LONGER mirrors the local temperature to
+   `state.world.environment.globalTemperature`. The EnvironmentSystem (slot
+   #10) owns the climate-scale `globalTemperature` via the climate model
+   (`stepTemperature`); the previous per-tick mirror dominated the
+   climate-driven trajectory. WeatherSystem writes ONLY the weather-scale
+   `state.world.weather.temperature`.
 8. If the new condition is damage-capable and intensity exceeds the threshold
    (`PROVISIONAL_WEATHER_DAMAGE_INTENSITY_THRESHOLD` = 0.6), emit a
    `weather-damage` event.
@@ -744,15 +753,21 @@ These are items the spec called out as carry-forward / migration concerns
 that downstream agents should be aware of:
 
 - **R-P2-1: BiologySystem reads weather indirectly via
-  `environment.globalTemperature`.** P1's `photosynthesis.ts`
-  `temperatureFactor` reads `ctx.environment.globalTemperature`; P2's
-  WeatherSystem mirrors the per-step local temperature
-  (`state.world.weather.temperature`) to `environment.globalTemperature`
-  each tick so biology keeps working unchanged. A future refactor of
+  `environment.globalTemperature` — mirror RESOLVED in P7d.** P1's
+  `photosynthesis.ts` `temperatureFactor` reads `ctx.environment.globalTemperature`.
+  P2's WeatherSystem originally mirrored the per-step local temperature
+  (`state.world.weather.temperature`) to `environment.globalTemperature` each
+  tick so biology kept working unchanged. P7d removed the mirror: the
+  EnvironmentSystem (slot #10) now owns `globalTemperature` via the climate
+  model (`stepTemperature`), so the climate-driven trajectory is no longer
+  dominated by the weather signal (see `docs/environment.md` §6 + R-P7-2).
+  BiologySystem reads the climate-scale `globalTemperature` (seeded at 18 °C,
+  evolved by forcing + thermal inertia); a one-tick lag on tick 0 is
+  acceptable for a slowly-evolving climate variable. A future refactor of
   biology to read `state.world.weather.{condition, temperature, intensity}`
-  directly (for cloud-cover light modulation, frost damage, etc.) will
-  retire the shim. P3 (EconomySystem) and P4 (renderer) may also read
-  `state.world.weather` directly without the shim.
+  directly (for cloud-cover light modulation, frost damage, etc.) remains open
+  but no longer blocks the climate model. P3 (EconomySystem) and P4 (renderer)
+  may also read `state.world.weather` directly.
 - **R-P2-2: `weather-damage` events are emitted but not yet consumed.** P2's
   WeatherSystem emits a `weather-damage` event whenever a damage-capable
   condition (severe storm, frost, heat wave, wind, drought) exceeds the
