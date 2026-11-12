@@ -1,20 +1,22 @@
-// @capitalist-tree/rendering — public API (P4a).
+// @capitalist-tree/rendering — public API (P4a + P4b).
 //
 // P4a ships the TreeRenderData / EnvironmentRenderData / CurrencyVisual
-// data contracts and the TreeRenderer interface. The simulation produces
-// `TreeState` / `WorldState` / `SimulationClock`; this package transforms
-// those into pure visual-data snapshots via `buildTreeRenderData` /
-// `buildEnvironmentRenderData`, which the renderer (P4b Canvas, P4c
-// environment + currency visuals, P4d React wrapper) consumes.
+// data contracts and the TreeRenderer interface + HeadlessTreeRenderer stub.
+// P4b adds the CanvasTreeRenderer — a procedural Canvas 2D renderer driven by
+// a deterministic LCG. The simulation produces `TreeState` / `WorldState` /
+// `SimulationClock`; this package transforms those into pure visual-data
+// snapshots via `buildTreeRenderData` / `buildEnvironmentRenderData`, which
+// the renderer (P4b Canvas, P4c environment + currency visuals, P4d React
+// wrapper) consumes.
 //
 // Rule 6 (TDD §15.1, GDD §6.1): rendering reads state, NEVER writes.
 // Everything in this package is a pure read of simulation state.
 //
 // Phase status:
-//   - P4a (this commit): types + mapping + interface + headless renderer.
-//   - P4b: Canvas TreeRenderer implementation.
-//   - P4c: environment + currency visuals rendering.
-//   - P4d: React wrapper + demo page.
+//   - P4a: types + mapping + interface + headless renderer.
+//   - P4b (this branch): CanvasTreeRenderer implementation.
+//   - P4c: environment + currency visuals rendering (TBD).
+//   - P4d: React wrapper + demo page (TBD).
 
 // Public types (TDD §15.1–§15.4, GDD §13.4, §14).
 export type {
