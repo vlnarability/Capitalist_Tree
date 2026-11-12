@@ -107,3 +107,53 @@ export class TreeSaleNotImplementedError extends Error {
     this.treeId = treeId;
   }
 }
+
+/**
+ * The system clock rolled backwards past the offline catch-up tolerance
+ * (P6a — TDD §14.4, GDD §4.2).
+ *
+ * Thrown by `catchUp(state, nowMs)` when `nowMs` is more than
+ * `PROVISIONAL_OFFLINE_BACKWARDS_CLOCK_TOLERANCE_MS` behind
+ * `state.metadata.lastSimulatedAt`. TDD §14.4: "The game should have
+ * safeguards against extreme offline catch-up periods and unreasonable
+ * system clock changes."
+ *
+ * A backwards clock could mean:
+ *   - The player manually set the clock back to farm leaves offline.
+ *   - A system restore from backup restored an older clock.
+ *   - An NTP step backwards (rare, usually small).
+ *
+ * The tolerance absorbs small jitter (a few ms from `Date.now()` rounding
+ * or an NTP micro-step); a larger jump is treated as tampering and the
+ * processor refuses rather than silently producing a nonsense state
+ * (e.g. negative elapsed time, or re-processing already-simulated
+ * chunks).
+ *
+ * The error is a real `class` so the apps/web consumer can use
+ * `instanceof` to route it to a "your clock changed — refusing to catch
+ * up" toast rather than crashing. The state is NOT mutated by the
+ * failed catch-up call — the consumer can still load and play from the
+ * pre-catch-up save (or surface a "load anyway?" dialog).
+ *
+ * P6a addition (TDD §14.4).
+ */
+export class OfflineClockTamperedError extends Error {
+  readonly lastSimulatedAt: number;
+  readonly nowMs: number;
+  /** How far backwards the clock moved, in ms (always > tolerance). */
+  readonly backwardsMs: number;
+
+  constructor(lastSimulatedAt: number, nowMs: number, backwardsMs: number) {
+    super(
+      `Offline catch-up refused: system clock moved backwards by ${backwardsMs} ms ` +
+        `(lastSimulatedAt=${lastSimulatedAt}, nowMs=${nowMs}). ` +
+        `This exceeds the offline catch-up tolerance — refusing to simulate ` +
+        `to avoid corrupting state or re-processing already-simulated chunks. ` +
+        `(GDD §4.2, TDD §14.4)`,
+    );
+    this.name = 'OfflineClockTamperedError';
+    this.lastSimulatedAt = lastSimulatedAt;
+    this.nowMs = nowMs;
+    this.backwardsMs = backwardsMs;
+  }
+}

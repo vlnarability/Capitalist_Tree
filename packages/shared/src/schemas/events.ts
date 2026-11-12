@@ -20,6 +20,10 @@ import {
   expenseDueEventSchema,
   transferCompletedEventSchema,
 } from './events-economy.js';
+import {
+  offlineCatchUpStartedEventSchema,
+  offlineCatchUpCompletedEventSchema,
+} from './offline.js';
 
 /**
  * SimulationEvent — discriminated union emitted by systems during `advance`.
@@ -120,6 +124,11 @@ export const simulationEventSchema = z.discriminatedUnion('type', [
   marketPriceChangedEventSchema,
   expenseDueEventSchema,
   transferCompletedEventSchema,
+  // P6a: offline catch-up events emitted by the catch-up processor
+  // (NOT by engine.advance — the engine is offline-agnostic). See
+  // packages/simulation/src/offline/catch-up.ts.
+  offlineCatchUpStartedEventSchema,
+  offlineCatchUpCompletedEventSchema,
 ]);
 export type SimulationEvent = z.infer<typeof simulationEventSchema>;
 
@@ -132,3 +141,5 @@ export * from './events-resources.js';
 // Re-export economy event variants so consumers can import them from
 // @capitalist-tree/shared without reaching into the economy submodule.
 export * from './events-economy.js';
+// P6a: re-export offline catch-up event variants + OfflineSummary type.
+export * from './offline.js';
