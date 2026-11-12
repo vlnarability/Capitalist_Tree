@@ -21,14 +21,16 @@
  * real implementation that advances the atmosphere / climate / freshwater /
  * soil / biodiversity subsystems each tick and derives forestCoverage +
  * ecosystemResilience.
+ * P8b has REPLACED the BusinessSystem (see `business.ts`) stub with a real
+ * implementation that runs production / supply-chain resolution / accounting
+ * / valuation / interest accrual each tick and emits business-operated /
+ * business-bankrupt events.
  *
  * These are no longer exported from this file — `systems/index.ts` imports
  * them from their dedicated modules.
  *
- * The remaining stubs (business, progression, event) are no-ops until their
- * phases:
+ * The remaining stubs (progression, event) are no-ops until their phases:
  *
- *   - BusinessSystem    — P7
  *   - ProgressionSystem — P6+/P8
  *   - EventSystem       — P3+
  *
@@ -41,6 +43,5 @@
 import type { System } from './system.js';
 import { noopSystem } from './system.js';
 
-export const businessSystem: System = noopSystem('BusinessSystem');
 export const progressionSystem: System = noopSystem('ProgressionSystem');
 export const eventSystem: System = noopSystem('EventSystem');

@@ -83,3 +83,13 @@ export * from './offline/index.js';
 // biodiversity subsystems each tick. Tests import these directly to assert
 // the climate + biodiversity + soil invariants (TDD §18.1, §18.4 conservation).
 export * from './environment/index.js';
+
+// Business module (P8b — TDD §5.7 Business State, §11 Personal and Business
+// Accounting; GDD §8 Business and Economic Simulation). Pure helpers used by
+// the BusinessSystem (registry slot #8) and the eight business action
+// handlers (purchase/operate/sell-business, take/repay-loan,
+// hire/lay-off-employees, set-business-status). Tests import these directly
+// to assert the production / supply-chain / accounting / valuation /
+// conservation invariants (TDD §18.1, §18.4 conservation, GDD §8.1 / §8.2 /
+// §8.4 / §8.5).
+export * from './business/index.js';

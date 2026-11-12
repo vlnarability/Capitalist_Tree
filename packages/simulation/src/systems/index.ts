@@ -16,6 +16,9 @@
  * P7b replaces the EnvironmentSystem stub with a real implementation that
  * advances the atmosphere / climate / freshwater / soil / biodiversity
  * subsystems each tick and derives forestCoverage + ecosystemResilience.
+ * P8b replaces the BusinessSystem stub with a real implementation that runs
+ * production / supply-chain resolution / accounting / valuation / interest
+ * accrual each tick and emits business-operated / business-bankrupt events.
  */
 import { SystemRegistry } from './registry.js';
 import { timeSystem } from './time-system.js';
@@ -25,10 +28,10 @@ import { resourceSystem } from './resource-system.js';
 import { harvestSystem } from './harvest-system.js';
 import { economySystem } from './economy.js';
 import { personalSystem } from './personal.js';
+import { businessSystem } from './business.js';
 import { automationSystem } from './automation.js';
 import { environmentSystem } from './environment.js';
 import {
-  businessSystem,
   progressionSystem,
   eventSystem,
 } from './stubs.js';
@@ -59,6 +62,7 @@ export * from './resource-system.js';
 export * from './harvest-system.js';
 export * from './economy.js';
 export * from './personal.js';
+export * from './business.js';
 export * from './automation.js';
 export * from './environment.js';
 export * from './stubs.js';
