@@ -62,3 +62,9 @@ export * from './economy/index.js';
 // the recurring-expenses + well-being + diminishing-returns invariants
 // (TDD §18.1, GDD §7).
 export * from './personal/index.js';
+
+// Offline catch-up module (P6a — TDD §14.4, GDD §4.2). The catch-up
+// processor is a pure function over existing GameState (no schema change,
+// no migration bump). The `OfflineSummary` / event types it produces live
+// in @capitalist-tree/shared.
+export * from './offline/index.js';
