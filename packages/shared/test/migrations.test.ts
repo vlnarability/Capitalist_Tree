@@ -353,6 +353,251 @@ describe('MigrationRegistry', () => {
     expect((out.world as { environment?: unknown }).environment).toBeUndefined();
   });
 
+  it('v9 -> v10 migration backfills businesses[*] P8 operational fields (P8a)', () => {
+    // A v9 save predates the P8a BusinessState operational additions. It has
+    // a business entry written by P0–P7 (no status / lastOperatedAt /
+    // supplyChainLevel / upstreamSupplierIds / downstreamCustomerIds /
+    // environmentalImpact / wageRate / marketParticipation / lastValuationTick).
+    const v9State = freshState();
+    const v9Business = {
+      id: 'business:test-farm',
+      name: 'Test Farm',
+      type: 'business:farm',
+      ownership: {
+        ownerId: 'player:personal',
+        structure: 'sole-proprietorship',
+        share: 1,
+      },
+      cash: '0',
+      assets: [],
+      liabilities: [],
+      revenue: '0',
+      expenses: '0',
+      valuation: '130000',
+      employees: 4,
+      production: {
+        inputResourceIds: ['fertilizer:balanced-10-10-10'],
+        outputResourceId: 'resource:food',
+        rate: 15,
+        efficiency: 0.8,
+      },
+      // No P8a operational fields — these are what the migration backfills.
+    };
+    const withoutP8a = {
+      ...v9State,
+      businesses: [v9Business],
+    } as unknown as GameState;
+    const out = migrations.migrate(withoutP8a, 9, CURRENT_SCHEMA_VERSION);
+    expect(out.businesses).toHaveLength(1);
+    // All nine P8a operational fields backfilled explicitly.
+    expect(out.businesses[0].status).toBe('operating');
+    expect(out.businesses[0].lastOperatedAt).toBe(0);
+    expect(out.businesses[0].supplyChainLevel).toBe(0);
+    expect(out.businesses[0].upstreamSupplierIds).toEqual([]);
+    expect(out.businesses[0].downstreamCustomerIds).toEqual([]);
+    expect(out.businesses[0].environmentalImpact).toEqual({
+      carbonEmissions: 0,
+      waterConsumption: 0,
+      soilDegradation: 0,
+      pollution: 0,
+      landDisturbance: 0,
+      biodiversityImpact: 0,
+    });
+    expect(out.businesses[0].wageRate).toBe('0');
+    expect(out.businesses[0].marketParticipation).toEqual([]);
+    expect(out.businesses[0].lastValuationTick).toBe(0);
+    // Existing P0 fields are preserved (backward compatible).
+    expect(out.businesses[0].id).toBe('business:test-farm');
+    expect(out.businesses[0].cash).toBe('0');
+    expect(out.businesses[0].valuation).toBe('130000');
+    expect(out.businesses[0].employees).toBe(4);
+    expect(out.businesses[0].production.outputResourceId).toBe('resource:food');
+    expect(out.businesses[0].ownership.structure).toBe('sole-proprietorship');
+  });
+
+  it('v9 -> v10 migration preserves hand-patched operational values', () => {
+    // A v9 save someone hand-patched with non-default operational values must
+    // keep them — the migration only backfills missing fields, it never
+    // overwrites.
+    const v9State = freshState();
+    const handPatched = {
+      ...v9State,
+      businesses: [
+        {
+          id: 'business:test-mine',
+          name: 'Test Mine',
+          type: 'business:mineral-mine',
+          ownership: {
+            ownerId: 'player:personal',
+            structure: 'sustainable-enterprise',
+            share: 1,
+          },
+          cash: '5000',
+          assets: [],
+          liabilities: [],
+          revenue: '1000',
+          expenses: '800',
+          valuation: '180000',
+          employees: 5,
+          production: {
+            inputResourceIds: [],
+            outputResourceId: 'resource:minerals',
+            rate: 50,
+            efficiency: 0.8,
+          },
+          // Hand-patched P8a values — must survive the migration.
+          status: 'idle',
+          lastOperatedAt: 9999,
+          supplyChainLevel: 0,
+          upstreamSupplierIds: ['business:other-mine'],
+          downstreamCustomerIds: ['business:chemical-plant'],
+          environmentalImpact: {
+            carbonEmissions: 0.8,
+            waterConsumption: 5,
+            soilDegradation: 0.3,
+            pollution: 0.2,
+            landDisturbance: 0.5,
+            biodiversityImpact: 0.4,
+          },
+          wageRate: '600',
+          marketParticipation: ['market:energy'],
+          lastValuationTick: 12345,
+        },
+      ],
+    } as unknown as GameState;
+    const out = migrations.migrate(handPatched, 9, CURRENT_SCHEMA_VERSION);
+    expect(out.businesses[0].status).toBe('idle');
+    expect(out.businesses[0].lastOperatedAt).toBe(9999);
+    expect(out.businesses[0].supplyChainLevel).toBe(0);
+    expect(out.businesses[0].upstreamSupplierIds).toEqual(['business:other-mine']);
+    expect(out.businesses[0].downstreamCustomerIds).toEqual(['business:chemical-plant']);
+    expect(out.businesses[0].environmentalImpact).toEqual({
+      carbonEmissions: 0.8,
+      waterConsumption: 5,
+      soilDegradation: 0.3,
+      pollution: 0.2,
+      landDisturbance: 0.5,
+      biodiversityImpact: 0.4,
+    });
+    expect(out.businesses[0].wageRate).toBe('600');
+    expect(out.businesses[0].marketParticipation).toEqual(['market:energy']);
+    expect(out.businesses[0].lastValuationTick).toBe(12345);
+    // The widened 'sustainable-enterprise' ownership enum value survives.
+    expect(out.businesses[0].ownership.structure).toBe('sustainable-enterprise');
+  });
+
+  it('v9 -> v10 migration is idempotent on a v10 save (no field changes)', () => {
+    // A v10 save already has all P8a fields. Migrating from 9 to current (10)
+    // runs the v9 -> v10 step, which shallow-copies but applies no patches to
+    // a current-shape state, so the result is deep-equal to the input.
+    const v10State = freshState();
+    const out = migrations.migrate(v10State, 9, CURRENT_SCHEMA_VERSION);
+    expect(out).toEqual(v10State);
+  });
+
+  it('v9 -> v10 migration is a no-op on an empty businesses list', () => {
+    // P0–P7 saves start with `businesses: []` — nothing to backfill.
+    const v9State = freshState();
+    expect(v9State.businesses).toEqual([]);
+    const out = migrations.migrate(v9State, 9, CURRENT_SCHEMA_VERSION);
+    expect(out.businesses).toEqual([]);
+  });
+
+  it('v8 -> v10 multi-hop migration backfills both P7a environment + P8a business fields', () => {
+    // A v8 save predates BOTH the P7a EnvironmentState additions AND the P8a
+    // BusinessState additions. It has a business entry written by P0–P6 (no
+    // P8a fields) and an environment written by P0–P6 (no P7a fields). The
+    // runner walks v8 -> v9 -> v10, applying both migrations in sequence.
+    const v8State = freshState();
+    // Strip the P7a environment fields (simulate a v8 save).
+    const {
+      methaneConcentration: _m,
+      nitrousOxideConcentration: _n,
+      aerosols: _a,
+      ...atmosphereWithoutV9
+    } = v8State.world.environment.atmosphere;
+    void _m;
+    void _n;
+    void _a;
+    const {
+      climateForcing: _cf,
+      seaLevelRise: _slr,
+      energy: _e,
+      landUse: _lu,
+      ...environmentWithoutV9
+    } = v8State.world.environment;
+    void _cf;
+    void _slr;
+    void _e;
+    void _lu;
+    // Add a v8-era business (no P8a fields).
+    const v8Business = {
+      id: 'business:test-store',
+      name: 'Test Store',
+      type: 'business:general-store',
+      ownership: {
+        ownerId: 'player:personal',
+        structure: 'sole-proprietorship',
+        share: 1,
+      },
+      cash: '1000',
+      assets: [],
+      liabilities: [],
+      revenue: '0',
+      expenses: '0',
+      valuation: '90000',
+      employees: 3,
+      production: {
+        inputResourceIds: ['fertilizer:balanced-10-10-10'],
+        outputResourceId: 'fertilizer:balanced-10-10-10',
+        rate: 20,
+        efficiency: 0.98,
+      },
+    };
+    const withoutP7aP8a = {
+      ...v8State,
+      world: {
+        ...v8State.world,
+        environment: {
+          ...environmentWithoutV9,
+          atmosphere: atmosphereWithoutV9,
+        },
+      },
+      businesses: [v8Business],
+    } as unknown as GameState;
+    const out = migrations.migrate(withoutP7aP8a, 8, CURRENT_SCHEMA_VERSION);
+    // P7a environment fields backfilled by the v8 -> v9 hop.
+    expect(out.world.environment.atmosphere.methaneConcentration).toBeCloseTo(1.9, 5);
+    expect(out.world.environment.atmosphere.nitrousOxideConcentration).toBeCloseTo(0.33, 5);
+    expect(out.world.environment.atmosphere.aerosols).toBe(0);
+    expect(out.world.environment.climateForcing).toBe(0);
+    expect(out.world.environment.seaLevelRise).toBe(0);
+    expect(out.world.environment.energy).toBeDefined();
+    expect(out.world.environment.landUse).toBeDefined();
+    // P8a business fields backfilled by the v9 -> v10 hop.
+    expect(out.businesses).toHaveLength(1);
+    expect(out.businesses[0].status).toBe('operating');
+    expect(out.businesses[0].lastOperatedAt).toBe(0);
+    expect(out.businesses[0].supplyChainLevel).toBe(0);
+    expect(out.businesses[0].upstreamSupplierIds).toEqual([]);
+    expect(out.businesses[0].downstreamCustomerIds).toEqual([]);
+    expect(out.businesses[0].environmentalImpact).toEqual({
+      carbonEmissions: 0,
+      waterConsumption: 0,
+      soilDegradation: 0,
+      pollution: 0,
+      landDisturbance: 0,
+      biodiversityImpact: 0,
+    });
+    expect(out.businesses[0].wageRate).toBe('0');
+    expect(out.businesses[0].marketParticipation).toEqual([]);
+    expect(out.businesses[0].lastValuationTick).toBe(0);
+    // Existing P0 business fields preserved across both hops.
+    expect(out.businesses[0].id).toBe('business:test-store');
+    expect(out.businesses[0].valuation).toBe('90000');
+    expect(out.businesses[0].employees).toBe(3);
+  });
+
   it('current-version saves pass through migrations unchanged (identity)', () => {
     const s = freshState();
     const out = migrations.migrate(s, CURRENT_SCHEMA_VERSION, CURRENT_SCHEMA_VERSION);

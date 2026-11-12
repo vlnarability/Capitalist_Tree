@@ -14,6 +14,16 @@ import {
   disableAutomationActionSchema,
   purchaseEquipmentActionSchema,
 } from './actions-automation.js';
+import {
+  purchaseBusinessActionSchema,
+  operateBusinessActionSchema,
+  sellBusinessActionSchema,
+  takeLoanActionSchema,
+  repayLoanActionSchema,
+  hireEmployeesActionSchema,
+  layOffEmployeesActionSchema,
+  setBusinessStatusActionSchema,
+} from './actions-business.js';
 
 /**
  * GameAction — discriminated union of player actions handled by
@@ -60,6 +70,15 @@ export const gameActionSchema = z.discriminatedUnion('type', [
   enableAutomationActionSchema,
   disableAutomationActionSchema,
   purchaseEquipmentActionSchema,
+  // P8a: business actions (schema-only — handlers + BusinessSystem land in P8b).
+  purchaseBusinessActionSchema,
+  operateBusinessActionSchema,
+  sellBusinessActionSchema,
+  takeLoanActionSchema,
+  repayLoanActionSchema,
+  hireEmployeesActionSchema,
+  layOffEmployeesActionSchema,
+  setBusinessStatusActionSchema,
 ]);
 export type GameAction = z.infer<typeof gameActionSchema>;
 export type NoOpAction = z.infer<typeof noOpActionSchema>;
@@ -79,3 +98,7 @@ export * from './actions-economy.js';
 // `SetAutomationPolicyAction` etc. from @capitalist-tree/shared without
 // reaching into the automation submodule.
 export * from './actions-automation.js';
+// P8a: re-export business action variants so consumers can import
+// `PurchaseBusinessAction` etc. from @capitalist-tree/shared without
+// reaching into the business submodule.
+export * from './actions-business.js';

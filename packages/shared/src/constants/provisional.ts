@@ -249,7 +249,44 @@ export const PROVISIONAL_INITIAL_INTEREST_RATE = 0;
 // v3 → v4 / v5 → v6 / v6 → v7 convention). The migration is idempotent and
 // does NOT touch `originalTree.id` or `originalTree.isOriginal`
 // (GDD §16.1/16.2).
-export const CURRENT_SCHEMA_VERSION = 9;
+//
+// v10 (P8a): extended `BusinessState` with nine operational fields for the
+// BusinessSystem (TDD §5.7 / §11, GDD §8.2 supply chains, §8.3 economic
+// organizations, §8.4 growth pressure, §8.5 market simulation):
+//   - `businesses[*].status: 'operating' | 'idle' | 'bankrupt' | 'liquidating'`
+//     — operational state. Default `'operating'`.
+//   - `businesses[*].lastOperatedAt: number` — sim seconds of last operate
+//     step. Default `0`.
+//   - `businesses[*].supplyChainLevel: number` — position in the supply chain
+//     (GDD §8.2). 0=extraction ... 5=application. Default `0`.
+//   - `businesses[*].upstreamSupplierIds: string[]` — business ids this one
+//     buys inputs from (vertical integration). Default `[]`.
+//   - `businesses[*].downstreamCustomerIds: string[]` — business ids this one
+//     sells outputs to. Default `[]`.
+//   - `businesses[*].environmentalImpact: EnvironmentalImpact` — per-business
+//     impact (reuses the P6 `environmentalImpactSchema` — pillar 4).
+//     Default all-zero.
+//   - `businesses[*].wageRate: string` — bigint minor-units wage per employee
+//     per pay period. Default `'0'`.
+//   - `businesses[*].marketParticipation: string[]` — which commodity markets
+//     this business buys/sells in (GDD §8.5). Default `[]`.
+//   - `businesses[*].lastValuationTick: number` — sim seconds of last
+//     valuation recompute (TDD §11 — valuation ≠ liquidity). Default `0`.
+//
+// Also widens the `OwnershipState.structure` enum with `'sustainable-enterprise'`
+// (GDD §8.3 — the P0 enum was missing it). Zod enum widening is backward-
+// compatible: existing saves with the old enum value parse cleanly because
+// every old value is still a member of the widened enum.
+//
+// All v10 fields have Zod `.default(...)` so v9 saves parse cleanly under v10
+// even without re-running the migration, and the v9 → v10 migration backfills
+// them explicitly so consumers can rely on their presence without re-running
+// the zod default pipeline (matching the v3 → v4 / v5 → v6 / v6 → v7 / v8 → v9
+// convention). The migration is idempotent and is a defensive no-op when
+// `state.businesses` is absent or empty (the P0 case — fresh games start with
+// `businesses: []`). The migration does NOT touch `originalTree.id` or
+// `originalTree.isOriginal` (GDD §16.1/16.2).
+export const CURRENT_SCHEMA_VERSION = 10;
 
 // Used by migration tests to exercise the v0 -> v1 path. Real saves are
 // always written at CURRENT_SCHEMA_VERSION.
