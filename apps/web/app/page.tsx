@@ -1,9 +1,9 @@
 'use client';
 
 /**
- * Main game screen (P5b — GDD §13.1, §13.2 Simplified View).
+ * Main game screen (P5b + P5c — GDD §13.1, §13.2 Simplified View, §13.3 Advanced View).
  *
- * Replaces P0's `use-engine-game`-driven page with the real P5b game UI:
+ * Replaces P0's `use-engine-game`-driven page with the real game UI:
  *
  *   - **TreeView dominant** (P4d React wrapper around CanvasTreeRenderer). The
  *     tree is the central visual element per GDD §13.1 ("the original tree is
@@ -17,10 +17,12 @@
  *   - **Save / Load / New Game** buttons wired through `useSimulationLoop`
  *     (P5a hook). The hook owns the storage lifecycle; the buttons just call
  *     `loop.save() / loop.load() / loop.newGame(config)`.
- *
- * No advanced view (P5c) + no notifications panel (P5d). The simplified view
- * (GDD §13.2) is plain-language summaries + icons + colour tones — no
- * nutrient ratios, photosynthetic efficiency, or Markov matrices.
+ *   - **Advanced view toggle** (P5c — GDD §13.3). When `ui.advancedView` is
+ *     true, a second row of Panels surfaces the BiologyPanel /
+ *     EnvironmentPanel / HarvestControls / PurchaseControls /
+ *     TransactionsPanel / CurrencyCosmeticPicker — the formulas + transactions
+ *     + controls GDD §13.3 calls out. The toggle is the gateway: simplified
+ *     view (GDD §13.2) by default; advanced view on demand.
  *
  * Architecture (10 Capitalist Tree rules):
  *   - Rule 6 (TDD §15.1, GDD §6.1): rendering / UI reads state, NEVER writes.
@@ -35,7 +37,8 @@
  *     via the dashboard component's narrow selectors. A `player.personalCash`
  *     change re-renders `MoneyDisplay` but NOT `WeatherDisplay`. The page
  *     itself subscribes only to the slices needed to build TreeView's props
- *     (`originalTree` + `world` + `clock`).
+ *     (`originalTree` + `world` + `clock`) + the `ui.advancedView` boolean
+ *     that gates the advanced panels.
  *
  * Lifecycle:
  *   - Mount: `useSimulationLoop(config, storage)` boots — tries to load from
@@ -48,6 +51,9 @@
  *   - Load button: `loop.load()` re-reads from IDB and republishes.
  *   - New Game button: `loop.newGame(config)` boots a fresh `engine.initialize`
  *     and republishes.
+ *   - Advanced view toggle: flips `ui.advancedView` (a UI-only slice —
+ *     `simState` reference is untouched, rule 6). The page re-renders to
+ *     mount / unmount the advanced Panels.
  */
 import { useCallback, useMemo, type ReactElement } from 'react';
 import { DEFAULT_GAME_CONFIG } from '@capitalist-tree/simulation';
@@ -68,8 +74,16 @@ import {
   ResourcesSummary,
   WeatherDisplay,
   SpeedControls,
+  AdvancedViewToggle,
   useTreeConditionTone,
 } from '../components/dashboard';
+import { BiologyPanel, EnvironmentPanel } from '../components/environment';
+import {
+  TransactionsPanel,
+  HarvestControls,
+  PurchaseControls,
+  CurrencyCosmeticPicker,
+} from '../components/economy';
 
 // ----------------------------------------------------------------------------
 // Page component.
@@ -102,6 +116,18 @@ export default function HomePage(): ReactElement {
   // TreeView tint: derived from the tree's condition tier (Healthy/Stressed/
   // Critical/Dead). Reads `originalTree.alive` + `originalTree.stress` only.
   const treeTone = useTreeConditionTone();
+
+  // P5c — GDD §13.3: the advanced-view toggle gates the BiologyPanel /
+  // EnvironmentPanel / TransactionsPanel / HarvestControls /
+  // PurchaseControls / CurrencyCosmeticPicker below. Subscribes narrowly
+  // to a primitive boolean — Zustand's `useSyncExternalStore` bails out
+  // when the value is unchanged, so an unrelated `simState` commit does
+  // NOT re-render the page on this selector. (The other selectors above
+  // do re-render the page on every step, but that's intentional — the
+  // TreeView needs the fresh slice. The `advancedView` selector rides
+  // along for free; the page re-renders + mounts/unmounts the advanced
+  // Panels only when the boolean actually flips.)
+  const advancedView = useGameStore((s) => s.ui.advancedView);
 
   // Build TreeRenderData + EnvironmentRenderData once per state change.
   // The mappers are pure (rule 2 + rule 6); `useMemo` re-runs only when the
@@ -140,8 +166,9 @@ export default function HomePage(): ReactElement {
     <main className="mx-auto max-w-7xl p-4 sm:p-6" data-testid="game-screen">
       <Header />
 
-      {/* Top row: speed + save/load controls. Always visible — the player
-          should be able to pause / save without scrolling. */}
+      {/* Top row: speed + save/load controls + the advanced-view toggle.
+          Always visible — the player should be able to pause / save /
+          switch views without scrolling. */}
       <Panel
         title="Simulation"
         icon="⏱"
@@ -149,7 +176,7 @@ export default function HomePage(): ReactElement {
         className="mb-4"
       >
         <SpeedControls accumulator={loop.accumulator} />
-        <div className="mt-3 flex flex-wrap gap-2 border-t border-slate-800/80 pt-3">
+        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-800/80 pt-3">
           <Button onClick={() => void loop.save()} data-testid="save-button">
             💾 Save
           </Button>
@@ -159,6 +186,12 @@ export default function HomePage(): ReactElement {
           <Button onClick={onNewGame} data-testid="new-game-button">
             🌱 New Game
           </Button>
+          {/* P5c: the advanced-view toggle lives in the Simulation panel so
+              the player can flip between simplified (GDD §13.2) and
+              advanced (GDD §13.3) without losing the speed / save controls. */}
+          <div className="ml-auto">
+            <AdvancedViewToggle />
+          </div>
         </div>
       </Panel>
 
@@ -206,6 +239,51 @@ export default function HomePage(): ReactElement {
           </Panel>
         </aside>
       </div>
+
+      {/* P5c — GDD §13.3 Advanced View. Rendered only when the player flips
+          `ui.advancedView` to true. The panels themselves subscribe narrowly
+          to their own slices (BiologyPanel reads `originalTree` +
+          `world.environment` + `clock`; PurchaseControls reads `economy.markets`
+          + `player.personalCash`; etc.) so mounting them doesn't add per-step
+          re-renders to the page — each panel re-renders independently when its
+          slice changes.
+
+          Layout: a responsive 1/2/3-column grid so the panel count stays
+          readable across viewport widths (single column on phones, two on
+          tablets, three on desktops). The order is intentional — biology
+          + environment lead (the player's primary advanced view into the
+          tree), then the harvest + market controls (the player's levers),
+          then the currency picker (cosmetic) + transactions (history). */}
+      {advancedView ? (
+        <div
+          className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3"
+          data-testid="advanced-view"
+        >
+          <Panel
+            title="Biology"
+            icon="🧬"
+            tone="emerald"
+            hint="GDD §13.3 / §5"
+          >
+            <BiologyPanel />
+          </Panel>
+          <Panel title="Environment" icon="🌍" hint="GDD §13.3">
+            <EnvironmentPanel />
+          </Panel>
+          <Panel title="Harvest" icon="🍃" tone="emerald" hint="GDD §5.4">
+            <HarvestControls />
+          </Panel>
+          <Panel title="Markets" icon="🛒" hint="GDD §8.5">
+            <PurchaseControls />
+          </Panel>
+          <Panel title="Transactions" icon="📒" hint="Recent">
+            <TransactionsPanel />
+          </Panel>
+          <Panel title="Currency" icon="💵" hint="Cosmetic only">
+            <CurrencyCosmeticPicker />
+          </Panel>
+        </div>
+      ) : null}
     </main>
   );
 }
@@ -222,7 +300,7 @@ function Header(): ReactElement {
           The Capitalist Tree
         </h1>
         <p className="text-xs text-slate-500">
-          P5b — main game screen (GDD §13.1 simplified view)
+          P5b + P5c — main game screen (GDD §13.1; advanced view §13.3)
         </p>
       </div>
     </header>
