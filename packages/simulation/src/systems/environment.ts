@@ -9,13 +9,15 @@
  * for the EnvironmentSystem in P0 and is now filled.
  *
  * Each step:
- *   1. Fork a deterministic sub-stream `'EnvironmentSystem'` from `ctx.rng`.
- *      Reserved for future stochastic environmental events (wildfire rolls,
- *      extreme-weather spikes). Currently unused by the deterministic
- *      transforms below; the fork keeps the environment path's draws
- *      independent of other systems' sequences. @provisional — persisting it
- *      would need an `rngStreams.environment` field (GDD §17); the fork is
- *      stateless per-step, like BiologySystem's + AutomationSystem's forks.
+ *   1. (RNG fork DEFERRED — R-P7-1, see docs/environment.md §11.) The
+ *      EnvironmentSystem's transforms are fully deterministic, so it does NOT
+ *      call `ctx.rng.fork('EnvironmentSystem')`. `fork()` advances the root
+ *      RNG by one draw by design; adding a third per-step fork (on top of
+ *      BiologySystem's + AutomationSystem's) shifts the mortality sequence
+ *      and breaks the calibrated catch-up death test. The fork lands when
+ *      stochastic environmental events arrive AND the catch-up test is
+ *      retuned, or `fork()` is refactored to a non-advancing derivation. A
+ *      determinism test pins the current (no-fork) behaviour.
  *   2. Derive `forestCoverage` from the originalTree's biology outputs
  *      (canopy fullness + age-based maturity). READ ONLY — the EnvironmentSystem
  *      never modifies TreeState (rule: biology consistent; the EnvironmentSystem
@@ -242,18 +244,30 @@ export const environmentSystem: System = {
     // convert to sim days internally.
     const dtSeconds = ctx.stepSeconds;
 
-    // @provisional RNG fork DEFERRED. The EnvironmentSystem's transforms in
-    // P7b are fully deterministic (no stochastic environmental events yet),
-    // so it does NOT call `ctx.rng.fork('EnvironmentSystem')`. Calling fork
-    // would advance the shared root RNG by one draw per tick, shifting the
-    // sequence every other system sees (BiologySystem's mortality rolls,
-    // WeatherSystem's next condition, etc.) and breaking existing
-    // determinism-calibrated tests (e.g. the offline-catch-up "starved tree
-    // dies" scenario). The fork will be added in P7c+ when stochastic
-    // environmental events (wildfire rolls, extreme-weather spikes) land and
-    // the catch-up tests are retuned for the shifted sequence. Matches the
-    // BiologySystem / AutomationSystem fork pattern — but only once there's a
-    // draw to make.
+    // @provisional RNG fork DEFERRED — see R-P7-1 in docs/environment.md.
+    //
+    // The EnvironmentSystem's transforms are fully deterministic (no stochastic
+    // environmental events yet), so it does NOT call
+    // `ctx.rng.fork('EnvironmentSystem')`. `Rng.fork()` advances the shared
+    // root RNG by exactly one draw BY DESIGN (packages/simulation/src/rng.ts:
+    // `fork()` calls `this.next()` to seed the child — "the parent advances by
+    // exactly one draw to seed the fork"). The EnvironmentSystem runs at slot
+    // #10, AFTER BiologySystem (slot #3) + WeatherSystem (slot #2). A fork
+    // here would advance the root at the END of the tick, shifting the child
+    // seed BiologySystem's `fork('BiologySystem')` derives on the NEXT tick →
+    // the mortality roll sequence changes → the offline-catch-up "starved tree
+    // dies" test (seed=3, calibrated to the current sequence) flips from
+    // dies-in-1-chunk to survives. Verified empirically in P7d.
+    //
+    // BiologySystem + AutomationSystem also fork per-step, but their forks are
+    // already baked into the calibrated sequence; adding a THIRD per-step fork
+    // (EnvironmentSystem) is the perturbation. The fork will be added when (a)
+    // stochastic environmental events land AND (b) the catch-up death test is
+    // retuned for the shifted sequence, OR `fork()` is refactored to support a
+    // non-advancing sub-stream derivation (a deeper change that retunes every
+    // system's sequence — out of P7d scope). A determinism test
+    // (environment.test.ts "does NOT shift the root RNG") pins this: the root
+    // RNG state is unchanged across an EnvironmentSystem.execute.
 
     // 2. Derive forestCoverage from the originalTree's biology outputs.
     //    READ ONLY — does not modify TreeState.

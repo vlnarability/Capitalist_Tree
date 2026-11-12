@@ -15,9 +15,11 @@
  *      intensity-modulated).
  *   6. Update state.world.weather.{condition, temperature, intensity,
  *      prevCondition, daysInCondition}.
- *   7. Mirror the local temperature to state.world.environment.globalTemperature
- *      so P1's BiologySystem (which currently reads globalTemperature) sees
- *      the local temperature. See R-P2-1 in docs/resources-weather.md.
+ *   7. R-P2-1 (resolved P7d): NO LONGER mirrors localTemp into
+ *      `environment.globalTemperature`. The EnvironmentSystem (slot #10) owns
+ *      the climate-scale `globalTemperature` via the climate model; the
+ *      previous per-tick mirror dominated the climate trajectory. WeatherSystem
+ *      writes ONLY the weather-scale `state.world.weather.temperature`.
  *   8. If the new condition is damage-capable and intensity exceeds the
  *      threshold, emit a `weather-damage` event.
  *   9. If the condition changed, emit a `weather-changed` event.
@@ -125,9 +127,20 @@ export const weatherSystem: System = {
       daysInCondition: newDaysInCondition,
     };
 
-    // 7. Mirror the local temperature to globalTemperature for P1 backwards
-    //    compatibility (see R-P2-1 in docs/resources-weather.md).
-    next.world.environment.globalTemperature = localTemp;
+    // 7. R-P2-1 RESOLVED (P7d): WeatherSystem NO LONGER mirrors the local
+    //    temperature into `environment.globalTemperature`. The EnvironmentSystem
+    //    (slot #10) owns `globalTemperature` via the climate model
+    //    (`stepTemperature` — forcing-driven equilibrium with thermal inertia).
+    //    The previous per-tick mirror made the climate-driven trajectory
+    //    "dominated by weather" (the EnvironmentSystem's nudge was overwritten
+    //    at the start of every subsequent tick). WeatherSystem now writes ONLY
+    //    the regional / weather-scale `state.world.weather.temperature`; the
+    //    climate-scale `globalTemperature` is seeded at 18 °C by initial-state
+    //    and evolved by the EnvironmentSystem. BiologySystem reads
+    //    `environment.globalTemperature` (the climate value) for its
+    //    temperature Liebig factor — a one-tick lag on tick 0 is acceptable
+    //    for a slowly-evolving climate variable. See docs/environment.md §6
+    //    + R-P7-2, and the updated R-P2-1 in docs/resources-weather.md.
 
     // 8. Emit weather-damage if applicable.
     if (shouldEmitDamage(eventDef, intensity)) {

@@ -19,14 +19,17 @@
  *
  * The pure-helper tests pin the @provisional climate math; the integration
  * tests assert the system layering (ResourceSystem writes soil.health first,
- * EnvironmentSystem nudges it; WeatherSystem writes globalTemperature first,
- * EnvironmentSystem nudges it — see the @provisional R-P2-1 notes in
- * climate.ts / water.ts).
+ * EnvironmentSystem nudges it; the EnvironmentSystem is the SOLE writer of
+ * globalTemperature via the climate model — R-P2-1 resolved in P7d, see
+ * climate.ts / water.ts / docs/environment.md §6).
  */
 import { describe, it, expect } from 'vitest';
 import {
   engine,
   defaultRegistry,
+  environmentSystem,
+  Rng,
+  type SystemContext,
   stepAtmosphere,
   deriveClimateForcing,
   stepTemperature,
@@ -742,9 +745,9 @@ describe('EnvironmentSystem integration (engine.advance, slot #10)', () => {
     const env1 = result.state.world.environment;
     // At least one subsystem's derived value should differ after a tick
     // (climateForcing is recomputed each tick; soil.health is nudged; etc.).
-    // We don't assert exact deltas (WeatherSystem dominates globalTemperature —
-    // see @provisional R-P2-1) — only that the system ran and produced finite
-    // values.
+    // We don't assert exact deltas (globalTemperature is climate-driven, not
+    // weather-mirrored — R-P2-1 resolved in P7d) — only that the system ran and
+    // produced finite values.
     expect(Number.isFinite(env1.atmosphere.co2Concentration)).toBe(true);
     expect(Number.isFinite(env1.climateForcing)).toBe(true);
     expect(Number.isFinite(env1.globalTemperature)).toBe(true);
@@ -864,7 +867,10 @@ describe('EnvironmentSystem integration (engine.advance, slot #10)', () => {
   it('determinism: different seeds → different environment state (sanity)', () => {
     const a = engine.advance(engine.initialize(cfg(123)), 10 * SECONDS_PER_DAY);
     const b = engine.advance(engine.initialize(cfg(999)), 10 * SECONDS_PER_DAY);
-    // Weather differs by seed, so globalTemperature + freshwater will differ.
+    // Weather differs by seed, so freshwater + forestCoverage + biodiversity
+    // will differ (globalTemperature is climate-driven + deterministic, so it
+    // does NOT differ by seed post-R-P2-1 — the env object still differs via
+    // the weather-dependent fields).
     expect(JSON.stringify(a.state.world.environment)).not.toBe(
       JSON.stringify(b.state.world.environment),
     );
@@ -901,5 +907,112 @@ describe('EnvironmentSystem integration (engine.advance, slot #10)', () => {
       PROVISIONAL_ENV_CO2_BASELINE_PPM,
       6,
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// EnvironmentSystem — RNG determinism (R-P7-1: fork deferred)
+// ---------------------------------------------------------------------------
+//
+// The EnvironmentSystem's transforms are fully deterministic, so it does NOT
+// call `ctx.rng.fork('EnvironmentSystem')`. `Rng.fork()` advances the shared
+// root RNG by exactly one draw BY DESIGN (packages/simulation/src/rng.ts:
+// `fork()` calls `this.next()` to seed the child). The EnvironmentSystem runs
+// at slot #10, AFTER BiologySystem (slot #3); a fork here would shift the
+// child seed BiologySystem's `fork('BiologySystem')` derives on the NEXT tick,
+// changing the mortality roll sequence and breaking the offline-catch-up
+// "starved tree dies" test (seed=3, calibrated to the current sequence).
+//
+// These tests pin the no-fork contract: the EnvironmentSystem consumes ZERO
+// root RNG draws. If a future change adds `ctx.rng.fork(...)`, these fail —
+// the catch-up death test must be retuned for the shifted sequence first (or
+// `fork()` refactored to a non-advancing sub-stream derivation).
+describe('EnvironmentSystem — RNG determinism (R-P7-1: fork deferred, zero root draws)', () => {
+  it('execute() consumes ZERO root RNG draws (rng state unchanged across a direct call)', () => {
+    const initial = engine.initialize(cfg(42));
+    // Rebuild the root RNG from the persisted state (mirrors simulation.ts
+    // runOneStep's RNG handling).
+    const rng = Rng.fromState(initial.rngState);
+    const before = rng.getState();
+    const ctx: SystemContext = {
+      now: initial.clock.elapsedSeconds + STEP,
+      stepSeconds: STEP,
+      dayOfYear: initial.clock.day,
+      rng,
+    };
+    const result = environmentSystem.execute(initial, ctx);
+    // The root RNG position is byte-identical before/after — the
+    // EnvironmentSystem drew nothing (no fork). If a future change adds
+    // `ctx.rng.fork('EnvironmentSystem')`, fork() advances the root by one
+    // draw (rng.ts) and this assertion fails.
+    expect(rng.getState()).toEqual(before);
+    // The system still ran to completion + deep-copied (purity).
+    expect(result.state).toBeDefined();
+    expect(result.state).not.toBe(initial);
+  });
+
+  it('a full engine.advance persists the SAME root RNG whether or not the EnvironmentSystem runs (it adds no draws to the pipeline)', () => {
+    const initial = engine.initialize(cfg(42));
+    // Full advance through the default registry (EnvironmentSystem present).
+    const full = engine.advance(initial, STEP);
+
+    // Manually replay one step WITHOUT the EnvironmentSystem to isolate its
+    // root-RNG contribution. Replicates runOneStep's RNG threading
+    // (simulation.ts): one shared root Rng, ctx passed to every system.
+    const rng = Rng.fromState(initial.rngState);
+    const ctx: SystemContext = {
+      now: initial.clock.elapsedSeconds + STEP,
+      stepSeconds: STEP,
+      dayOfYear: initial.clock.day,
+      rng,
+    };
+    let next: GameState = initial;
+    for (const system of defaultRegistry.all()) {
+      if (system.id === 'EnvironmentSystem') continue; // isolate
+      const result = system.execute(next, ctx);
+      next = result.state;
+    }
+    const skippedRngState = rng.getState();
+
+    // The persisted root RNG position is IDENTICAL whether or not the
+    // EnvironmentSystem ran — it contributes zero root draws to the pipeline.
+    // BiologySystem's mortality sequence (forked from the root) is therefore
+    // unaffected by the EnvironmentSystem's presence.
+    expect(skippedRngState).toEqual(full.state.rngState);
+  });
+
+  it('does NOT perturb the BiologySystem mortality sequence (starved tree still dies with the EnvironmentSystem present)', () => {
+    // The offline-catch-up "starved tree dies" test (seed=3) is calibrated to
+    // the CURRENT root-RNG sequence. Adding an EnvironmentSystem fork would
+    // shift BiologySystem's mortality rolls and flip dies-in-1-day → survives
+    // (verified empirically in P7d). This test pins the no-fork outcome: a
+    // crippled tree still dies within one sim day with the EnvironmentSystem
+    // in the registry — proving the mortality sequence is unperturbed.
+    function crippled(seed: number): GameState {
+      const s = engine.initialize({ ...DEFAULT_GAME_CONFIG, seed, createdAt: 0 });
+      const t = s.originalTree;
+      return {
+        ...s,
+        originalTree: {
+          ...t,
+          alive: true,
+          stress: 1,
+          health: 0,
+          energy: { ...t.energy, reserves: 0, production: 0, consumption: 0 },
+          water: { ...t.water, stored: 0 },
+          foliage: { ...t.foliage, currentLeaves: 0 },
+          damage: [
+            { type: 'severe-defoliation', severity: 1, appliedAt: s.clock.elapsedSeconds },
+            { type: 'severe-defoliation', severity: 1, appliedAt: s.clock.elapsedSeconds },
+          ],
+        },
+      };
+    }
+    const s = crippled(3);
+    const result = engine.advance(s, SECONDS_PER_DAY);
+    expect(result.state.originalTree.alive).toBe(false);
+    // The tree-died event fired (BiologySystem mortality ran on the
+    // unshifted sequence).
+    expect(result.events.some((e) => e.type === 'tree-died')).toBe(true);
   });
 });

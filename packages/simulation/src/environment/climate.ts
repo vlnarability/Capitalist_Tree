@@ -27,16 +27,18 @@
  * - Sea level: rises only with warming above baseline, advanced per sim YEAR
  *   (GDD §170 long-term climate patterns).
  *
- * @provisional R-P2-1 (docs/resources-weather.md): the WeatherSystem (slot #2)
- * currently mirrors the *local* weather temperature into
- * `environment.globalTemperature` each tick for P1 backwards-compatibility.
- * The EnvironmentSystem (slot #10) runs AFTER it, so this step's climate nudge
- * is what persists in the returned state — but the WeatherSystem overwrites it
- * again at the start of the next tick. Until R-P2-1 lands (WeatherSystem stops
- * mirroring, BiologySystem reads `weather.temperature` directly), the
- * climate-driven temperature trajectory is dominated by the weather signal.
- * The pure `stepTemperature` function is still correct and unit-tested in
- * isolation; the integration test only asserts finiteness + bounded drift.
+ * R-P2-1 RESOLVED (P7d — see docs/environment.md §6 + R-P7-2): the WeatherSystem
+ * (slot #2) NO LONGER mirrors the local weather temperature into
+ * `environment.globalTemperature` each tick. The EnvironmentSystem (slot #10)
+ * is now the sole writer of the climate-scale `globalTemperature` via
+ * `stepTemperature`. The previous mirror overwrote this step's climate nudge
+ * at the start of every subsequent tick, so the climate-driven trajectory was
+ * "dominated by the weather signal". With the mirror removed, the trajectory
+ * follows the forcing-driven equilibrium with thermal inertia — exactly the
+ * GDD §170 "long-term climate patterns" + TDD §9.2 "evolve over long periods"
+ * intent. BiologySystem reads `environment.globalTemperature` (the climate
+ * value) for its temperature Liebig factor; the one-tick lag on tick 0 is
+ * acceptable for a slowly-evolving climate variable.
  */
 import type { EnvironmentState } from '@capitalist-tree/shared';
 import {
