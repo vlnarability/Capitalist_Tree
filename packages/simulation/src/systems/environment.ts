@@ -72,8 +72,6 @@ import {
   PROVISIONAL_ENV_BASELINE_TEMP_C,
 } from '../environment/index.js';
 
-const SECONDS_PER_DAY = 24 * 60 * 60;
-
 // @provisional (GDD §17: detailed resource simulation equations) — provisional
 // mapping from the originalTree's biology outputs to `forestCoverage`. A
 // single mature tree is treated as a small forest stand proxy: coverage grows
@@ -228,13 +226,14 @@ export const environmentSystem: System = {
     const events: SimulationEvent[] = [];
     const env = next.world.environment;
     // stepSeconds is the per-tick sim seconds; the helpers take seconds and
-    // convert to days internally.
+    // convert to sim days internally.
     const dtSeconds = ctx.stepSeconds;
-    void dtSeconds / SECONDS_PER_DAY; // referenced for the unit-consistency note
 
     // Fork the deterministic sub-stream for the environment path. Currently
     // unused by the deterministic transforms below; reserved for future
-    // stochastic environmental events (wildfire rolls, etc.).
+    // stochastic environmental events (wildfire rolls, extreme-weather
+    // spikes). The fork keeps the environment path's draws independent of
+    // other systems' sequences (matches BiologySystem / AutomationSystem).
     const rng = ctx.rng.fork('EnvironmentSystem');
     void rng;
 
