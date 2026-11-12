@@ -26,3 +26,11 @@ export { ExpensesSummary, type ExpensesSummaryProps } from './ExpensesSummary';
 export { ResourcesSummary, type ResourcesSummaryProps } from './ResourcesSummary';
 export { WeatherDisplay, type WeatherDisplayProps } from './WeatherDisplay';
 export { SpeedControls, type SpeedControlsProps } from './SpeedControls';
+// P5c: advanced-view toggle — switches the dashboard between simplified
+// (GDD §13.2) and advanced (GDD §13.3) presentation. The toggle itself
+// lives in the dashboard barrel because it shares the Panel/Button
+// primitives + is rendered at the top of the simulation panel.
+export {
+  AdvancedViewToggle,
+  type AdvancedViewToggleProps,
+} from './AdvancedViewToggle';
