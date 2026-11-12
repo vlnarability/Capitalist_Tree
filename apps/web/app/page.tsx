@@ -75,6 +75,7 @@ import {
   WeatherDisplay,
   SpeedControls,
   AdvancedViewToggle,
+  NotificationsPanel,
   useTreeConditionTone,
 } from '../components/dashboard';
 import { BiologyPanel, EnvironmentPanel } from '../components/environment';
@@ -165,6 +166,25 @@ export default function HomePage(): ReactElement {
   return (
     <main className="mx-auto max-w-7xl p-4 sm:p-6" data-testid="game-screen">
       <Header />
+
+      {/* P5d — GDD §13.5 Notifications. Floating top-right toast panel.
+          The panel returns `null` when there are no actionable
+          notifications to show, so this container collapses to nothing
+          (no reserved space, no empty UI). ARIA `role="region"` on the
+          panel + `role="alert"`/`"status"` per item — keyboard users tab
+          through the dismiss buttons; the panel respects
+          `prefers-reduced-motion` via `useReducedMotion()` inside. */}
+      <div
+        className="pointer-events-none fixed right-4 top-4 z-50 w-[min(22rem,calc(100vw-2rem))]"
+        data-testid="notifications-panel-container"
+      >
+        {/* Re-enable pointer events on the panel itself so the buttons
+            are clickable; the wrapper stays `pointer-events-none` so
+            empty space doesn't intercept clicks meant for the tree. */}
+        <div className="pointer-events-auto">
+          <NotificationsPanel />
+        </div>
+      </div>
 
       {/* Top row: speed + save/load controls + the advanced-view toggle.
           Always visible — the player should be able to pause / save /

@@ -175,4 +175,34 @@ describe('HomePage advanced-view wiring (P5c — GDD §13.3)', () => {
     expect(getByTestId('load-button')).toBeInTheDocument();
     expect(getByTestId('new-game-button')).toBeInTheDocument();
   });
+
+  it('P5d: renders the NotificationsPanel container (panel itself null when no notifications)', () => {
+    publish(freshState());
+    const { getByTestId, queryByTestId } = render(<HomePage />);
+    // The container is always present (the page wraps the panel in a
+    // fixed-positioned div so the panel can float top-right when
+    // notifications arrive).
+    expect(getByTestId('notifications-panel-container')).toBeInTheDocument();
+    // The panel itself returns null when the actionable-filtered list is
+    // empty — the fresh game has no notifications.
+    expect(queryByTestId('notifications-panel')).toBeNull();
+  });
+
+  it('P5d: the NotificationsPanel surfaces actionable notifications', async () => {
+    publish(freshState());
+    const { getByTestId, queryByTestId } = render(<HomePage />);
+    // Push an actionable notification via the store (simulating the
+    // dispatch-wrapper catching an InsufficientFundsError).
+    useGameStore.getState().pushNotification({
+      severity: 'warning',
+      code: 'low-funds',
+      message: 'Insufficient funds: needed $5.00, available $1.00.',
+      at: 60,
+    });
+    // The panel renders.
+    await waitFor(() => {
+      expect(queryByTestId('notifications-panel')).not.toBeNull();
+    });
+    expect(getByTestId('notifications-panel-count')).toHaveTextContent('1');
+  });
 });
