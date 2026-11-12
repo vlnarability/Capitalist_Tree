@@ -47,4 +47,70 @@ export default tseslint.config(
       'no-console': 'off',
     },
   },
+  {
+    // P4d: Import-boundary enforcement for the three core packages.
+    //
+    // Per TDD §3 (import boundary) + rule 6 (rendering reads state, never
+    // writes; GDD §6.1 cosmetics stay out of the sim), the core packages
+    // (simulation, shared, rendering) MUST NOT import UI / framework code.
+    // The web app (apps/web) is the only place that touches next/react/react-dom/
+    // zustand/idb.
+    //
+    // We use ESLint's built-in `no-restricted-imports` (with the `patterns`
+    // option + a `files` array to scope it to the three packages) instead of
+    // the `no-restricted-paths` rule from `eslint-plugin-import` — they're
+    // functionally equivalent for banning bare specifiers + glob patterns,
+    // and the built-in rule requires no extra plugin dependency. The runtime
+    // test at tests/import-boundaries.test.ts is the comprehensive backstop
+    // (it scans the actual file content via regex); this ESLint rule is the
+    // fast-feedback layer during development.
+    //
+    // Note: the rendering package IS allowed to import DOM *types* (it has
+    // `"lib": ["ES2022", "DOM", "DOM.Iterable"]` in its tsconfig for
+    // HTMLCanvasElement / CanvasRenderingContext2D). What it must NOT do is
+    // import a framework that takes ownership of the DOM (React/Next/etc.) —
+    // the React wrapper (TreeView.tsx) lives in apps/web, not in the
+    // rendering package.
+    files: [
+      'packages/simulation/src/**/*.ts',
+      'packages/shared/src/**/*.ts',
+      'packages/rendering/src/**/*.ts',
+    ],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: [
+                'next',
+                'next/**',
+                'react',
+                'react/**',
+                'react-dom',
+                'react-dom/**',
+                '@reduxjs/**',
+                'zustand',
+                'zustand/**',
+                'idb',
+                'idb/**',
+              ],
+              message:
+                'Core packages (simulation/shared/rendering) must not import UI / framework code — see tests/import-boundaries.test.ts and docs/rendering.md §"Import-boundary extension".',
+            },
+            {
+              group: ['@/**'],
+              message:
+                'Core packages must not import from the web app alias (@/*) — the web app depends on the core packages, never the reverse.',
+            },
+            {
+              group: ['**/apps/**'],
+              message:
+                'Core packages must not import from apps/ via a relative path — the dependency direction is apps/web → core packages, never the reverse.',
+            },
+          ],
+        },
+      ],
+    },
+  },
 );
