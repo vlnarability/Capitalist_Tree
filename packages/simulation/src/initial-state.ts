@@ -33,6 +33,7 @@ import {
   PROVISIONAL_ECONOMY_EXTERNAL_ACCOUNT_LABEL,
   PROVISIONAL_ECONOMY_MARKET_ACCOUNT_PREFIX,
   PROVISIONAL_ECONOMY_MARKET_INITIAL_SUPPLY,
+  PROVISIONAL_ENERGY_BATTERY_CAPACITY_DEFAULT,
 } from '@capitalist-tree/shared';
 import { findSpeciesById, ALL_MARKETS } from '@capitalist-tree/content';
 import { seasonFromDay, SECONDS_PER_DAY } from './systems/time-system.js';
@@ -205,6 +206,12 @@ export function initializeState(config: GameConfig): GameState {
           co2Concentration: 410, // ppm
           emissions: 0,
           sequestration: 0,
+          // P7a (v9) — the other major GHGs + aerosols for the climate model
+          // (TDD §9.2, GDD §170). Real-world-ish baselines; the
+          // EnvironmentSystem (P7b) folds these into `climateForcing`.
+          methaneConcentration: 1.9, // ppm (CH4)
+          nitrousOxideConcentration: 0.33, // ppm (N2O)
+          aerosols: 0, // net-neutral at start
         },
         soil: {
           health: 1,
@@ -237,6 +244,26 @@ export function initializeState(config: GameConfig): GameState {
         // temperature (climate baseline + per-condition delta). The starting
         // value here is the day-0 baseline before WeatherSystem's first tick.
         globalTemperature: startTempC,
+        // P7a (v9) — derived climate + long-term consequence fields. Both
+        // start neutral; the EnvironmentSystem (P7b) computes `climateForcing`
+        // from the GHG concentrations each tick and advances `seaLevelRise`
+        // each sim year with warming (GDD §170).
+        climateForcing: 0, // W/m^2 — no perturbation at baseline
+        seaLevelRise: 0, // mm above baseline
+        // P7a (v9) — energy pool (resolves R-P6-3). Empty at start: stored 0
+        // (no free energy), capacity set to the battery default so surplus
+        // can be banked once a solar panel is installed, rates 0 (the
+        // EnvironmentSystem + AutomationSystem populate them in P7b/P7c).
+        energy: {
+          stored: 0,
+          capacity: PROVISIONAL_ENERGY_BATTERY_CAPACITY_DEFAULT,
+          generationRate: 0,
+          consumptionRate: 0,
+        },
+        // P7a (v9) — land-use accumulators (resolves R-P6-4). All zero at
+        // start: the starting plot is undeveloped, undegraded, unprotected.
+        // `landDisturbance` from automation increments `degraded` (P7c).
+        landUse: { developed: 0, degraded: 0, protected: 0 },
       },
       weather: {
         condition: PROVISIONAL_WEATHER_INITIAL_CONDITION,

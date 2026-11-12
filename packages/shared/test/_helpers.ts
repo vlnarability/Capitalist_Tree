@@ -73,6 +73,10 @@ export function baseState(overrides: Partial<GameState> = {}): GameState {
           co2Concentration: 410,
           emissions: 0,
           sequestration: 0,
+          // P7a (v9) climate-model fields.
+          methaneConcentration: 1.9,
+          nitrousOxideConcentration: 0.33,
+          aerosols: 0,
         },
         soil: {
           health: 1,
@@ -89,6 +93,11 @@ export function baseState(overrides: Partial<GameState> = {}): GameState {
         forestCoverage: 0.3,
         ecosystemResilience: 0.8,
         globalTemperature: 14,
+        // P7a (v9) — resolves R-P6-3 (energy pool) + R-P6-4 (landUse target).
+        climateForcing: 0,
+        seaLevelRise: 0,
+        energy: { stored: 0, capacity: 100, generationRate: 0, consumptionRate: 0 },
+        landUse: { developed: 0, degraded: 0, protected: 0 },
       },
       weather: {
         condition: 'sunny',

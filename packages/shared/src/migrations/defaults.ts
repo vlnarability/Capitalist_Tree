@@ -44,6 +44,28 @@
  * The migration is pure and does NOT touch `originalTree.id` or
  * `originalTree.isOriginal` (GDD §16.1/16.2).
  *
+ * v8 -> v9 (P7a): backfills the EnvironmentState additions for the
+ * EnvironmentSystem (TDD §13, §5.5, §9.2; GDD §10, §170; resolves R-P6-3 /
+ * R-P6-4):
+ *   - `world.environment.atmosphere.methaneConcentration` — 1.9 (CH4 ppm).
+ *   - `world.environment.atmosphere.nitrousOxideConcentration` — 0.33 (N2O ppm).
+ *   - `world.environment.atmosphere.aerosols` — 0 (no aerosol perturbation).
+ *   - `world.environment.climateForcing` — 0 W/m^2.
+ *   - `world.environment.seaLevelRise` — 0 mm.
+ *   - `world.environment.energy` — { stored: 0, capacity:
+ *     PROVISIONAL_ENERGY_BATTERY_CAPACITY_DEFAULT, generationRate: 0,
+ *     consumptionRate: 0 }.
+ *   - `world.environment.landUse` — { developed: 0, degraded: 0, protected: 0 }.
+ *
+ * All fields have Zod `.default(...)` so v8 saves parse cleanly under v9, but
+ * the migration backfills them explicitly so consumers can rely on their
+ * presence without re-running the zod default pipeline. Each field is
+ * backfilled only if missing — a v8 save hand-patched with any of these
+ * values keeps them. The migration is idempotent under repeated application
+ * (defensive — the framework doesn't re-run migrations, but tests do) and is
+ * a no-op when `world.environment` is absent (defensive; strict validation
+ * catches the malformation downstream).
+ *
  * Future agents: when you change GameState's shape, bump CURRENT_SCHEMA_VERSION
  * in constants/provisional.ts and add a real migration here. Migrations MUST
  * be pure and MUST NOT touch `originalTree.id` or `originalTree.isOriginal`.
@@ -57,6 +79,7 @@ import {
   PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_LABEL,
   PROVISIONAL_ECONOMY_EXTERNAL_ACCOUNT_LABEL,
 } from '../constants/economy.js';
+import { PROVISIONAL_ENERGY_BATTERY_CAPACITY_DEFAULT } from '../constants/environment.js';
 
 // Sample v0 -> v1 migration. v0 saves had no `scheduler` field; v1 adds it.
 // (In reality, no v0 saves exist — this is here to demonstrate the framework.)
@@ -427,3 +450,123 @@ const v7ToV8: Migration = (state: GameState): GameState => {
 };
 
 migrations.register(7, v7ToV8);
+
+// P7a: v8 -> v9 migration. Backfills the EnvironmentState additions for the
+// EnvironmentSystem (TDD §13, §5.5, §9.2; GDD §10, §170; resolves R-P6-3 /
+// R-P6-4 from docs/offline-automation.md §6.3 / §6.4):
+//   - atmosphere.methaneConcentration / nitrousOxideConcentration / aerosols
+//   - climateForcing
+//   - seaLevelRise
+//   - energy { stored, capacity, generationRate, consumptionRate }
+//   - landUse { developed, degraded, protected }
+//
+// All fields have Zod `.default(...)` so v8 saves already parse cleanly under
+// v9, but the migration backfills them explicitly so consumers can rely on
+// the fields being present without re-running through zod's default pipeline
+// (matching the v3 -> v4 / v5 -> v6 / v6 -> v7 convention).
+//
+// Each field is backfilled only if missing — a v8 save hand-patched with any
+// of these values keeps them. This makes the migration idempotent under
+// repeated application (defensive — the framework doesn't re-run migrations,
+// but tests do). If `world.environment` is absent the migration returns the
+// state unchanged (defensive; strict post-migration validation catches the
+// malformation — the schema requires `world.environment`).
+//
+// `energy.stored` is backfilled to 0 (no legacy save starts with free
+// energy); `energy.capacity` to PROVISIONAL_ENERGY_BATTERY_CAPACITY_DEFAULT
+// so a freshly-migrated save can bank surplus once a solar panel is
+// installed. The EnvironmentSystem (P7b) raises `capacity` when a battery is
+// actually purchased.
+//
+// The migration is pure and does NOT touch `originalTree.id` or
+// `originalTree.isOriginal` (GDD §16.1/16.2).
+const v8ToV9: Migration = (state: GameState): GameState => {
+  const out: GameState = { ...state };
+
+  // Defensive: `world.environment` is required by the schema, but a malformed
+  // save might lack it. Bail out unchanged and let strict validation report
+  // the error downstream rather than crashing the migration.
+  const env = out.world?.environment as
+    | (typeof out.world.environment & {
+        climateForcing?: unknown;
+        seaLevelRise?: unknown;
+        energy?: unknown;
+        landUse?: unknown;
+      })
+    | undefined;
+  if (!env || typeof env !== 'object' || Array.isArray(env)) {
+    return out;
+  }
+
+  const envPatch: Record<string, unknown> = {};
+
+  // 1. atmosphere.methaneConcentration — 1.9 ppm (real-world-ish baseline).
+  const atmosphere = env.atmosphere as typeof env.atmosphere & {
+    methaneConcentration?: unknown;
+    nitrousOxideConcentration?: unknown;
+    aerosols?: unknown;
+  };
+  const atmospherePatch: Record<string, unknown> = {};
+  if (
+    typeof atmosphere.methaneConcentration !== 'number' ||
+    !Number.isFinite(atmosphere.methaneConcentration)
+  ) {
+    atmospherePatch.methaneConcentration = 1.9;
+  }
+  if (
+    typeof atmosphere.nitrousOxideConcentration !== 'number' ||
+    !Number.isFinite(atmosphere.nitrousOxideConcentration)
+  ) {
+    atmospherePatch.nitrousOxideConcentration = 0.33;
+  }
+  if (typeof atmosphere.aerosols !== 'number' || !Number.isFinite(atmosphere.aerosols)) {
+    atmospherePatch.aerosols = 0;
+  }
+  if (Object.keys(atmospherePatch).length > 0) {
+    envPatch.atmosphere = { ...env.atmosphere, ...atmospherePatch };
+  }
+
+  // 2. climateForcing — 0 W/m^2 (no perturbation at baseline).
+  if (typeof env.climateForcing !== 'number' || !Number.isFinite(env.climateForcing)) {
+    envPatch.climateForcing = 0;
+  }
+
+  // 3. seaLevelRise — 0 mm above baseline.
+  if (typeof env.seaLevelRise !== 'number' || !Number.isFinite(env.seaLevelRise)) {
+    envPatch.seaLevelRise = 0;
+  }
+
+  // 4. energy pool — { stored: 0, capacity: default, rates: 0 }.
+  if (
+    typeof env.energy !== 'object' ||
+    env.energy === null ||
+    Array.isArray(env.energy)
+  ) {
+    envPatch.energy = {
+      stored: 0,
+      capacity: PROVISIONAL_ENERGY_BATTERY_CAPACITY_DEFAULT,
+      generationRate: 0,
+      consumptionRate: 0,
+    };
+  }
+
+  // 5. landUse — { developed: 0, degraded: 0, protected: 0 }.
+  if (
+    typeof env.landUse !== 'object' ||
+    env.landUse === null ||
+    Array.isArray(env.landUse)
+  ) {
+    envPatch.landUse = { developed: 0, degraded: 0, protected: 0 };
+  }
+
+  if (Object.keys(envPatch).length > 0) {
+    out.world = {
+      ...out.world,
+      environment: { ...env, ...envPatch } as typeof out.world.environment,
+    };
+  }
+
+  return out;
+};
+
+migrations.register(8, v8ToV9);
