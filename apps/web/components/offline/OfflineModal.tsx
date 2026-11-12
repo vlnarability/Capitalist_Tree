@@ -197,7 +197,7 @@ function environmentalRows(summary: OfflineSummary): readonly RowSpec[] {
     mk('Forest Coverage', e.forestCoverage, formatPercent),
     // Temperature + CO₂ rising is bad — invert the tone.
     mk('Global Temperature', e.globalTemperature, (n) => `${n.toFixed(2)}°C`, true),
-    mk('CO₂ Concentration', e.co2Concentration, (n) => `${Math.round(n)} ppm`, true),
+    mk('CO2 Concentration', e.co2Concentration, (n) => `${Math.round(n)} ppm`, true),
   ];
 }
 

@@ -91,42 +91,56 @@ export interface CatchUpOnLoadStore {
  * is an exceptional condition the caller routes via {@link applyCatchUpOnLoad}).
  *
  * Decision tree:
- *   - `elapsed <= threshold` → fresh save; return the input state unchanged
+ *   - `0 ≤ elapsed ≤ threshold` → fresh save; return the input state unchanged
  *     with `summary: null` + no events. The live rAF loop just resumes.
- *   - `elapsed > threshold` → call `runOfflineCatchUp(state, nowMs)`.
+ *   - `elapsed < 0` (backwards clock) OR `elapsed > threshold` → call
+ *     `runOfflineCatchUp(state, nowMs)`. The backwards-clock case is NOT
+ *     short-circuited here because the processor owns the tolerance check: a
+ *     small backwards jitter within
+ *     `PROVISIONAL_OFFLINE_BACKWARDS_CLOCK_TOLERANCE_MS` is treated as zero
+ *     elapsed (0 chunks, fresh state returned by the processor), while a
+ *     larger jump throws `OfflineClockTamperedError` (which the caller
+ *     routes). Short-circuiting on `elapsed < 0` would silently swallow a
+ *     tampered clock as "fresh" — that defeats the safeguard (TDD §14.4).
  *     - `summary.chunksRun > 0` → return `{ state, summary, events }`. The
  *       loop parks the summary on the UI slice → OfflineModal renders.
  *     - `summary.chunksRun === 0` → the elapsed interval crossed the
  *       threshold but rounded down to 0 sim chunks (e.g. 90 real seconds →
- *       5_400 sim sec → 0 chunks at the 86_400-sim-s chunk size). Return the
- *       processor's fresh state with `summary: null` — no modal for a
- *       zero-chunk catch-up, but the state's `lastSimulatedAt` is advanced
- *       (P6a step 10) so the next load doesn't re-evaluate the same gap.
+ *       5_400 sim sec → 0 chunks at the 86_400-sim-s chunk size), OR the
+ *       backwards clock was within tolerance (treated as zero elapsed).
+ *       Return the processor's fresh state with `summary: null` — no modal
+ *       for a zero-chunk catch-up, but the state's `lastSimulatedAt` is
+ *       advanced (P6a step 10) so the next load doesn't re-evaluate the
+ *       same gap.
  *   - Backwards clock beyond tolerance → `runOfflineCatchUp` throws
  *     `OfflineClockTamperedError`; this function does NOT catch — re-throws
  *     so {@link applyCatchUpOnLoad} can route it.
  *
  * Purity (rule 2): the input state is never mutated — `runOfflineCatchUp`
- * deep-copies on entry (P6a). When no catch-up runs, the input reference is
- * returned as-is (the caller publishes it; no fresh copy is needed because
- * nothing changed).
+ * deep-copies on entry (P6a). When no catch-up runs (fresh save), the input
+ * reference is returned as-is (the caller publishes it; no fresh copy is
+ * needed because nothing changed).
  */
 export function catchUpOnLoad(state: GameState, nowMs: number): CatchUpOnLoadResult {
   const lastSimulatedAt = state.metadata.lastSimulatedAt;
   const elapsed = nowMs - lastSimulatedAt;
 
-  // Fresh save — below the prompt threshold. No catch-up, no modal.
-  if (elapsed <= PROVISIONAL_OFFLINE_PROMPT_THRESHOLD_MS) {
+  // Fresh save — non-negative elapsed within the prompt threshold. A
+  // NEGATIVE elapsed (backwards clock) is deliberately NOT caught here: it
+  // falls through to runOfflineCatchUp, which applies the tolerance check
+  // and throws OfflineClockTamperedError on a real tamper (TDD §14.4).
+  if (elapsed >= 0 && elapsed <= PROVISIONAL_OFFLINE_PROMPT_THRESHOLD_MS) {
     return { state, summary: null, events: [] };
   }
 
-  // Stale save — delegate to the P6a processor. Throws OfflineClockTamperedError
-  // on a backwards clock beyond tolerance; the caller (applyCatchUpOnLoad)
-  // routes it.
+  // Stale save OR backwards clock — delegate to the P6a processor. Throws
+  // OfflineClockTamperedError on a backwards clock beyond tolerance; the
+  // caller (applyCatchUpOnLoad) routes it.
   const result = runOfflineCatchUp(state, nowMs);
 
   // Zero-chunk catch-up (elapsed crossed the threshold but rounded to 0 sim
-  // chunks). The state's lastSimulatedAt was still advanced by the processor
+  // chunks, or a within-tolerance backwards clock treated as zero elapsed).
+  // The state's lastSimulatedAt was still advanced by the processor
   // (P6a step 10) so the next load won't re-evaluate the same gap; we just
   // suppress the modal by reporting summary: null.
   if (result.summary.chunksRun === 0) {

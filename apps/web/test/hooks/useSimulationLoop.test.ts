@@ -176,8 +176,18 @@ describe('useSimulationLoop (P5a) — boot', () => {
   it('boots from the loaded save when storage has one', async () => {
     const storage = new InMemoryStorage();
     // Pre-save a state with a non-default saveId so we can distinguish it.
+    // Stamp `lastSimulatedAt` to "now" so the P6d2 catch-up-on-load trigger
+    // treats the save as fresh (a real `loop.save()` stamps Date.now(); this
+    // test bypasses that path, so we stamp explicitly). Without this stamp
+    // the save's marker is `config.createdAt` (a 2023 fixture timestamp) and
+    // the boot would run a 1800-chunk catch-up, blowing the waitFor timeout.
     const preSaved = engine.initialize({ ...freshConfig(), saveId: 'pre-saved' });
-    await storage.save(preSaved);
+    const now = Date.now();
+    const stamped = {
+      ...preSaved,
+      metadata: { ...preSaved.metadata, lastSimulatedAt: now, lastSavedAt: now },
+    };
+    await storage.save(stamped);
 
     const config = freshConfig();
     const { result } = renderHook(() => useSimulationLoop(config, storage));
@@ -185,6 +195,9 @@ describe('useSimulationLoop (P5a) — boot', () => {
     expect(result.current.ready).toBe(true);
     const simState = useGameStore.getState().simState;
     expect(simState?.metadata.saveId).toBe('pre-saved');
+    // P6d2 — the fresh save did NOT trigger a catch-up, so no offline summary
+    // is parked on the UI slice.
+    expect(useGameStore.getState().ui.pendingOfflineSummary).toBeNull();
   });
 
   it('boots from engine.initialize when storage.load() returns null', async () => {
@@ -195,6 +208,38 @@ describe('useSimulationLoop (P5a) — boot', () => {
     expect(result.current.ready).toBe(true);
     const simState = useGameStore.getState().simState;
     expect(simState?.metadata.saveId).toBe(config.saveId);
+  });
+
+  it('P6d2: boots from a stale save and parks an OfflineSummary on the UI slice', async () => {
+    const storage = new InMemoryStorage();
+    // Pre-save a state whose lastSimulatedAt is 25 real minutes in the past
+    // relative to the boot's Date.now(). 25 min × 60 = 90_000 sim sec → 1
+    // chunk. The boot's applyCatchUpOnLoad runs the catch-up and parks the
+    // summary so the OfflineModal renders.
+    const preSaved = engine.initialize({ ...freshConfig(), saveId: 'stale' });
+    const staleMs = 25 * 60 * 1000;
+    const stale = {
+      ...preSaved,
+      metadata: {
+        ...preSaved.metadata,
+        lastSimulatedAt: Date.now() - staleMs,
+        lastSavedAt: Date.now() - staleMs,
+      },
+    };
+    await storage.save(stale);
+
+    const config = freshConfig();
+    const { result } = renderHook(() => useSimulationLoop(config, storage));
+    await waitForReady();
+    expect(result.current.ready).toBe(true);
+    // The catch-up advanced the save marker to ~now.
+    const simState = useGameStore.getState().simState;
+    expect(simState?.metadata.saveId).toBe('stale');
+    expect(simState?.metadata.lastSimulatedAt).toBeGreaterThan(Date.now() - 5_000);
+    // A summary with chunksRun > 0 was parked → the OfflineModal will render.
+    const summary = useGameStore.getState().ui.pendingOfflineSummary;
+    expect(summary).not.toBeNull();
+    expect(summary!.chunksRun).toBeGreaterThan(0);
   });
 
   it('recovers from a storage.load() rejection by initializing fresh', async () => {
