@@ -82,6 +82,7 @@ import { engine } from '@capitalist-tree/simulation';
 import type {
   GameAction,
   GameState,
+  OfflineSummary,
   SimulationEvent,
 } from '@capitalist-tree/shared';
 import {
@@ -160,6 +161,20 @@ export interface GameUiState {
    * by `useReducedMotion()`; P4's TreeView is not yet wired (R-P5d-2).
    */
   readonly reducedMotionOverride: 'auto' | 'on' | 'off';
+  /**
+   * P6d2 — the "while you were away" summary parked by the catch-up-on-load
+   * trigger (`lib/persistence/offline-catch-up-trigger.ts`) when a stale save
+   * is loaded and `runOfflineCatchUp` produced a non-zero-chunk summary. The
+   * OfflineModal renders this; the player's Continue click clears it via
+   * `clearPendingOfflineSummary`. `null` when no modal is shown.
+   *
+   * UI-only — NOT part of the saved GameState (the summary is a transient
+   * report derived at load time; re-deriving it on the next load is cheap
+   * and avoids persisting a potentially stale snapshot). Rule 6: this lives
+   * on the `ui` slice, so parking / clearing it never touches `simState`'s
+   * reference.
+   */
+  readonly pendingOfflineSummary: OfflineSummary | null;
 }
 
 /**
@@ -195,6 +210,17 @@ export interface GameStoreState {
   pushNotification: (n: Omit<UiNotification, 'id' | 'createdAtMs'>) => UiNotification;
   dismissNotification: (id: string) => void;
   clearNotifications: () => void;
+  /**
+   * P6d2 — park an `OfflineSummary` produced by the catch-up-on-load trigger
+   * so the OfflineModal can render it. UI mutator only — `simState` is
+   * referentially unchanged (rule 6).
+   */
+  setPendingOfflineSummary: (summary: OfflineSummary) => void;
+  /**
+   * P6d2 — clear the parked offline summary (the OfflineModal's Continue
+   * click). UI mutator only.
+   */
+  clearPendingOfflineSummary: () => void;
 
   // --- UI-only action dispatch (symmetric to `dispatch` for `UiAction`) ---
   applyUiAction: (action: UiAction) => void;
@@ -281,6 +307,13 @@ export function selectReducedMotionOverride(
 ): 'auto' | 'on' | 'off' {
   return state.ui.reducedMotionOverride;
 }
+/**
+ * P6d2 — read the parked "while you were away" summary. The OfflineModal
+ * subscribes to this; returns `null` when no modal should render.
+ */
+export function selectPendingOfflineSummary(state: GameStoreState): OfflineSummary | null {
+  return state.ui.pendingOfflineSummary;
+}
 export function selectEngineStatus(state: GameStoreState): EngineStatus {
   return state.engineStatus;
 }
@@ -299,6 +332,7 @@ export function initialGameUiState(): GameUiState {
     notifications: [],
     selectedCurrencyId: PROVISIONAL_UI_DEFAULT_CURRENCY_VISUAL_ID,
     reducedMotionOverride: 'auto',
+    pendingOfflineSummary: null,
   };
 }
 
@@ -420,6 +454,14 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
 
   clearNotifications: () =>
     set((s) => ({ ui: { ...s.ui, notifications: [] } })),
+
+  // --- P6d2: pending offline summary (UI mutators — never touch simState) ---
+
+  setPendingOfflineSummary: (summary) =>
+    set((s) => ({ ui: { ...s.ui, pendingOfflineSummary: summary } })),
+
+  clearPendingOfflineSummary: () =>
+    set((s) => ({ ui: { ...s.ui, pendingOfflineSummary: null } })),
 
   // --- UI-only action dispatch ---
   //
