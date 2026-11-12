@@ -264,7 +264,12 @@ function applyMaintenance(
     };
   }
   const lastTxn = next.economy.transactions[next.economy.transactions.length - 1];
-  return { state: next, transactionId: lastTxn?.id };
+  const transactionId = lastTxn?.id;
+  // Under exactOptionalPropertyTypes, an explicit `undefined` is not assignable
+  // to an optional `string`, so only spread the field in when it is present.
+  return transactionId !== undefined
+    ? { state: next, transactionId }
+    : { state: next };
 }
 
 /**

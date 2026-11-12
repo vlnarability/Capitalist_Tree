@@ -34,7 +34,6 @@
 import type {
   AutomationState,
   GameState,
-  GameAction,
   SimulationEvent,
   SetAutomationPolicyAction,
   EnableAutomationAction,
@@ -47,15 +46,12 @@ import {
   PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID,
 } from '@capitalist-tree/shared';
 import { getEquipmentById } from '@capitalist-tree/content';
-import type { SystemResult } from '../systems/system.js';
 import type { ActionListener } from '../actions/handlers.js';
 import {
   transfer,
-  getBalance,
   isRequestProcessed,
   parseAmount,
 } from '../economy/ledger.js';
-import { InsufficientFundsError } from '../economy/errors.js';
 import {
   UnknownAutomationError,
   UnknownEquipmentError,
@@ -296,7 +292,6 @@ export const purchaseEquipmentHandler: ActionListener<PurchaseEquipmentAction> =
     throw new UnknownEquipmentError(equipmentId);
   }
 
-  const saveId = state.metadata.saveId;
   const requestId = derivePurchaseRequestId(state, equipmentId, targetId);
 
   // Idempotency: if this purchase was already processed (replay after
@@ -383,7 +378,3 @@ export const purchaseEquipmentHandler: ActionListener<PurchaseEquipmentAction> =
   return { state: next, events };
 };
 
-// Re-export the typed errors so the action layer / UI can catch them.
-export { UnknownAutomationError, UnknownEquipmentError, UnsupportedPolicyError } from './errors.js';
-export { InsufficientFundsError } from '../economy/errors.js';
-export { getBalance } from '../economy/ledger.js';

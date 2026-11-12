@@ -46,7 +46,6 @@ import {
 import {
   transfer,
   getBalance,
-  sumBalances,
   conservationDiscrepancy,
   isRequestProcessed,
   parseAmount,

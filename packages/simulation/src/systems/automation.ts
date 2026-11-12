@@ -48,7 +48,7 @@ import { evaluatePolicy, executeAutomation } from '../automation/index.js';
 export const automationSystem: System = {
   id: 'AutomationSystem',
   execute(state: GameState, ctx: SystemContext): SystemResult {
-    const next = deepCopy(state);
+    let next = deepCopy(state);
     const events: SimulationEvent[] = [];
 
     // No automations — fast path.
