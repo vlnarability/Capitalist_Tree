@@ -11,3 +11,7 @@ build/
 coverage/
 .cache/
 *.tsbuildinfo
+# Playwright (P5d) — test artifacts + the headless-shell browser cache.
+test-results/
+playwright-report/
+.playwright/
