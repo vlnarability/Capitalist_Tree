@@ -341,7 +341,7 @@ export function executeMarketTransaction(
 
   const market = state.economy.markets.find((m) => m.id === marketId);
   if (!market) {
-    throw new UnknownMarketError(marketId);
+    throw new UnknownBusinessMarketError(marketId);
   }
 
   const unitPrice = parseAmount(price, 'price');
@@ -440,11 +440,11 @@ export function executeMarketTransaction(
 }
 
 /** Error thrown by `executeMarketTransaction` when the market id is unknown. */
-export class UnknownMarketError extends Error {
+export class UnknownBusinessMarketError extends Error {
   readonly marketId: string;
   constructor(marketId: string) {
     super(`Unknown market "${marketId}". Run clearMarkets first to register the deferred markets.`);
-    this.name = 'UnknownMarketError';
+    this.name = 'UnknownBusinessMarketError';
     this.marketId = marketId;
   }
 }

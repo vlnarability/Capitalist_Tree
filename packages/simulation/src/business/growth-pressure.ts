@@ -312,6 +312,3 @@ export function applyCompetitionPressure(
   });
   return { businesses: newBusinesses, events };
 }
-
-/** Re-exported for tests / the BusinessSystem. */
-export { SECONDS_PER_DAY };
