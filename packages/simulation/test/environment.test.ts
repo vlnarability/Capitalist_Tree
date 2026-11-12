@@ -39,13 +39,13 @@ import {
   PROVISIONAL_ENV_N2O_BASELINE_PPM,
   PROVISIONAL_ENV_BASELINE_TEMP_C,
   PROVISIONAL_ENV_TEMP_INERTIA_PER_DAY,
-  PROVISIONAL_ENV_TEMP_SENSITIVITY_PER_W_M2,
 } from '../src/index.js';
 import { DEFAULT_GAME_CONFIG } from '../src/initial-state.js';
 import {
   PROVISIONAL_ENV_CO2_BASELINE_PPM,
   PROVISIONAL_ENV_EMISSIONS_DECAY_RATE,
   PROVISIONAL_ENV_SEA_LEVEL_RISE_RATE,
+  PROVISIONAL_ENV_TEMP_SENSITIVITY_PER_W_M2,
   PROVISIONAL_RESOURCE_CONTAMINATION_FULL_DEGRADE,
   PROVISIONAL_RESOURCE_ORGANIC_MATTER_SATURATION,
   PROVISIONAL_SIMULATION_STEP_SECONDS as STEP,
@@ -479,9 +479,10 @@ describe('environment / soil (stepSoil)', () => {
     const next = stepSoil(env, SECONDS_PER_DAY);
     expect(next.compaction).toBeLessThan(0.8);
     expect(next.compaction).toBeGreaterThan(0); // slow
-    // Over many steps → 0.
+    // Over many steps → 0. (0.005/day decay is slow: 0.8 × 0.995^n < 1e-3
+    // needs n ≈ 1340, so 2000 steps is plenty.)
     let e = env;
-    for (let i = 0; i < 500; i++) e = { ...e, soil: stepSoil(e, SECONDS_PER_DAY) };
+    for (let i = 0; i < 2000; i++) e = { ...e, soil: stepSoil(e, SECONDS_PER_DAY) };
     expect(e.soil.compaction).toBeLessThan(1e-3);
   });
 
@@ -789,7 +790,14 @@ describe('EnvironmentSystem integration (engine.advance, slot #10)', () => {
   });
 
   it('emits notification events when soil health drops below the warning threshold', () => {
-    // Construct a state with very low soil health so the EnvironmentSystem
+    // Construct a state where the DERIVED soil health is low. ResourceSystem
+    // (slot #4) recomputes `soil.health` each tick from the underlying factors,
+    // so setting `health` directly is overwritten — we have to make the factors
+    // bad: high contamination (contaminationFrac → 0), no organic matter, no
+    // nutrients, no soil water. With the soil-health weights (organicMatter
+    // 0.25, nutrients 0.30, moisture 0.20, contamination 0.15, ph 0.10), the
+    // derived health collapses to ~0.10 (only the pH stub contributes) — below
+    // the SOIL_HEALTH_CRITICAL threshold (0.15), so the EnvironmentSystem
     // emits an environment-soil-health-low notification.
     const initial = engine.initialize(cfg(42));
     const stressed: GameState = {
@@ -800,7 +808,11 @@ describe('EnvironmentSystem integration (engine.advance, slot #10)', () => {
           ...initial.world.environment,
           soil: {
             ...initial.world.environment.soil,
-            health: 0.1, // below SOIL_HEALTH_CRITICAL (0.15)
+            health: 0.1,
+            organicMatter: 0,
+            contamination: PROVISIONAL_RESOURCE_CONTAMINATION_FULL_DEGRADE * 5,
+            nutrients: { nitrogen: 0, phosphorus: 0, potassium: 0 },
+            soilWater: 0,
           },
         },
       },

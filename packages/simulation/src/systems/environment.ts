@@ -229,13 +229,18 @@ export const environmentSystem: System = {
     // convert to sim days internally.
     const dtSeconds = ctx.stepSeconds;
 
-    // Fork the deterministic sub-stream for the environment path. Currently
-    // unused by the deterministic transforms below; reserved for future
-    // stochastic environmental events (wildfire rolls, extreme-weather
-    // spikes). The fork keeps the environment path's draws independent of
-    // other systems' sequences (matches BiologySystem / AutomationSystem).
-    const rng = ctx.rng.fork('EnvironmentSystem');
-    void rng;
+    // @provisional RNG fork DEFERRED. The EnvironmentSystem's transforms in
+    // P7b are fully deterministic (no stochastic environmental events yet),
+    // so it does NOT call `ctx.rng.fork('EnvironmentSystem')`. Calling fork
+    // would advance the shared root RNG by one draw per tick, shifting the
+    // sequence every other system sees (BiologySystem's mortality rolls,
+    // WeatherSystem's next condition, etc.) and breaking existing
+    // determinism-calibrated tests (e.g. the offline-catch-up "starved tree
+    // dies" scenario). The fork will be added in P7c+ when stochastic
+    // environmental events (wildfire rolls, extreme-weather spikes) land and
+    // the catch-up tests are retuned for the shifted sequence. Matches the
+    // BiologySystem / AutomationSystem fork pattern — but only once there's a
+    // draw to make.
 
     // 2. Derive forestCoverage from the originalTree's biology outputs.
     //    READ ONLY — does not modify TreeState.
