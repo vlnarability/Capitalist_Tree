@@ -377,6 +377,11 @@ describe('AutomationSystem solar pre-pass (passive generation, R-P6-3)', () => {
   });
 
   it('solar generation scales with panel count', () => {
+    // Compare each against a no-solar control so the EnvironmentSystem
+    // baseline debit (subtracted once per run, not per panel) cancels — the
+    // delta is then purely the solar generation, which scales linearly with
+    // panel count.
+    const baseNoSolar = setEnergy(freshState(), 50);
     const onePanel = addAutomation(setEnergy(freshState(), 50), makeAutomation({ id: 's1', type: SOLAR_PANEL.id }));
     const threePanels = addAutomation(
       addAutomation(
@@ -385,13 +390,14 @@ describe('AutomationSystem solar pre-pass (passive generation, R-P6-3)', () => {
       ),
       makeAutomation({ id: 's3', type: SOLAR_PANEL.id }),
     );
+    const rNo = engine.advance(baseNoSolar, STEP);
     const r1 = engine.advance(onePanel, STEP);
     const r3 = engine.advance(threePanels, STEP);
-    const delta1 = r1.state.world.environment.energy.stored - 50; // vs baseline-only
-    const delta3 = r3.state.world.environment.energy.stored - 50;
-    // 3 panels bank ~3× the generation of 1 (baseline cancels in both).
-    expect(delta3).toBeGreaterThan(delta1);
-    expect(delta3).toBeCloseTo(delta1 * 3, 6);
+    const gen1 = r1.state.world.environment.energy.stored - rNo.state.world.environment.energy.stored;
+    const gen3 = r3.state.world.environment.energy.stored - rNo.state.world.environment.energy.stored;
+    // 3 panels bank ~3× the generation of 1 (baseline cancels in both deltas).
+    expect(gen3).toBeGreaterThan(gen1);
+    expect(gen3).toBeCloseTo(gen1 * 3, 6);
   });
 });
 

@@ -48,7 +48,6 @@ import {
   type AutomationState,
   type AutomationPolicy,
   type SimulationEvent,
-  PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID,
   PROVISIONAL_ENERGY_SOLAR_GENERATION_RATE,
   PROVISIONAL_SIMULATION_STEP_SECONDS as STEP,
 } from '@capitalist-tree/shared';
