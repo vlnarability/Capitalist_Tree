@@ -25,17 +25,23 @@
 // summary records `capped: true` so the UI can warn them their absence was
 // only partially honoured.
 //
-// Conversion math (at PROVISIONAL_REAL_TO_SIM_SECONDS = 60):
+// Conversion math (at PROVISIONAL_REAL_TO_SIM_SECONDS = 60 — 1 real sec =
+// 60 sim sec; factor 60, NOT 24):
 //   1 real second  = 60 sim seconds   (1 sim minute)
-//   1 real hour    = 86_400 sim sec   (1 sim day)
-//   1 real day     = 2_073_600 sim sec (24 sim days ≈ 0.8 sim month)
-//   30 real days   = 62_208_000 sim sec ≈ 720 sim days ≈ 6 sim years
+//   1 real minute  = 3_600 sim sec    (1 sim hour)
+//   1 real hour    = 216_000 sim sec  (2.5 sim days ≈ 2 chunks)
+//   1 real day     = 5_184_000 sim sec (60 sim days = 2 sim months)
+//   30 real days   = 155_520_000 sim sec = 1_800 sim days = 1_800 chunks
+//                  ≈ 15 sim years (at 120 sim days/year)
 //
-// 720 sim days × 1_440 steps/sim-day = ~1.04M fixed-step (60s) updates
+// 1_800 chunks × 1_440 steps/sim-day = ~2.59M fixed-step (60s) updates
 // worst-case — bounded so the browser/UI thread doesn't lock up. The chunk
-// count (720 chunks of 1 sim day each) keeps per-chunk event accumulation
+// count (1_800 chunks of 1 sim day each) keeps per-chunk event accumulation
 // from blowing up memory (1 sim day produces O(100) events at the current
-// system density).
+// system density). The previous draft of this comment used factor 24
+// (1 real hour = 1 sim day, 720 chunks) which is inconsistent with the
+// actual factor 60 above; the VALUES were always correct, only the comment
+// math was wrong.
 export const PROVISIONAL_OFFLINE_MAX_REAL_INTERVAL_MS = 30 * 24 * 60 * 60 * 1000;
 
 // PROVISIONAL (GDD §4.2: Offline Progression must not multiply production rates)
@@ -48,8 +54,10 @@ export const PROVISIONAL_OFFLINE_MAX_REAL_INTERVAL_MS = 30 * 24 * 60 * 60 * 1000
 // 1 sim day was chosen so:
 //   - Each chunk represents a meaningful biological unit (a full day/night
 //     cycle, season-aware photosynthesis, daily water/nutrient uptake).
-//   - The worst-case 30-real-day catch-up runs ~720 chunks (not millions of
-//     steps) — keeping wall-clock time bounded for the consumer.
+//   - The worst-case 30-real-day catch-up runs ~1_800 chunks (not millions of
+//     steps) — keeping wall-clock time bounded for the consumer. (At factor
+//     60: 30 real days × 86_400 real sec/day × 60 sim sec/real sec =
+//     155_520_000 sim sec ÷ 86_400 sim sec/chunk = 1_800 chunks.)
 //   - Per-chunk event accumulation stays small enough to hold in memory
 //     without streaming (the consumer can drop `tick` events if it wants
 //     a smaller payload).

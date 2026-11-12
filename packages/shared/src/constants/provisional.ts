@@ -18,11 +18,17 @@
 
 // PROVISIONAL (GDD §17: Exact real-time-to-simulation-time relationship)
 //
-// At 1x speed:
+// At 1x speed (factor 60 — 1 real second = 60 simulation seconds):
 //   1 real second  = 1 simulation minute (= 60 sim seconds)
-//   1 real minute  = 1 simulation hour
-//   1 real hour    = 1 simulation day (24 sim hours)
-//   1 real day     = 1 simulation month (30 sim days)
+//   1 real minute  = 1 simulation hour (3_600 sim sec)
+//   1 real hour    = 2.5 simulation days (216_000 sim sec)
+//   1 real day     = 2 simulation months (60 sim days = 5_184_000 sim sec)
+//
+// Note: an earlier draft of this comment read "1 real hour = 1 simulation
+// day" and "1 real day = 1 simulation month", which corresponds to factor
+// 24, not factor 60. The VALUE below (60) was always correct; only the
+// comment math was wrong. See packages/shared/src/constants/offline.ts for
+// the chunk-count consequences (30 real days = 1_800 chunks at factor 60).
 //
 // This is the relationship between wall-clock time and in-game time when the
 // speed multiplier is 1. The TimeSystem does NOT use this directly; it is the
