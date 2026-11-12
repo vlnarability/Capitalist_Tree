@@ -199,6 +199,9 @@ export function createBusinessFromDefinition(
     wageRate: definition.baseWageRate,
     marketParticipation: [...definition.marketParticipation],
     lastValuationTick: 0,
+    // P8c: per-business inventory starts empty (GDD §8.2). Production fills
+    // it; market sales / downstream transfers drain it.
+    inventory: [],
   };
 }
 
@@ -537,6 +540,10 @@ export const takeLoanHandler: ActionListener<TakeLoanAction> = (state, action) =
                 principal,
                 interestRate,
                 dueAt,
+                // P8c: interest accrues separately into accruedInterest
+                // (GDD §8.4). Starts at '0'; the BusinessSystem's
+                // accrueDebtInterest grows it each tick.
+                accruedInterest: '0',
               },
             ],
           }
@@ -574,25 +581,24 @@ export const takeLoanHandler: ActionListener<TakeLoanAction> = (state, action) =
 };
 
 /**
- * `repay-loan` action handler (P8b — GDD §8.4).
+ * `repay-loan` action handler (P8c — GDD §8.4; resolves P8b carry-forward #3).
  *
  *   1. Find the business + the liability (`UnknownLiabilityError` if the
  *      liability id is not on the business). Content gate: `'repay-loan'`.
- *   2. Cap the repayment at the outstanding principal (overpayment beyond
- *      the principal is silently capped — the action's `amount` is the
- *      requested amount; the actual repaid is `min(amount, principal)`).
- *   3. Debit the business (business → authority sink). The loan principal was
- *      issued money; repaying destroys it (mirrors P3c's expense sink).
- *   4. Reduce the liability principal; remove the liability if fully repaid.
- *   5. Emit `loan-repaid`.
- *
- * @provisional The interest/principal split: P8b's `accrueInterest` compounds
- * accrued interest into the principal (no separate interest-accrued field on
- * the Liability schema), so the repayment reduces the compounded principal.
- * The event's `interestPaid` is '0' and `principalPaid` is the repaid amount.
- * A future phase that splits interest-accrued-but-unpaid from principal will
- * populate `interestPaid` with the accrued portion paid first (per the
- * schema doc's "interest accrued to date is paid first, then principal").
+ *   2. P8c interest/principal split: the payment FIRST covers the accrued
+ *      interest (since the last payment), then reduces the principal.
+ *      `interestPaid = min(amount, accruedInterest)`; the remainder
+ *      `principalPaid = min(amount - interestPaid, principal)`. The total
+ *      repaid is `interestPaid + principalPaid` (may be less than the
+ *      requested `amount` if the principal is fully repaid with a remainder).
+ *   3. Debit the business (business → authority sink) for the total repaid.
+ *      The loan principal was issued money; repaying destroys it. The
+ *      accrued interest was never issued (it accrued in-place), so paying it
+ *      also destroys money (sink) — the interest is recognized as revenue
+ *      for the lender (the authority, in P8c's sole-proprietorship model).
+ *   4. Reduce the liability's `accruedInterest` and `principal`; remove the
+ *      liability if both are zero.
+ *   5. Emit `loan-repaid` with the interest/principal split.
  *
  * Pure: returns a new state, never mutates input.
  */
@@ -609,37 +615,52 @@ export const repayLoanHandler: ActionListener<RepayLoanAction> = (state, action)
 
   const timestamp = tick;
   const saveId = state.metadata.saveId;
-  const outstanding = parseBusinessAmount(liability.principal, 'principal');
+  const outstandingPrincipal = parseBusinessAmount(liability.principal, 'principal');
+  const outstandingInterest = parseBusinessAmount(liability.accruedInterest, 'accruedInterest');
   const requested = parseAmount(amount, 'amount');
-  // Cap at the outstanding principal.
-  const repaid = requested <= outstanding ? requested : outstanding;
-  const remainingPrincipal = outstanding - repaid;
 
-  if (repaid > 0n) {
-    state = transfer(state, {
+  // P8c: interest paid FIRST, then principal.
+  const interestPaid = requested <= outstandingInterest ? requested : outstandingInterest;
+  const remainderAfterInterest = requested - interestPaid;
+  const principalPaid =
+    remainderAfterInterest <= outstandingPrincipal
+      ? remainderAfterInterest
+      : outstandingPrincipal;
+  const totalRepaid = interestPaid + principalPaid;
+  const remainingAccruedInterest = outstandingInterest - interestPaid;
+  const remainingPrincipal = outstandingPrincipal - principalPaid;
+
+  let next: GameState = state;
+  if (totalRepaid > 0n) {
+    next = transfer(next, {
       sourceAccount: businessId,
       destinationAccount: PROVISIONAL_ECONOMY_AUTHORITY_ACCOUNT_ID,
-      amount: repaid.toString(10),
+      amount: totalRepaid.toString(10),
       category: CATEGORY_BUSINESS_LOAN_REPAYMENT,
-      description: `Repay loan ${liabilityId} on ${businessId}`,
+      description: `Repay loan ${liabilityId} on ${businessId} (interest ${interestPaid.toString(10)} + principal ${principalPaid.toString(10)})`,
       timestamp,
       requestId: `business-loan-repay:${saveId}:${timestamp}:${businessId}:${liabilityId}`,
     });
   }
 
-  // Reduce / remove the liability.
-  let next: GameState = {
-    ...state,
-    businesses: state.businesses.map((b) => {
+  // Reduce / remove the liability. Remove only when BOTH accruedInterest and
+  // principal are zero (a fully-repaid loan with no pending interest).
+  const fullyRepaid = remainingAccruedInterest === 0n && remainingPrincipal === 0n;
+  next = {
+    ...next,
+    businesses: next.businesses.map((b) => {
       if (b.id !== businessId) return b;
-      const newLiabilities =
-        remainingPrincipal > 0n
-          ? b.liabilities.map((l) =>
-              l.id === liabilityId
-                ? { ...l, principal: remainingPrincipal.toString(10) }
-                : l,
-            )
-          : b.liabilities.filter((l) => l.id !== liabilityId);
+      const newLiabilities = fullyRepaid
+        ? b.liabilities.filter((l) => l.id !== liabilityId)
+        : b.liabilities.map((l) =>
+            l.id === liabilityId
+              ? {
+                  ...l,
+                  accruedInterest: remainingAccruedInterest.toString(10),
+                  principal: remainingPrincipal.toString(10),
+                }
+              : l,
+          );
       return { ...b, liabilities: newLiabilities };
     }),
   };
@@ -648,7 +669,7 @@ export const repayLoanHandler: ActionListener<RepayLoanAction> = (state, action)
   const businessCashAfter = getBalance(next, businessId).toString(10);
 
   const events: SimulationEvent[] = [];
-  if (repaid > 0n) {
+  if (totalRepaid > 0n) {
     events.push({
       type: 'transaction-recorded',
       at: timestamp,
@@ -663,9 +684,9 @@ export const repayLoanHandler: ActionListener<RepayLoanAction> = (state, action)
     payload: {
       businessId,
       liabilityId,
-      interestPaid: '0',
-      principalPaid: repaid.toString(10),
-      totalRepaid: repaid.toString(10),
+      interestPaid: interestPaid.toString(10),
+      principalPaid: principalPaid.toString(10),
+      totalRepaid: totalRepaid.toString(10),
       remainingPrincipal: remainingPrincipal.toString(10),
       businessCashAfter,
     },

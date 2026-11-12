@@ -38,6 +38,15 @@ export const liabilitySchema = z.object({
   principal: z.string(),
   interestRate: z.number(),
   dueAt: z.number().int().nonnegative(),
+  // P8c (GDD §8.4 debt and interest growth pressure — resolves P8b carry-
+  // forward #3): accrued-but-unpaid interest, tracked SEPARATELY from the
+  // principal. P8b compounded accrued interest into `principal` each tick
+  // (so repay-loan could not split interest from principal). P8c accrues
+  // interest into this field each tick via `accrueInterest` /
+  // `accrueDebtInterest`; the `repay-loan` action pays `accruedInterest`
+  // FIRST, then reduces `principal`. Zod `.default('0')` so v10 saves parse
+  // cleanly under v11; the v10 → v11 migration backfills it explicitly.
+  accruedInterest: z.string().default('0'),
 });
 export type Liability = z.infer<typeof liabilitySchema>;
 
@@ -247,5 +256,24 @@ export const businessStateSchema = z.object({
   wageRate: z.string().default('0'),
   marketParticipation: z.array(z.string()).default([]),
   lastValuationTick: z.number().nonnegative().default(0),
+  // P8c (GDD §8.2 supply chains, §8.5 Market Simulation — resolves P8b
+  // carry-forward #2): per-business resource stocks. P8b used the shared
+  // `state.inventory` pool as a workaround because BusinessState had no
+  // inventory field. P8c adds this field so each business holds its own
+  // inputs/outputs between ticks: production consumes from this inventory,
+  // outputs are credited here (then sold to the market or pushed to a
+  // downstream customer's inventory). The shared `state.inventory` remains
+  // the PLAYER's inventory (water/fertilizer/seeds bought by the player).
+  // Shape mirrors `inventoryStateSchema.items` for consistency. Zod
+  // `.default([])` so v10 saves parse cleanly under v11; the v10 → v11
+  // migration backfills it explicitly.
+  inventory: z
+    .array(
+      z.object({
+        resourceId: z.string().min(1),
+        quantity: z.number().nonnegative(),
+      }),
+    )
+    .default([]),
 });
 export type BusinessState = z.infer<typeof businessStateSchema>;

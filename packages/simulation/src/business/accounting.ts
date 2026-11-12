@@ -139,23 +139,30 @@ export function applyExpenses(business: BusinessState, amount: bigint): Business
 }
 
 /**
- * Accrue interest on every liability for one step (GDD §8.4 debt and
- * interest growth pressure).
+ * Accrue interest on every liability for one step (GDD §8.4 debt and interest
+ * growth pressure).
  *
- * For each liability, the principal grows by `principal × interestRate ×
- * dtFraction`, where `dtFraction = dtSeconds / SECONDS_PER_YEAR` (the
- * interestRate is annualized). Uses bigint floor division for the accrued
+ * P8c (resolves P8b carry-forward #3): interest accrues SEPARATELY into the
+ * liability's `accruedInterest` field — it is NO LONGER compounded into
+ * `principal`. The `repay-loan` action pays `accruedInterest` FIRST, then
+ * reduces `principal`. This matches the schema doc's contract ("interest
+ * accrued to date is paid first, then principal").
+ *
+ * For each liability, the accrued interest grows by `principal × interestRate
+ * × dtFraction`, where `dtFraction = dtSeconds / SECONDS_PER_YEAR` (the
+ * interestRate is annualized). Uses bigint floor addition for the accrued
  * interest (no fractional currency — TDD §10.1). Liabilities with
  * `interestRate === 0` are unchanged. A liability whose per-tick accrual
  * rounds down to 0 (small principal × small rate × short step) accrues
  * nothing this tick — @provisional, a fractional accumulator would smooth
- * this, but no schema field exists for it.
+ * this, but the per-tick floor is the starter model.
  *
  * Pure: returns a NEW liabilities array; the input is never mutated.
  *
  * @provisional (GDD §17: debt and interest model) — the simple-interest
- * accrual (principal grows, interest compounds into principal) is a starter
- * model; a future phase may split interest-accrued-but-unpaid from principal.
+ * accrual into a separate `accruedInterest` field is a starter model; a
+ * future phase may compound unpaid accrued interest (add accrued to principal
+ * when it crosses a threshold).
  */
 export function accrueInterest(
   liabilities: readonly Liability[],
@@ -167,16 +174,20 @@ export function accrueInterest(
   return liabilities.map((l) => {
     if (l.interestRate === 0) return l;
     const principal = parseBusinessAmount(l.principal, 'principal');
+    const alreadyAccrued = parseBusinessAmount(l.accruedInterest, 'accruedInterest');
     // Accrued interest = principal × rate × dtFraction, floored to minor units.
     // Use Number for the rate × dtFraction product (small fraction), then
-    // multiply back into bigint via BigInt(Math.floor(...)). Safe for P8b
+    // multiply back into bigint via BigInt(Math.floor(...)). Safe for P8c
     // magnitudes (principals well under 2^53 minor units).
     const accrualFraction = l.interestRate * dtFraction;
-    const accrued = BigInt(
+    const accruedThisTick = BigInt(
       Math.floor(Number(principal) * accrualFraction),
     );
-    if (accrued <= 0n) return l;
-    return { ...l, principal: (principal + accrued).toString(10) };
+    if (accruedThisTick <= 0n) return l;
+    return {
+      ...l,
+      accruedInterest: (alreadyAccrued + accruedThisTick).toString(10),
+    };
   });
 }
 

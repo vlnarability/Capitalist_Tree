@@ -474,7 +474,7 @@ describe('accounting — checkBankruptcy', () => {
 });
 
 describe('accounting — accrueInterest', () => {
-  it('grows liability principal by the annualized rate × dtFraction', () => {
+  it('accrues interest into accruedInterest (NOT compounded into principal) — P8c carry-forward #3', () => {
     const liabilities = [
       {
         id: 'liability:1',
@@ -482,19 +482,34 @@ describe('accounting — accrueInterest', () => {
         principal: '100000',
         interestRate: 0.05, // 5%/year
         dueAt: 0,
+        accruedInterest: '0',
       },
     ];
     const after = accrueInterest(liabilities, SECONDS_PER_DAY);
     // dtFraction = 86400 / (365×86400) = 1/365. Accrual = floor(100000 × 0.05/365)
-    // = floor(13.698) = 13. New principal = 100013.
-    expect(after[0]!.principal).toBe('100013');
+    // = floor(13.698) = 13. P8c: accrued into accruedInterest, NOT principal.
+    expect(after[0]!.accruedInterest).toBe('13');
+    expect(after[0]!.principal).toBe('100000'); // principal unchanged
   });
 
   it('leaves zero-rate liabilities unchanged', () => {
     const liabilities = [
-      { id: 'l1', type: 'loan', principal: '100000', interestRate: 0, dueAt: 0 },
+      { id: 'l1', type: 'loan', principal: '100000', interestRate: 0, dueAt: 0, accruedInterest: '0' },
     ];
-    expect(accrueInterest(liabilities, SECONDS_PER_DAY)[0]!.principal).toBe('100000');
+    const after = accrueInterest(liabilities, SECONDS_PER_DAY);
+    expect(after[0]!.principal).toBe('100000');
+    expect(after[0]!.accruedInterest).toBe('0');
+  });
+
+  it('accumulates accruedInterest across multiple ticks (compounds into accruedInterest)', () => {
+    const liabilities = [
+      { id: 'l1', type: 'loan', principal: '100000', interestRate: 0.05, dueAt: 0, accruedInterest: '0' },
+    ];
+    // Two consecutive ticks: each accrues 13 (floor(100000 × 0.05/365)).
+    const after1 = accrueInterest(liabilities, SECONDS_PER_DAY);
+    const after2 = accrueInterest(after1, SECONDS_PER_DAY);
+    expect(after2[0]!.accruedInterest).toBe('26'); // 13 + 13
+    expect(after2[0]!.principal).toBe('100000'); // principal still unchanged
   });
 });
 

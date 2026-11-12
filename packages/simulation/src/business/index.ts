@@ -55,4 +55,6 @@ export * from './accounting.js';
 export * from './valuation.js';
 export * from './supply-chain.js';
 export * from './production.js';
+export * from './market.js';
+export * from './growth-pressure.js';
 export * from './actions.js';

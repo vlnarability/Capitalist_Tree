@@ -150,3 +150,78 @@ export const PROVISIONAL_MARKET_PRICE_FOOD = '300';
 export const PROVISIONAL_MARKET_PRICE_ENERGY = '50';
 export const PROVISIONAL_MARKET_PRICE_LABOR = '500';
 export const PROVISIONAL_MARKET_PRICE_LAND = '100000';
+
+// ---------------------------------------------------------------------------
+// MARKET DEMAND LIQUIDITY (P8c — GDD §8.5 Market Simulation; resolves P8b
+// carry-forward #1: revenue recognized as authority issuance)
+// ---------------------------------------------------------------------------
+
+// PROVISIONAL (GDD §17: market simulation / external demand liquidity)
+//
+// When a business sells output to a commodity market and the market's account
+// balance is insufficient to cover the sale, the authority injects just enough
+// liquidity (issuance → market account) to fund the purchase. This represents
+// external market demand — buyers from outside the simulation (other cities,
+// export markets) — and ensures the market is a REAL PARTICIPANT (the
+// transfer is market → business, not authority → business issuance). The
+// injection is capped at the sale amount; the market account never goes
+// negative. P3b's `applyPurchase` (player buys from market) credits the market
+// account; over time, as players and businesses transact, the injection
+// becomes less frequent. The flag toggles the behavior on (default) so tests
+// can disable it to assert the market-pays-business transfer alone.
+//
+// `true` = inject liquidity when the market account is the buyer and has
+// insufficient balance (default — keeps the simulation running without
+// grace-skipping every market sale at game start when market accounts hold
+// '0'). `false` = the sale fails with InsufficientFundsError (graceful skip
+// in operateBusiness). Production code leaves this `true`.
+export const PROVISIONAL_BUSINESS_MARKET_DEMAND_INJECTION_ENABLED = true;
+
+// ---------------------------------------------------------------------------
+// GROWTH PRESSURE (P8c — GDD §8.4 Growth Pressure)
+// ---------------------------------------------------------------------------
+
+// PROVISIONAL (GDD §17: shareholder expectations / corporate governance)
+//
+// Expected per-tick revenue growth rate (fraction) for corporations
+// (`ownership.structure === 'corporation'`). When a corporation's per-tick
+// revenue growth falls below this rate, the BusinessSystem's
+// `applyShareholderExpectations` helper emits a `shareholder-pressure`
+// notification and reduces the corporation's valuation by the shortfall
+// scaled by the operating margin factor (TDD §11 — valuation reflects
+// expected future performance). 0.001 = 0.1% per tick (PROVISIONAL — tuned
+// for a 60s tick; annualized ≈ 0.001 × 525600 ticks ≈ 525x which is too
+// aggressive; in practice revenue is lumpy per tick so the rate acts as a
+// smoothing threshold, not a compound growth target).
+export const PROVISIONAL_BUSINESS_SHAREHOLDER_EXPECTED_GROWTH_RATE = 0.001;
+
+// PROVISIONAL (GDD §17: shareholder expectations / valuation haircut)
+//
+// Fraction of the valuation shortfall applied as a penalty when a corporation
+// underperforms shareholder expectations. The shortfall is
+// `(expectedRevenue - actualRevenue)` for the tick; the valuation is reduced
+// by `floor(shortfall × penaltyFactor × operatingMarginFactor)`. 0.5 = 50% of
+// the shortfall hits valuation (PROVISIONAL — calibrated so a single bad tick
+// doesn't crater the valuation, but sustained underperformance compounds).
+export const PROVISIONAL_BUSINESS_SHAREHOLDER_VALUATION_PENALTY = 0.5;
+
+// PROVISIONAL (GDD §17: competition / market share erosion)
+//
+// Per-tick market-share erosion rate (fraction) applied to a business whose
+// efficiency is below the average of businesses selling to the same market.
+// The less-efficient business loses `PROVISIONAL_BUSINESS_COMPETITION_EROSION_RATE
+// × (avgEfficiency - businessEfficiency)` of its output share each tick
+// (modeled as a reduction in effective production rate). 0.10 = 10% per tick
+// of the efficiency gap (PROVISIONAL — keeps inefficient businesses declining
+// visibly but not collapsing instantly).
+export const PROVISIONAL_BUSINESS_COMPETITION_EROSION_RATE = 0.10;
+
+// PROVISIONAL (GDD §17: inflation / operating cost scaling)
+//
+// Fraction of the economy's `inflationIndex - 1.0` applied to a business's
+// `wageRate` each tick (GDD §8.4 inflation growth pressure). The wageRate
+// grows by `floor(wageRate × (inflationIndex - 1) × scalingFactor ×
+// dtFraction)` per tick — a small drift that mirrors real-world wage-price
+// spirals. 1.0 = full pass-through of the inflation delta (PROVISIONAL; a
+// future phase may add a wage-stickiness dampener).
+export const PROVISIONAL_BUSINESS_INFLATION_WAGE_PASS_THROUGH = 1.0;

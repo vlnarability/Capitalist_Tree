@@ -286,7 +286,34 @@ export const PROVISIONAL_INITIAL_INTEREST_RATE = 0;
 // `state.businesses` is absent or empty (the P0 case — fresh games start with
 // `businesses: []`). The migration does NOT touch `originalTree.id` or
 // `originalTree.isOriginal` (GDD §16.1/16.2).
-export const CURRENT_SCHEMA_VERSION = 10;
+//
+// v11 (P8c): extends `BusinessState` and `Liability` for the market simulation
+// + growth pressure + per-business inventory work (TDD §11, GDD §8.4 Growth
+// Pressure, §8.5 Market Simulation; resolves the P8b carry-forwards):
+//   - `businesses[*].inventory: Array<{ resourceId, quantity }>` — per-business
+//     resource stocks (GDD §8.2 supply chains). P8b used the shared
+//     `state.inventory` pool as a workaround; P8c gives each business its own
+//     inventory so production consumes from / credits to the business's stock.
+//     Default `[]`.
+//   - `businesses[*].liabilities[*].accruedInterest: string` — accrued-but-
+//     unpaid interest, tracked SEPARATELY from `principal` (GDD §8.4 debt and
+//     interest). P8b compounded interest into `principal`; P8c accrues into
+//     this field and the `repay-loan` action pays it FIRST, then reduces
+//     `principal`. Default `'0'`.
+//
+// Both v11 fields have Zod `.default(...)`, so v10 saves already parse cleanly
+// under v11, but the migration backfills them explicitly so consumers can rely
+// on the fields being present without re-running through zod's default
+// pipeline (matching the v3 → v4 / v5 → v6 / v6 → v7 / v8 → v9 / v9 → v10
+// convention). Each field is backfilled only if missing — fields already
+// present on a v11 save (or a v10 save hand-patched with any of these values)
+// are left untouched. This makes the migration idempotent under repeated
+// application (defensive — the framework doesn't re-run migrations, but tests
+// do). The migration is a defensive no-op when `state.businesses` is absent or
+// empty (the P0 case — fresh games start with `businesses: []`). The migration
+// does NOT touch `originalTree.id` or `originalTree.isOriginal`
+// (GDD §16.1/16.2).
+export const CURRENT_SCHEMA_VERSION = 11;
 
 // Used by migration tests to exercise the v0 -> v1 path. Real saves are
 // always written at CURRENT_SCHEMA_VERSION.
