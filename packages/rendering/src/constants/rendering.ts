@@ -202,3 +202,279 @@ export const PROVISIONAL_RENDER_CURRENCY_DEFAULT_TIER_COUNT = 3;
 // implements the full TreeRenderer interface so consumer code paths work
 // unchanged in non-visual contexts (SSR, tests, screenshots).
 export const PROVISIONAL_RENDER_HEADLESS_TARGET_KIND = 'headless' as const;
+
+// ============================================================================
+// Canvas renderer (P4b — TDD §15.3, GDD §13.4 procedural tree structure).
+//
+// Every constant in this section is a @provisional visual-tuning knob. They
+// drive only the Canvas renderer's drawing — never the simulation. When a
+// value is promoted from "provisional" to "decided" via playtesting, move it
+// to a sibling `decided.ts` and remove the prefix (per the convention in the
+// header above).
+// ============================================================================
+
+// PROVISIONAL (TDD §15.3 — canvas target discriminator)
+//
+// The Canvas renderer's `targetKind` identifier. P4d's React wrapper will
+// switch on this to decide which DOM element to mount (an <HTMLCanvasElement>
+// for canvas vs an <SVGSVGElement> for svg).
+export const PROVISIONAL_RENDER_CANVAS_TARGET_KIND = 'canvas' as const;
+
+// ----------------------------------------------------------------------------
+// Canvas layout — default viewport + ground/baseline fractions (GDD §13.4).
+// @provisional: exact canvas size + tree-on-screen proportions are GDD §17
+// unresolved ("Regional simulation granularity" affects how many trees fit
+// on screen at once; the default single-tree scale is provisional).
+// ----------------------------------------------------------------------------
+
+// PROVISIONAL (GDD §13.4: surrounding environment — viewport defaults)
+export const PROVISIONAL_RENDER_CANVAS_DEFAULT_WIDTH_PX = 600;
+export const PROVISIONAL_RENDER_CANVAS_DEFAULT_HEIGHT_PX = 480;
+
+// PROVISIONAL (GDD §13.4: surrounding environment — ground)
+//
+// Fraction of the canvas height (from the bottom) occupied by the ground
+// band. 0.18 = ground takes the bottom ~86 px of a 480 px canvas.
+export const PROVISIONAL_RENDER_GROUND_HEIGHT_FRACTION = 0.18;
+
+// PROVISIONAL (GDD §13.4: surrounding environment — tree placement)
+//
+// Fraction of the canvas height (from the top) at which the tree's base
+// sits. 0.82 = the trunk emerges from the ground at 82% down the canvas,
+// matching GROUND_HEIGHT_FRACTION (1 - 0.18 = 0.82).
+export const PROVISIONAL_RENDER_TREE_BASELINE_FRACTION = 1 - PROVISIONAL_RENDER_GROUND_HEIGHT_FRACTION;
+
+// ----------------------------------------------------------------------------
+// Tree palette — trunk / branch / damage colours (GDD §13.4 Species, Physical
+// damage). @provisional: exact palette is GDD §14 unresolved ("Tree species
+// appearances" + "Foliage colors" cosmetic items).
+// ----------------------------------------------------------------------------
+
+// PROVISIONAL (GDD §13.4: Tree Visualization — trunk)
+export const PROVISIONAL_RENDER_TRUNK_COLOR = '#5a3a1f';
+// PROVISIONAL (GDD §13.4: Tree Visualization — dead stump)
+export const PROVISIONAL_RENDER_TRUNK_DEAD_COLOR = '#3a2a1a';
+// PROVISIONAL (GDD §13.4: Tree Visualization — branches)
+export const PROVISIONAL_RENDER_BRANCH_COLOR = '#6b4226';
+// PROVISIONAL (GDD §13.4: Tree Visualization — physical damage marker)
+export const PROVISIONAL_RENDER_DAMAGE_MARKER_COLOR = '#8b1a1a';
+
+// ----------------------------------------------------------------------------
+// Seasonal foliage palette (GDD §4.4 seasons, §13.4 foliage).
+// @provisional: exact palette is GDD §14 unresolved ("Foliage colors").
+// ----------------------------------------------------------------------------
+
+// PROVISIONAL (GDD §4.4: Spring — bud development)
+export const PROVISIONAL_RENDER_FOLIAGE_SPRING_COLOR = '#a8d672';
+// PROVISIONAL (GDD §4.4: Summer — active photosynthesis)
+export const PROVISIONAL_RENDER_FOLIAGE_SUMMER_COLOR = '#3a8b3a';
+// PROVISIONAL (GDD §4.4: Autumn — leaf aging + senescence)
+export const PROVISIONAL_RENDER_FOLIAGE_AUTUMN_COLOR = '#d97942';
+// PROVISIONAL (GDD §4.4: Winter — used only for evergreens; deciduous trees
+// draw no foliage in winter)
+export const PROVISIONAL_RENDER_FOLIAGE_WINTER_COLOR = '#9bb3c8';
+
+// PROVISIONAL (GDD §13.4: Tree Visualization — leaf condition)
+//
+// Hex tint applied to leaves when foliageCondition drops below the stressed
+// threshold (drives yellowing — stressed leaves are less green).
+export const PROVISIONAL_RENDER_FOLIAGE_STRESSED_TINT = '#c8b560';
+
+// ----------------------------------------------------------------------------
+// Sky palette by time-of-day phase (GDD §4.1 day/night, TDD §15.2 environment).
+// @provisional: the exact day/night colour temperature curve is a GDD §17
+// unresolved item ("exact real-time-to-simulation-time relationship").
+//
+// The renderer interpolates the sky top/bottom hex colours across four anchor
+// phases: night (00:00), dawn (06:00), day (12:00), dusk (18:00), then back
+// to night. timeOfDay ∈ [0, 1) where 0 = midnight, 0.25 = 06:00, 0.5 = noon,
+// 0.75 = 18:00.
+// ----------------------------------------------------------------------------
+
+// PROVISIONAL (GDD §4.1: day/night — night sky)
+export const PROVISIONAL_RENDER_SKY_NIGHT_TOP = '#0a0a1f';
+export const PROVISIONAL_RENDER_SKY_NIGHT_BOTTOM = '#1a1a3a';
+// PROVISIONAL (GDD §4.1: day/night — dawn sky)
+export const PROVISIONAL_RENDER_SKY_DAWN_TOP = '#ff9966';
+export const PROVISIONAL_RENDER_SKY_DAWN_BOTTOM = '#ffcc99';
+// PROVISIONAL (GDD §4.1: day/night — day sky)
+export const PROVISIONAL_RENDER_SKY_DAY_TOP = '#4a90e2';
+export const PROVISIONAL_RENDER_SKY_DAY_BOTTOM = '#87ceeb';
+// PROVISIONAL (GDD §4.1: day/night — dusk sky)
+export const PROVISIONAL_RENDER_SKY_DUSK_TOP = '#cc6666';
+export const PROVISIONAL_RENDER_SKY_DUSK_BOTTOM = '#ff9966';
+
+// PROVISIONAL (GDD §4.1: day/night — cloud overlay)
+//
+// Cloud grey tint applied (alpha-blended) over the sky when weather is cloudy
+// / rainy / stormy. Intensity (weatherIntensity) drives alpha.
+export const PROVISIONAL_RENDER_CLOUD_COLOR = '#9aa4b0';
+
+// ----------------------------------------------------------------------------
+// Ground palette (GDD §13.4 surrounding environment, soil quality).
+// @provisional: the exact ground palette is a GDD §14 cosmetic item
+// ("Environmental visual themes").
+// ----------------------------------------------------------------------------
+
+// PROVISIONAL (GDD §13.4: surrounding environment — grass)
+export const PROVISIONAL_RENDER_GRASS_COLOR = '#6b8e23';
+
+// ----------------------------------------------------------------------------
+// Particle pool sizes (TDD §15.3 — weather effects; "no per-frame alloc").
+//
+// Each pool is a fixed-size array of pre-allocated particle structs. The
+// renderer reuses inactive slots rather than allocating new objects each
+// frame. Sizes are tuned to fill a 600x480 viewport without runaway memory.
+// @provisional: pool sizing is a P4b performance tuning concern.
+// ----------------------------------------------------------------------------
+
+// PROVISIONAL (TDD §15.3: rain overlay)
+export const PROVISIONAL_RENDER_RAIN_PARTICLE_POOL_SIZE = 200;
+// PROVISIONAL (TDD §15.3: snow / frost overlay)
+export const PROVISIONAL_RENDER_SNOW_PARTICLE_POOL_SIZE = 150;
+// PROVISIONAL (TDD §15.3: autumn falling-leaf animation)
+export const PROVISIONAL_RENDER_FALLING_LEAF_POOL_SIZE = 50;
+
+// ----------------------------------------------------------------------------
+// Wind sway (TDD §15.3 — animation).
+// @provisional: wind amplitude + frequency are GDD §14 cosmetic items
+// ("Environmental visual themes"); also depend on the unresolved real-time-
+// to-simulation-time relationship (GDD §17).
+// ----------------------------------------------------------------------------
+
+// PROVISIONAL (TDD §15.3: wind sway amplitude)
+//
+// Max horizontal pixel offset applied to branch tips at full branch depth.
+// Scales with branchDevelopment / 100 (developed crowns sway more visibly).
+export const PROVISIONAL_RENDER_WIND_SWAY_AMPLITUDE_PX = 6;
+// PROVISIONAL (TDD §15.3: wind sway frequency)
+//
+// Frequency of the sinusoidal sway. 0.5 Hz = one full sway cycle every 2 s.
+export const PROVISIONAL_RENDER_WIND_SWAY_FREQUENCY_HZ = 0.5;
+
+// ----------------------------------------------------------------------------
+// Procedural branch generation (TDD §15.3 — procedural tree structure).
+// @provisional: branch depth + decay rates are GDD §17 unresolved
+// ("detailed photosynthesis and energy allocation equations" feeds how
+// branchDevelopment translates to visible structure).
+// ----------------------------------------------------------------------------
+
+// PROVISIONAL (GDD §13.4: Tree Visualization — branch structure)
+//
+// Maximum recursive depth of the procedural branch generator. 4 = trunk →
+// main limbs → secondary branches → twigs. Higher depths explode the leaf
+// count geometrically; 4 keeps a 600x480 canvas legible.
+export const PROVISIONAL_RENDER_MAX_BRANCH_DEPTH = 4;
+
+// PROVISIONAL (GDD §13.4: Tree Visualization — branch structure)
+//
+// Half-angle (in degrees) of the cone each child branch can deviate from
+// its parent's direction. 35° → children fan ±35° around the parent's heading.
+export const PROVISIONAL_RENDER_BRANCH_ANGLE_SPREAD_DEG = 35;
+
+// PROVISIONAL (GDD §13.4: Tree Visualization — branch structure)
+//
+// Length multiplier applied at each branch recursion depth. 0.7 → child
+// branches are 70% as long as their parent.
+export const PROVISIONAL_RENDER_BRANCH_LENGTH_DECAY = 0.7;
+
+// PROVISIONAL (GDD §13.4: Tree Visualization — branch structure)
+//
+// Diameter multiplier applied at each branch recursion depth. 0.65 → child
+// branches are 65% as thick as their parent.
+export const PROVISIONAL_RENDER_BRANCH_DIAMETER_DECAY = 0.65;
+
+// PROVISIONAL (GDD §13.4: Tree Visualization — branch structure)
+//
+// Number of children each non-leaf branch produces. 2 = binary branching
+// (typical of oaks).
+export const PROVISIONAL_RENDER_BRANCH_CHILD_COUNT = 2;
+
+// ----------------------------------------------------------------------------
+// Money-leaf sizing per denomination tier (TDD §15.4 currency cosmetics).
+// @provisional: leaf sizes are a P4b visual-tuning concern; the GDD §14
+// "Banknote appearances" cosmetic item is unresolved.
+// ----------------------------------------------------------------------------
+
+// PROVISIONAL (TDD §15.4: Currency Cosmetics — leaf tier sizes)
+//
+// Half-extent (px) of a leaf drawn at each tier. Higher tier = larger leaf
+// (a high-denomination leaf reads as more prominent at a glance).
+export const PROVISIONAL_RENDER_LEAF_TIER0_SIZE_PX = 3;
+export const PROVISIONAL_RENDER_LEAF_TIER1_SIZE_PX = 4.5;
+export const PROVISIONAL_RENDER_LEAF_TIER2_SIZE_PX = 6;
+
+// PROVISIONAL (TDD §15.4: Currency Cosmetics — leaf outline width)
+export const PROVISIONAL_RENDER_LEAF_OUTLINE_WIDTH_PX = 0.5;
+
+// ----------------------------------------------------------------------------
+// Banknote theme palette (TDD §15.4, GDD §14 currency designs).
+//
+// Each CurrencyVisual carries a `banknoteTheme` string. The renderer resolves
+// it to a per-tier colour triplet via this registry. Adding a new theme is a
+// one-line addition here — no type changes required.
+//
+// @provisional: the exact colours are GDD §14 unresolved ("Currency designs"
+// + "Banknote appearances").
+// ----------------------------------------------------------------------------
+
+// PROVISIONAL (GDD §14: Monetization and Cosmetics — US greenback theme)
+export const PROVISIONAL_RENDER_BANKNOTE_THEME_US_GREENBACK: Readonly<{
+  tier0: string;
+  tier1: string;
+  tier2: string;
+}> = Object.freeze({
+  tier0: '#a3c98f',
+  tier1: '#7eb463',
+  tier2: '#5a8f3a',
+});
+
+// PROVISIONAL (GDD §14: Monetization and Cosmetics — gold foil theme)
+export const PROVISIONAL_RENDER_BANKNOTE_THEME_GOLD_FOIL: Readonly<{
+  tier0: string;
+  tier1: string;
+  tier2: string;
+}> = Object.freeze({
+  tier0: '#f5d76e',
+  tier1: '#e6b94e',
+  tier2: '#c69a3a',
+});
+
+// PROVISIONAL (GDD §14: Monetization and Cosmetics — euro violet theme)
+export const PROVISIONAL_RENDER_BANKNOTE_THEME_EURO_VIOLET: Readonly<{
+  tier0: string;
+  tier1: string;
+  tier2: string;
+}> = Object.freeze({
+  tier0: '#a3b1d4',
+  tier1: '#7d8cc0',
+  tier2: '#5a6db0',
+});
+
+// PROVISIONAL (GDD §14: Monetization and Cosmetics — fallback theme)
+//
+// Used when a CurrencyVisual's `banknoteTheme` is not in the registry.
+export const PROVISIONAL_RENDER_BANKNOTE_THEME_FALLBACK: Readonly<{
+  tier0: string;
+  tier1: string;
+  tier2: string;
+}> = PROVISIONAL_RENDER_BANKNOTE_THEME_US_GREENBACK;
+
+// ----------------------------------------------------------------------------
+// Day / night lighting curve (GDD §4.1 day/night, TDD §15.2 environment).
+// @provisional: the exact curve is GDD §17 unresolved ("exact real-time-to-
+// simulation-time relationship").
+//
+// Anchor timeOfDay values for the linear-interpolation curve:
+//   0.00 → NIGHT  (midnight)
+//   0.25 → DAWN   (06:00 sunrise)
+//   0.50 → DAY    (noon, peak brightness)
+//   0.75 → DUSK   (18:00 sunset)
+//   1.00 → NIGHT  (next midnight; wraps to 0)
+// ----------------------------------------------------------------------------
+
+// PROVISIONAL (GDD §4.1: day/night — anchor fractions)
+export const PROVISIONAL_RENDER_DAY_PHASE_NIGHT_TOD = 0.0;
+export const PROVISIONAL_RENDER_DAY_PHASE_DAWN_TOD = 0.25;
+export const PROVISIONAL_RENDER_DAY_PHASE_DAY_TOD = 0.5;
+export const PROVISIONAL_RENDER_DAY_PHASE_DUSK_TOD = 0.75;
