@@ -376,9 +376,19 @@ describe('TreeRenderer interface + factory', () => {
     expect(r.targetKind).toBe('headless');
   });
 
-  it('createTreeRenderer({ kind: "canvas" }) throws (lands in P4b)', () => {
-    const target: CreateTreeRendererTarget = { kind: 'canvas', canvas: {} };
-    expect(() => createTreeRenderer(target)).toThrowError(/P4b/);
+  it('createTreeRenderer({ kind: "canvas" }) returns a CanvasTreeRenderer (P4b lands)', () => {
+    // P4b ships CanvasTreeRenderer. The full canvas test suite lives in
+    // canvas-tree-renderer.test.ts; this assertion just confirms the factory
+    // dispatch works from this side too. We pass a minimal canvas-shaped mock
+    // with a no-op getContext so the renderer constructs without a real DOM.
+    const canvasLike = {
+      width: 0,
+      height: 0,
+      getContext: () => null,
+    };
+    const target: CreateTreeRendererTarget = { kind: 'canvas', canvas: canvasLike };
+    const r = createTreeRenderer(target);
+    expect(r.targetKind).toBe('canvas');
   });
 
   it('createTreeRenderer({ kind: "svg" }) throws (future phase)', () => {
