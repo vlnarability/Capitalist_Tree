@@ -654,12 +654,17 @@ describe('prestige — computePrestigeEarned', () => {
 });
 
 describe('prestige — applyPrestigeReset (skeleton)', () => {
-  it('throws GenerationTooEarlyError when fired before the minimum duration', () => {
+  it('the pure helper does NOT guard duration (the handler is the gatekeeper) — applyPrestigeReset resets unconditionally', () => {
+    // The duration guard (PROVISIONAL_PRESTIGE_GENERATION_MIN_DURATION_DAYS)
+    // lives in the prestige-reset ACTION HANDLER (per the schema doc step 1),
+    // NOT in the pure helper. The pure helper is the mechanical reset; calling
+    // it before the minimum duration still resets (the handler is the
+    // gatekeeper that rejects early calls). The action-handler test below
+    // asserts the throw.
     const state = freshState();
-    // Fire at tick = 10 seconds — well below 120 days.
-    expect(() =>
-      applyPrestigeReset(state, 'species:white-oak', 10),
-    ).toThrow(GenerationTooEarlyError);
+    const result = applyPrestigeReset(state, 'species:white-oak', 10);
+    expect(result.event.type).toBe('generation-established');
+    expect(result.state.progression.prestige.currentGeneration).toBe(2);
   });
 
   it('increments totalGenerations + currentGeneration, credits earned points, records history', () => {
