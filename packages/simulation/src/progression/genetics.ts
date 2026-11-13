@@ -53,9 +53,12 @@
  * Deterministic given (state, newGeneration) — the mutation is a pure
  * function of `(originalLineageId, newGeneration, traitId, magnitude)`.
  */
-import type { GameState, GeneticsState, GeneticTraitState } from '@capitalist-tree/shared';
+import type { GameState, ProgressionState, GeneticTraitState } from '@capitalist-tree/shared';
 import { getTraitById } from '@capitalist-tree/content';
 import { Rng } from '../rng.js';
+
+/** The genetics slice of ProgressionState (activeTraits + availableTraits + originalLineageId). */
+type GeneticsState = ProgressionState['genetics'];
 
 // ---------------------------------------------------------------------------
 // Local @provisional constants (GDD §17 — genetic modification balance)

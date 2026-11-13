@@ -50,7 +50,7 @@
 import type {
   GameState,
   GenerationHistoryEntry,
-  GeneticsState,
+  ProgressionState,
   ResearchNodeState,
   SimulationEvent,
 } from '@capitalist-tree/shared';
@@ -64,6 +64,9 @@ import { findSpeciesById } from '@capitalist-tree/content';
 import { SECONDS_PER_DAY } from '../systems/time-system.js';
 import { initializeState, DEFAULT_GAME_CONFIG } from '../initial-state.js';
 import { inheritTraits } from './genetics.js';
+
+/** The genetics slice of ProgressionState (activeTraits + availableTraits + originalLineageId). */
+type GeneticsState = ProgressionState['genetics'];
 
 // PROVISIONAL (GDD §17: Prestige and Generational Progression — §11.3)
 //
