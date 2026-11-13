@@ -163,7 +163,30 @@ export function baseState(overrides: Partial<GameState> = {}): GameState {
     businesses: [],
     inventory: { items: [] },
     automation: [],
-    progression: { research: [], achievements: [], geneticLegacy: 0 },
+    // P9a (v12): progression is the full ProgressionState shape (GDD §11/§12).
+    // The v11 P0 stub `{research:[], achievements:[], geneticLegacy:0}` was
+    // replaced by the nested-object shape. Every field is populated explicitly
+    // here so the deep-equal round-trip (serialize -> deserialize -> toEqual)
+    // holds — otherwise Zod's `.default(...)` pipeline would re-add fields on
+    // deserialize and the post-deserialize state would not match the
+    // pre-serialize state (same pattern as P7a/P8a explicit field population).
+    progression: {
+      research: { nodes: [], totalSpent: '0' },
+      genetics: {
+        activeTraits: [],
+        availableTraits: [],
+        originalLineageId: 'original',
+      },
+      achievements: { tracked: [] },
+      prestige: {
+        geneticLegacyPoints: '0',
+        totalGenerations: 0,
+        currentGeneration: 1,
+        prestigeMultiplier: 1.0,
+        historicalRecords: [],
+      },
+      generationHistory: [],
+    },
     history: { snapshots: [], archive: [] },
     rngState: [0, 0, 0, 0],
     rngStreams: { weather: [0, 0, 0, 0] },

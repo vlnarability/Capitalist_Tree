@@ -19,6 +19,11 @@
  * P8b replaces the BusinessSystem stub with a real implementation that runs
  * production / supply-chain resolution / accounting / valuation / interest
  * accrual each tick and emits business-operated / business-bankrupt events.
+ * P9b replaces the ProgressionSystem stub with a real implementation that
+ * seeds the tracked-achievements list on first tick and runs the throttled
+ * achievement evaluation every PROVISIONAL_ACHIEVEMENT_CHECK_INTERVAL_TICKS
+ * ticks, emitting achievement-unlocked events for newly-completed
+ * achievements.
  */
 import { SystemRegistry } from './registry.js';
 import { timeSystem } from './time-system.js';
@@ -31,10 +36,8 @@ import { personalSystem } from './personal.js';
 import { businessSystem } from './business.js';
 import { automationSystem } from './automation.js';
 import { environmentSystem } from './environment.js';
-import {
-  progressionSystem,
-  eventSystem,
-} from './stubs.js';
+import { progressionSystem } from './progression.js';
+import { eventSystem } from './stubs.js';
 
 export const defaultSystems = [
   timeSystem,
@@ -65,4 +68,5 @@ export * from './personal.js';
 export * from './business.js';
 export * from './automation.js';
 export * from './environment.js';
+export * from './progression.js';
 export * from './stubs.js';

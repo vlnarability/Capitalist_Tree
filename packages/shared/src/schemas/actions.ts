@@ -24,6 +24,13 @@ import {
   layOffEmployeesActionSchema,
   setBusinessStatusActionSchema,
 } from './actions-business.js';
+import {
+  unlockResearchActionSchema,
+  activateTraitActionSchema,
+  deactivateTraitActionSchema,
+  prestigeResetActionSchema,
+  recordHistoricalEventActionSchema,
+} from './actions-progression.js';
 
 /**
  * GameAction — discriminated union of player actions handled by
@@ -79,6 +86,12 @@ export const gameActionSchema = z.discriminatedUnion('type', [
   hireEmployeesActionSchema,
   layOffEmployeesActionSchema,
   setBusinessStatusActionSchema,
+  // P9a: progression actions (schema-only — handlers + ProgressionSystem land in P9b).
+  unlockResearchActionSchema,
+  activateTraitActionSchema,
+  deactivateTraitActionSchema,
+  prestigeResetActionSchema,
+  recordHistoricalEventActionSchema,
 ]);
 export type GameAction = z.infer<typeof gameActionSchema>;
 export type NoOpAction = z.infer<typeof noOpActionSchema>;
@@ -102,3 +115,7 @@ export * from './actions-automation.js';
 // `PurchaseBusinessAction` etc. from @capitalist-tree/shared without
 // reaching into the business submodule.
 export * from './actions-business.js';
+// P9a: re-export progression action variants so consumers can import
+// `UnlockResearchAction` etc. from @capitalist-tree/shared without
+// reaching into the progression submodule.
+export * from './actions-progression.js';

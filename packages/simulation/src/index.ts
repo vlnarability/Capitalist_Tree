@@ -93,3 +93,12 @@ export * from './environment/index.js';
 // conservation invariants (TDD §18.1, §18.4 conservation, GDD §8.1 / §8.2 /
 // §8.4 / §8.5).
 export * from './business/index.js';
+
+// Progression module (P9b — TDD §5.7 / §11, GDD §11 Progression and
+// Generations, §12 Player Objectives). Pure helpers used by the
+// ProgressionSystem (registry slot #11) and the five progression action
+// handlers (unlock-research / activate-trait / deactivate-trait /
+// prestige-reset / record-historical-event). Tests import these directly to
+// assert the research-unlock / achievement-evaluation / prestige-computation
+// invariants (TDD §18.1, §18.4, GDD §11.2 / §11.3 / §12).
+export * from './progression/index.js';

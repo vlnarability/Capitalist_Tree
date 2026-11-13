@@ -313,7 +313,46 @@ export const PROVISIONAL_INITIAL_INTEREST_RATE = 0;
 // empty (the P0 case — fresh games start with `businesses: []`). The migration
 // does NOT touch `originalTree.id` or `originalTree.isOriginal`
 // (GDD §16.1/16.2).
-export const CURRENT_SCHEMA_VERSION = 11;
+//
+// v12 (P9a): REPLACES the P0 progression stub with the full ProgressionState
+// shape required by GDD §11 (Progression and Generations) and §12 (Player
+// Objectives) — TDD §5.1 (`progression: ProgressionState`), TDD line 199
+// (ProgressionSystem: research, genetics, achievements). The P0 stub was
+// `{ research: [{id, completedAt}], achievements: [{id, completedAt}],
+// geneticLegacy: number }`; v12 is:
+//   - `research: { nodes: ResearchNodeState[], totalSpent: string }` — per-save
+//     research unlock records + cumulative genetic-legacy points spent.
+//   - `genetics: { activeTraits: GeneticTraitState[], availableTraits: string[],
+//     originalLineageId: string }` — expressed + reserve traits, unlocked-but-
+//     unacquired trait ids, and the ORIGINAL TREE'S permanent genetic identity
+//     (GDD §11.2 — original tree's lineage remains identifiable; defaults to
+//     `'original'` matching `originalTree.id`).
+//   - `achievements: { tracked: AchievementState[] }` — per-save achievement
+//     tracking records (GDD §12 — objectives tracked independently).
+//   - `prestige: { geneticLegacyPoints, totalGenerations, currentGeneration,
+//     prestigeMultiplier, historicalRecords }` — the prestige currency +
+//     generation counters (GDD §11.2 Genetic Legacy is a prestige currency;
+//     §11.3 Prestige is generational progress, NOT a numerical multiplier).
+//   - `generationHistory: GenerationHistoryEntry[]` — per-generation history
+//     (GDD §11.3 — original tree permanently represented in history).
+//
+// This is a STRUCTURAL migration (not a simple field backfill): the v11
+// `research` / `achievements` arrays and `geneticLegacy` number are replaced
+// by the v12 nested-object shape. The migration restructures the entire
+// `progression` field. Because the ProgressionSystem was a no-op stub through
+// v11, no real v11 save has non-empty research / achievements / geneticLegacy
+// (they were always `[]` / `[]` / `0` at init), so the restructure discards
+// no player data — it upgrades the empty stub to the empty v12 defaults.
+//
+// All v12 fields have Zod `.default(...)`, so once the migration restructures
+// the progression field, the v12 schema validates cleanly. The migration is
+// idempotent: a v12-shaped progression (already restructured) is left
+// untouched (the migration detects the v12 `research` object shape and
+// skips). It is a defensive no-op when `state.progression` is absent or
+// non-object (lets strict validation report the malformation downstream). The
+// migration is pure and does NOT touch `originalTree.id` or
+// `originalTree.isOriginal` (GDD §16.1/16.2).
+export const CURRENT_SCHEMA_VERSION = 12;
 
 // Used by migration tests to exercise the v0 -> v1 path. Real saves are
 // always written at CURRENT_SCHEMA_VERSION.
