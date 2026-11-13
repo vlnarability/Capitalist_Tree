@@ -25,19 +25,22 @@
  * implementation that runs production / supply-chain resolution / accounting
  * / valuation / interest accrual each tick and emits business-operated /
  * business-bankrupt events.
- *
- * These are no longer exported from this file — `systems/index.ts` imports
- * them from their dedicated modules.
- *
- * The remaining stub (event) is a no-op until its phase:
- *
- *   - EventSystem       — P3+
- *
  * P9b has REPLACED the ProgressionSystem (see `progression.ts`) stub with a
  * real implementation that seeds the tracked-achievements list on first tick
  * and runs the throttled achievement evaluation every
  * PROVISIONAL_ACHIEVEMENT_CHECK_INTERVAL_TICKS ticks, emitting
  * `achievement-unlocked` events for newly-completed achievements.
+ *
+ * These are no longer exported from this file — `systems/index.ts` imports
+ * them from their dedicated modules.
+ *
+ * P10b has REPLACED the EventSystem (see `events.ts`) stub — the LAST
+ * remaining stub (slot #12) — with a real implementation that seeds the
+ * regional breakdown on first tick, runs the throttled scheduled-event
+ * processing, drifts regional indicators each tick, recomputes the global
+ * aggregated indicators, and runs the throttled government + monetary policy
+ * reactions. With this, ALL 12 systems in the registry are real
+ * implementations — there are no remaining stubs.
  *
  * The `id` strings are part of the public interface — downstream agents
  * reference them in tests and event logs. Do NOT rename.
@@ -45,7 +48,8 @@
  * Order of registration in `packages/simulation/src/systems/index.ts` is the
  * stable system execution order. Do not reorder existing entries.
  */
-import type { System } from './system.js';
-import { noopSystem } from './system.js';
-
-export const eventSystem: System = noopSystem('EventSystem');
+// No stubs remain — every system in the registry is a real implementation.
+// This file is kept (rather than deleted) so `systems/index.ts`'s
+// `export * from './stubs.js'` line stays valid and downstream imports of any
+// future stub land here. It now exports nothing.
+export {};
