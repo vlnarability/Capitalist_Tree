@@ -62,7 +62,6 @@ import {
   PROVISIONAL_MONETARY_POLICY_INTERVAL_DAYS,
 } from '@capitalist-tree/shared';
 import { getEventDefinitionById } from '@capitalist-tree/content';
-import { deepCopy } from '../deep-copy.js';
 
 const SECONDS_PER_DAY = 24 * 60 * 60;
 
@@ -310,26 +309,25 @@ export function applyEventEffects(
     return { state, events: [] };
   }
 
-  const next: GameState = deepCopy(state);
-  const resilience = next.eventState.global.aggregatedIndicators.ecosystemResilience;
+  const resilience = state.eventState.global.aggregatedIndicators.ecosystemResilience;
   const degradation = 1 - resilience;
   const baseMultiplier = severityMultiplier(event.severity);
   const effectiveMultiplier =
     baseMultiplier * (1 + degradation * PROVISIONAL_EVENT_SEVERITY_SCALING);
 
-  const globalMarketIndices = { ...next.eventState.global.globalMarketIndices };
-  const aggregated = { ...next.eventState.global.aggregatedIndicators };
-  const regions = next.eventState.global.regions.map((r) => ({
+  const globalMarketIndices = { ...state.eventState.global.globalMarketIndices };
+  const aggregated = { ...state.eventState.global.aggregatedIndicators };
+  const regions = state.eventState.global.regions.map((r) => ({
     ...r,
     climate: { ...r.climate },
     pollution: { ...r.pollution },
   }));
   const policy: GovernmentPolicy = {
-    ...next.eventState.global.governmentPolicy,
-    subsidies: next.eventState.global.governmentPolicy.subsidies.map((s) => ({ ...s })),
+    ...state.eventState.global.governmentPolicy,
+    subsidies: state.eventState.global.governmentPolicy.subsidies.map((s) => ({ ...s })),
   };
 
-  const targets = targetRegions(next.eventState.global.regions, event.payload);
+  const targets = targetRegions(state.eventState.global.regions, event.payload);
 
   for (const [path, baseDelta] of Object.entries(def.effects)) {
     const delta = baseDelta * effectiveMultiplier;
@@ -365,14 +363,23 @@ export function applyEventEffects(
     applyPolicyNudge(policy, event.type, baseMultiplier);
   }
 
-  next.eventState = {
-    ...next.eventState,
-    global: {
-      ...next.eventState.global,
-      regions,
-      aggregatedIndicators: aggregated,
-      globalMarketIndices,
-      governmentPolicy: policy,
+  // Targeted clone (P10c perf — avoids a full structuredClone per tick). Four
+  // sub-paths of eventState.global are modified in one spread chain (regions +
+  // aggregatedIndicators + globalMarketIndices + governmentPolicy); the rest
+  // is shared by reference. Pure: the frozen input is never touched (new
+  // objects at every modified level; the fresh `regions` each carry fresh
+  // climate/pollution objects that `applyRegionDelta` mutates in place).
+  const next: GameState = {
+    ...state,
+    eventState: {
+      ...state.eventState,
+      global: {
+        ...state.eventState.global,
+        regions,
+        aggregatedIndicators: aggregated,
+        globalMarketIndices,
+        governmentPolicy: policy,
+      },
     },
   };
 
@@ -423,16 +430,15 @@ export function updateGovernmentPolicy(
     return { state, events: [] };
   }
 
-  const next: GameState = deepCopy(state);
-  const indicators = next.eventState.global.aggregatedIndicators;
+  const indicators = state.eventState.global.aggregatedIndicators;
   let degradation = 1 - indicators.ecosystemResilience;
   // Irreversible species loss adds a permanent degradation penalty.
   degradation += Math.min(0.3, indicators.speciesExtinctionRate * 0.1);
   degradation = clamp01(degradation);
 
   const policy: GovernmentPolicy = {
-    ...next.eventState.global.governmentPolicy,
-    subsidies: next.eventState.global.governmentPolicy.subsidies.map((s) => ({ ...s })),
+    ...state.eventState.global.governmentPolicy,
+    subsidies: state.eventState.global.governmentPolicy.subsidies.map((s) => ({ ...s })),
   };
 
   policy.environmentalRegulations = clamp01(
@@ -454,11 +460,17 @@ export function updateGovernmentPolicy(
     }
   }
 
-  next.eventState = {
-    ...next.eventState,
-    global: {
-      ...next.eventState.global,
-      governmentPolicy: policy,
+  // Targeted clone (P10c perf — avoids a full structuredClone per tick). Only
+  // the eventState.global.governmentPolicy path is cloned; the rest of the
+  // state is shared by reference. Pure: the frozen input is never touched.
+  const next: GameState = {
+    ...state,
+    eventState: {
+      ...state.eventState,
+      global: {
+        ...state.eventState.global,
+        governmentPolicy: policy,
+      },
     },
   };
 
@@ -524,8 +536,7 @@ export function updateMonetaryPolicy(
     return { state, events: [] };
   }
 
-  const next: GameState = deepCopy(state);
-  const policy: MonetaryPolicy = { ...next.eventState.global.monetaryPolicy };
+  const policy: MonetaryPolicy = { ...state.eventState.global.monetaryPolicy };
 
   if (deviation <= PROVISIONAL_RECESSION_THRESHOLD) {
     // Recession — cut rates + loosen money.
@@ -545,11 +556,17 @@ export function updateMonetaryPolicy(
     policy.moneySupplyGrowth = Math.max(0.01, policy.moneySupplyGrowth - 0.005);
   }
 
-  next.eventState = {
-    ...next.eventState,
-    global: {
-      ...next.eventState.global,
-      monetaryPolicy: policy,
+  // Targeted clone (P10c perf — avoids a full structuredClone per tick). Only
+  // the eventState.global.monetaryPolicy path is cloned; the rest of the state
+  // is shared by reference. Pure: the frozen input is never touched.
+  const next: GameState = {
+    ...state,
+    eventState: {
+      ...state.eventState,
+      global: {
+        ...state.eventState.global,
+        monetaryPolicy: policy,
+      },
     },
   };
 

@@ -46,7 +46,6 @@ import type {
   RegionState,
 } from '@capitalist-tree/shared';
 import { PROVISIONAL_SPECIES_EXTINCTION_THRESHOLD } from '@capitalist-tree/shared';
-import { deepCopy } from '../deep-copy.js';
 
 const SECONDS_PER_DAY = 24 * 60 * 60;
 const SECONDS_PER_YEAR = 365 * SECONDS_PER_DAY;
@@ -156,13 +155,12 @@ export function applyClimateFeedback(
     return { state, events: [] };
   }
 
-  const next: GameState = deepCopy(state);
   const years = dtSeconds / SECONDS_PER_YEAR;
   const driftFraction = PROVISIONAL_CLIMATE_BASELINE_DRIFT_RATE * years;
   const precipPenalty = PROVISIONAL_PRECIPITATION_WARMING_PENALTY * warmingAnomaly * years;
   const events: SimulationEvent[] = [];
 
-  const shiftedRegions = next.eventState.global.regions.map((region) => {
+  const shiftedRegions = regions.map((region) => {
     const beforeTemp = region.climate.temperatureBaseline;
     // Converge the regional temperature baseline toward the warmed global mean.
     const temperatureBaseline =
@@ -193,11 +191,18 @@ export function applyClimateFeedback(
     };
   });
 
-  next.eventState = {
-    ...next.eventState,
-    global: {
-      ...next.eventState.global,
-      regions: shiftedRegions,
+  // Targeted clone (P10c perf — avoids a full structuredClone per tick). Only
+  // the eventState.global.regions path is cloned (each region + its climate);
+  // the rest of the state is shared by reference. Pure: the frozen input is
+  // never touched (new objects at every modified level).
+  const next: GameState = {
+    ...state,
+    eventState: {
+      ...state.eventState,
+      global: {
+        ...state.eventState.global,
+        regions: shiftedRegions,
+      },
     },
   };
 
@@ -253,15 +258,14 @@ export function applyEnvironmentalFeedback(
     return { state, events: [] };
   }
 
-  const next: GameState = deepCopy(state);
   const events: SimulationEvent[] = [];
-  let ecosystemResilience = next.eventState.global.aggregatedIndicators.ecosystemResilience;
-  let speciesExtinctionRate = next.eventState.global.aggregatedIndicators.speciesExtinctionRate;
-  const globalMarketIndices = { ...next.eventState.global.globalMarketIndices };
+  let ecosystemResilience = state.eventState.global.aggregatedIndicators.ecosystemResilience;
+  let speciesExtinctionRate = state.eventState.global.aggregatedIndicators.speciesExtinctionRate;
+  const globalMarketIndices = { ...state.eventState.global.globalMarketIndices };
 
   const commodityLiftedRegions: string[] = [];
 
-  const shiftedRegions = next.eventState.global.regions.map((region) => {
+  const shiftedRegions = regions.map((region) => {
     let soilHealth = region.soilHealth;
     let industrialActivity = region.industrialActivity;
     const biodiversity = region.biodiversity;
@@ -331,16 +335,24 @@ export function applyEnvironmentalFeedback(
     });
   }
 
-  next.eventState = {
-    ...next.eventState,
-    global: {
-      ...next.eventState.global,
-      regions: shiftedRegions,
-      globalMarketIndices,
-      aggregatedIndicators: {
-        ...next.eventState.global.aggregatedIndicators,
-        ecosystemResilience,
-        speciesExtinctionRate,
+  // Targeted clone (P10c perf — avoids a full structuredClone per tick). Three
+  // sub-paths of eventState.global are modified in one spread chain (regions +
+  // globalMarketIndices + aggregatedIndicators); the rest is shared by
+  // reference. Pure: the frozen input is never touched (new objects at every
+  // modified level; globalMarketIndices is a fresh copy mutated in the loop).
+  const next: GameState = {
+    ...state,
+    eventState: {
+      ...state.eventState,
+      global: {
+        ...state.eventState.global,
+        regions: shiftedRegions,
+        globalMarketIndices,
+        aggregatedIndicators: {
+          ...state.eventState.global.aggregatedIndicators,
+          ecosystemResilience,
+          speciesExtinctionRate,
+        },
       },
     },
   };

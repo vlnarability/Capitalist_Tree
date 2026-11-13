@@ -33,7 +33,6 @@
  * (TDD §4.1, §18.4). Deterministic given (state, dtSeconds) — no RNG.
  */
 import type { GameState, SimulationEvent } from '@capitalist-tree/shared';
-import { deepCopy } from '../deep-copy.js';
 
 const SECONDS_PER_DAY = 24 * 60 * 60;
 
@@ -222,10 +221,9 @@ export function evolveGlobalMarketIndices(
   if (dtSeconds <= 0) {
     return { state, events: [] };
   }
-  const next: GameState = deepCopy(state);
 
   // Seed the @provisional default indices if the map is empty.
-  let indices = next.eventState.global.globalMarketIndices;
+  let indices = state.eventState.global.globalMarketIndices;
   if (Object.keys(indices).length === 0) {
     indices = {};
     for (const id of DEFAULT_MARKET_INDICES) {
@@ -235,21 +233,27 @@ export function evolveGlobalMarketIndices(
 
   const days = dtSeconds / SECONDS_PER_DAY;
   const reversion = 1 - Math.pow(1 - PROVISIONAL_MARKET_MEAN_REVERSION_RATE, days);
-  const aggregateActivity = aggregateIndustrialActivity(next);
+  const aggregateActivity = aggregateIndustrialActivity(state);
 
   const evolved: Record<string, number> = {};
   for (const [id, level] of Object.entries(indices)) {
-    const baseline = shiftedBaseline(id, next, aggregateActivity);
+    const baseline = shiftedBaseline(id, state, aggregateActivity);
     // Mean-revert toward the shifted baseline.
     const newLevel = clampNonNegative(level + (baseline - level) * reversion);
     evolved[id] = newLevel;
   }
 
-  next.eventState = {
-    ...next.eventState,
-    global: {
-      ...next.eventState.global,
-      globalMarketIndices: evolved,
+  // Targeted clone (P10c perf — avoids a full structuredClone per tick). Only
+  // the eventState.global.globalMarketIndices path is cloned; the rest of the
+  // state is shared by reference. Pure: the frozen input is never touched.
+  const next: GameState = {
+    ...state,
+    eventState: {
+      ...state.eventState,
+      global: {
+        ...state.eventState.global,
+        globalMarketIndices: evolved,
+      },
     },
   };
 

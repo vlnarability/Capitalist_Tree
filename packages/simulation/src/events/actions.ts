@@ -46,7 +46,6 @@ import type {
   MonetaryPolicy,
 } from '@capitalist-tree/shared';
 import type { ActionListener } from '../actions/handlers.js';
-import { deepCopy } from '../deep-copy.js';
 import {
   scheduleEvent,
   cancelScheduledEvent,
@@ -145,19 +144,24 @@ export const setGovernmentPolicyHandler: ActionListener<SetGovernmentPolicyActio
   action,
 ) => {
   const { policy: partial, tick } = action.payload;
-  const next: GameState = deepCopy(state);
-  const current = next.eventState.global.governmentPolicy;
+  const current = state.eventState.global.governmentPolicy;
   const merged: GovernmentPolicy = {
     environmentalRegulations:
       partial.environmentalRegulations ?? current.environmentalRegulations,
     carbonTaxRate: partial.carbonTaxRate ?? current.carbonTaxRate,
     subsidies: partial.subsidies ?? current.subsidies,
   };
-  next.eventState = {
-    ...next.eventState,
-    global: {
-      ...next.eventState.global,
-      governmentPolicy: merged,
+  // Targeted clone (P10c perf — avoids a full structuredClone). Only the
+  // eventState.global.governmentPolicy path is cloned; the rest is shared by
+  // reference. Pure: the frozen input is never touched.
+  const next: GameState = {
+    ...state,
+    eventState: {
+      ...state.eventState,
+      global: {
+        ...state.eventState.global,
+        governmentPolicy: merged,
+      },
     },
   };
   const event: SimulationEvent = {
@@ -185,18 +189,23 @@ export const setMonetaryPolicyHandler: ActionListener<SetMonetaryPolicyAction> =
   action,
 ) => {
   const { policy: partial, tick } = action.payload;
-  const next: GameState = deepCopy(state);
-  const current = next.eventState.global.monetaryPolicy;
+  const current = state.eventState.global.monetaryPolicy;
   const merged: MonetaryPolicy = {
     interestRate: partial.interestRate ?? current.interestRate,
     inflationTarget: partial.inflationTarget ?? current.inflationTarget,
     moneySupplyGrowth: partial.moneySupplyGrowth ?? current.moneySupplyGrowth,
   };
-  next.eventState = {
-    ...next.eventState,
-    global: {
-      ...next.eventState.global,
-      monetaryPolicy: merged,
+  // Targeted clone (P10c perf — avoids a full structuredClone). Only the
+  // eventState.global.monetaryPolicy path is cloned; the rest is shared by
+  // reference. Pure: the frozen input is never touched.
+  const next: GameState = {
+    ...state,
+    eventState: {
+      ...state.eventState,
+      global: {
+        ...state.eventState.global,
+        monetaryPolicy: merged,
+      },
     },
   };
   const event: SimulationEvent = {

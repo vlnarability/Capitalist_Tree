@@ -52,7 +52,6 @@ import {
   PROVISIONAL_SIMULATION_STEP_SECONDS,
 } from '@capitalist-tree/shared';
 import { getEventDefinitionById } from '@capitalist-tree/content';
-import { deepCopy } from '../deep-copy.js';
 import { applyEventEffects } from './global.js';
 import { UnknownEventDefinitionError, UnknownActiveEventError } from './errors.js';
 
@@ -228,8 +227,7 @@ export function scheduleEvent(
     throw new UnknownEventDefinitionError(type);
   }
 
-  const next: GameState = deepCopy(state);
-  const scheduler = next.eventState.scheduler;
+  const scheduler = state.eventState.scheduler;
   const { id, scheduler: schedulerWithId } = allocateId(scheduler);
   const instance: ScheduledEventInstance = {
     id,
@@ -240,11 +238,19 @@ export function scheduleEvent(
     resolvedAt: 0,
     priority,
   };
-  next.eventState = {
-    ...next.eventState,
-    scheduler: {
-      ...schedulerWithId,
-      scheduled: [...schedulerWithId.scheduled, instance],
+
+  // Targeted clone (P10c perf — avoids a full structuredClone per tick). Only
+  // the eventState.scheduler path is cloned (scheduled list + nextEventId);
+  // the rest of the state is shared by reference. Pure: the frozen input is
+  // never touched.
+  const next: GameState = {
+    ...state,
+    eventState: {
+      ...state.eventState,
+      scheduler: {
+        ...schedulerWithId,
+        scheduled: [...schedulerWithId.scheduled, instance],
+      },
     },
   };
 
@@ -273,16 +279,21 @@ export function cancelScheduledEvent(
   state: GameState,
   id: string,
 ): { state: GameState; events: SimulationEvent[] } {
-  const next: GameState = deepCopy(state);
-  const scheduler = next.eventState.scheduler;
+  const scheduler = state.eventState.scheduler;
   const filtered = scheduler.scheduled.filter((e) => e.id !== id);
   if (filtered.length === scheduler.scheduled.length) {
     // Idempotent no-op — id not found.
-    return { state: next, events: [] };
+    return { state, events: [] };
   }
-  next.eventState = {
-    ...next.eventState,
-    scheduler: { ...scheduler, scheduled: filtered },
+  // Targeted clone (P10c perf — avoids a full structuredClone per tick). Only
+  // the eventState.scheduler.scheduled path is cloned; the rest of the state
+  // is shared by reference. Pure: the frozen input is never touched.
+  const next: GameState = {
+    ...state,
+    eventState: {
+      ...state.eventState,
+      scheduler: { ...scheduler, scheduled: filtered },
+    },
   };
   return { state: next, events: [] };
 }
@@ -313,8 +324,7 @@ export function triggerEventImmediate(
     throw new UnknownEventDefinitionError(type);
   }
 
-  let next: GameState = deepCopy(state);
-  const scheduler = next.eventState.scheduler;
+  const scheduler = state.eventState.scheduler;
   const { id, scheduler: schedulerWithId } = allocateId(scheduler);
   const severity = resolveSeverity(payload);
   const duration = resolveDuration(type, payload);
@@ -330,21 +340,29 @@ export function triggerEventImmediate(
     severity,
   };
 
-  next.eventState = {
-    ...next.eventState,
-    scheduler: {
-      ...schedulerWithId,
-      active: [...schedulerWithId.active, active],
+  // Targeted clone of the scheduler path (P10c perf — avoids a full
+  // structuredClone). Adds the active event to eventState.scheduler.active +
+  // bumps nextEventId; the rest of the state is shared by reference. Pure: the
+  // frozen input is never touched.
+  const withScheduler: GameState = {
+    ...state,
+    eventState: {
+      ...state.eventState,
+      scheduler: {
+        ...schedulerWithId,
+        active: [...schedulerWithId.active, active],
+      },
     },
   };
 
   // Apply the event's effects to regional / global state (GDD §10.3 —
   // environmental damage creates secondary consequences). applyEventEffects
-  // reads the content `effects` deltas + the event severity + global
-  // degradation and mutates `next` in place (it operates on the deep-copied
-  // state we already produced).
-  const effectsResult = applyEventEffects(next, active);
-  next = effectsResult.state;
+  // does its own targeted clone of the eventState.global path and PRESERVES the
+  // scheduler we just set (it spreads eventState and only overrides `global`,
+  // keeping the scheduler reference), so the returned state carries both the
+  // new active event and the applied effects.
+  const effectsResult = applyEventEffects(withScheduler, active);
+  const next = effectsResult.state;
 
   const event: SimulationEvent = {
     type: 'event-triggered',
@@ -382,8 +400,7 @@ export function resolveActiveEvent(
   id: string,
   now: number,
 ): { state: GameState; events: SimulationEvent[] } {
-  const next: GameState = deepCopy(state);
-  const scheduler = next.eventState.scheduler;
+  const scheduler = state.eventState.scheduler;
   const idx = scheduler.active.findIndex((e) => e.id === id);
   if (idx < 0) {
     throw new UnknownActiveEventError(id);
@@ -403,12 +420,19 @@ export function resolveActiveEvent(
       : `${active.type} — mitigated early`,
   };
 
-  next.eventState = {
-    ...next.eventState,
-    scheduler: {
-      ...scheduler,
-      active: scheduler.active.filter((e) => e.id !== id),
-      history: [...scheduler.history, historyEntry],
+  // Targeted clone (P10c perf — avoids a full structuredClone per tick). Only
+  // the eventState.scheduler path is cloned (active list minus the resolved
+  // event + history with the new entry); the rest of the state is shared by
+  // reference. Pure: the frozen input is never touched.
+  const next: GameState = {
+    ...state,
+    eventState: {
+      ...state.eventState,
+      scheduler: {
+        ...scheduler,
+        active: scheduler.active.filter((e) => e.id !== id),
+        history: [...scheduler.history, historyEntry],
+      },
     },
   };
 
@@ -461,8 +485,15 @@ export function processScheduledEvents(
     return { state, events: [] };
   }
 
-  const next: GameState = deepCopy(state);
-  const scheduler = next.eventState.scheduler;
+  // `working` threads the accumulated event-effects (eventState.global) through
+  // the FIRE loop: each applyEventEffects call reads the current global and
+  // returns a new state with the effects applied. It starts as the (frozen)
+  // input — only read from until the first applyEventEffects reassigns it to a
+  // fresh state. The scheduler path is cloned once at the end (P10c perf —
+  // avoids a full structuredClone per tick). Pure: the frozen input is never
+  // mutated.
+  let working: GameState = state;
+  const scheduler = state.eventState.scheduler;
   const events: SimulationEvent[] = [];
   const interval = PROVISIONAL_EVENT_CHECK_INTERVAL_TICKS;
 
@@ -555,22 +586,33 @@ export function processScheduledEvents(
         severity,
       },
     });
-    // Apply the event's effects (mutates `next` in place — it's already a
-    // deep copy).
-    const effectsResult = applyEventEffects(next, active);
-    next.eventState = effectsResult.state.eventState;
+    // Apply the event's effects (targeted clone of the eventState.global
+    // path). Thread the result back into `working` so the next iteration's
+    // applyEventEffects reads the accumulated global state. applyEventEffects
+    // preserves the scheduler (it spreads eventState and only overrides
+    // `global`), so working.eventState.scheduler stays === state's scheduler
+    // until the final merge below.
+    const effectsResult = applyEventEffects(working, active);
+    working = effectsResult.state;
     // applyEventEffects may emit events for policy-category government-policy
     // nudges; thread them through.
     events.push(...effectsResult.events);
   }
 
-  next.eventState = {
-    ...next.eventState,
-    scheduler: {
-      ...scheduler,
-      scheduled: remainingScheduled,
-      active: activeList,
-      history: [...scheduler.history, ...newHistory],
+  // Targeted clone — merge the accumulated event-effects global (on
+  // `working.eventState.global`) with the new scheduler (scheduled / active /
+  // history) in a single spread chain. The rest of the state is shared by
+  // reference. Pure: the frozen input is never touched.
+  const next: GameState = {
+    ...working,
+    eventState: {
+      ...working.eventState,
+      scheduler: {
+        ...scheduler,
+        scheduled: remainingScheduled,
+        active: activeList,
+        history: [...scheduler.history, ...newHistory],
+      },
     },
   };
 

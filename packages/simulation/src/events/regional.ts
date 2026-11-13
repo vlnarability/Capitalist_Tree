@@ -49,7 +49,6 @@ import {
   PROVISIONAL_REGIONAL_AGGREGATION_WEIGHTS,
   PROVISIONAL_SPECIES_EXTINCTION_THRESHOLD,
 } from '@capitalist-tree/shared';
-import { deepCopy } from '../deep-copy.js';
 
 const SECONDS_PER_DAY = 24 * 60 * 60;
 
@@ -297,12 +296,11 @@ export function evolveRegions(
     return { state, events: [] };
   }
 
-  const next: GameState = deepCopy(state);
   const days = dtSeconds / SECONDS_PER_DAY;
   const events: SimulationEvent[] = [];
-  let speciesExtinctionRate = next.eventState.global.aggregatedIndicators.speciesExtinctionRate;
+  let speciesExtinctionRate = state.eventState.global.aggregatedIndicators.speciesExtinctionRate;
 
-  const evolvedRegions = next.eventState.global.regions.map((region) => {
+  const evolvedRegions = regions.map((region) => {
     const before = region;
 
     // Pollution accumulation + natural decay.
@@ -363,14 +361,22 @@ export function evolveRegions(
     return after;
   });
 
-  next.eventState = {
-    ...next.eventState,
-    global: {
-      ...next.eventState.global,
-      regions: evolvedRegions,
-      aggregatedIndicators: {
-        ...next.eventState.global.aggregatedIndicators,
-        speciesExtinctionRate,
+  // Targeted clone (P10c perf — avoids a full structuredClone per tick). Only
+  // the eventState.global path being modified is cloned (regions + the
+  // irreversible speciesExtinctionRate accumulator on aggregatedIndicators);
+  // the rest of the state is shared by reference. Pure: the frozen input is
+  // never touched (new objects at every modified level).
+  const next: GameState = {
+    ...state,
+    eventState: {
+      ...state.eventState,
+      global: {
+        ...state.eventState.global,
+        regions: evolvedRegions,
+        aggregatedIndicators: {
+          ...state.eventState.global.aggregatedIndicators,
+          speciesExtinctionRate,
+        },
       },
     },
   };
