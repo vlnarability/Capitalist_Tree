@@ -32,7 +32,7 @@
  * All helpers are pure: they return a new state without mutating the input
  * (TDD §4.1, §18.4). Deterministic given (state, dtSeconds) — no RNG.
  */
-import type { GameState } from '@capitalist-tree/shared';
+import type { GameState, SimulationEvent } from '@capitalist-tree/shared';
 import { deepCopy } from '../deep-copy.js';
 
 const SECONDS_PER_DAY = 24 * 60 * 60;
@@ -218,9 +218,9 @@ function shiftedBaseline(
 export function evolveGlobalMarketIndices(
   state: GameState,
   dtSeconds: number,
-): { state: GameState; events: GameState[] } {
+): { state: GameState; events: SimulationEvent[] } {
   if (dtSeconds <= 0) {
-    return { state, events: [] as GameState[] };
+    return { state, events: [] };
   }
   const next: GameState = deepCopy(state);
 
@@ -256,9 +256,8 @@ export function evolveGlobalMarketIndices(
   // This helper emits no SimulationEvents — the central bank's
   // `monetary-policy-changed` (global.ts) surfaces material index moves on
   // its own cadence. The `events` slot is reserved for future market-shock
-  // notifications; typed as GameState[] only to satisfy the no-events shape —
-  // callers ignore it.
-  return { state: next, events: [] as GameState[] };
+  // notifications.
+  return { state: next, events: [] as SimulationEvent[] };
 }
 
 /**
