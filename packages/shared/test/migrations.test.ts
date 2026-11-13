@@ -598,6 +598,237 @@ describe('MigrationRegistry', () => {
     expect(out.businesses[0].employees).toBe(3);
   });
 
+  it('v10 -> v11 migration backfills businesses[*].inventory + liabilities[*].accruedInterest (P8c)', () => {
+    // A v10 save predates the P8c BusinessState additions. It has a business
+    // entry written by P8a/P8b (all P8a operational fields present, but NO
+    // `inventory` field and NO `accruedInterest` on its liabilities).
+    const v10State = freshState();
+    const v10Business = {
+      id: 'business:test-farm',
+      name: 'Test Farm',
+      type: 'business:farm',
+      ownership: {
+        ownerId: 'player:personal',
+        structure: 'sole-proprietorship',
+        share: 1,
+      },
+      cash: '5000',
+      assets: [],
+      liabilities: [
+        {
+          id: 'liability:1',
+          type: 'loan',
+          principal: '100000',
+          interestRate: 0.05,
+          dueAt: 100000,
+          // No accruedInterest — P8c backfills this.
+        },
+      ],
+      revenue: '1000',
+      expenses: '800',
+      valuation: '130000',
+      employees: 4,
+      production: {
+        inputResourceIds: ['fertilizer:balanced-10-10-10'],
+        outputResourceId: 'resource:food',
+        rate: 15,
+        efficiency: 0.8,
+      },
+      status: 'operating',
+      lastOperatedAt: 9999,
+      supplyChainLevel: 5,
+      upstreamSupplierIds: [],
+      downstreamCustomerIds: [],
+      environmentalImpact: {
+        carbonEmissions: 0.3,
+        waterConsumption: 30,
+        soilDegradation: 0.05,
+        pollution: 0.1,
+        landDisturbance: 0.15,
+        biodiversityImpact: 0.2,
+      },
+      wageRate: '450',
+      marketParticipation: ['market:food'],
+      lastValuationTick: 12345,
+      // No inventory — P8c backfills this.
+    };
+    const withoutP8c = {
+      ...v10State,
+      businesses: [v10Business],
+    } as unknown as GameState;
+    const out = migrations.migrate(withoutP8c, 10, CURRENT_SCHEMA_VERSION);
+    expect(out.businesses).toHaveLength(1);
+    // P8c inventory field backfilled explicitly.
+    expect(Array.isArray(out.businesses[0].inventory)).toBe(true);
+    expect(out.businesses[0].inventory).toEqual([]);
+    // P8c accruedInterest backfilled on each liability.
+    expect(out.businesses[0].liabilities[0].accruedInterest).toBe('0');
+    // Existing P8a fields are preserved (backward compatible).
+    expect(out.businesses[0].id).toBe('business:test-farm');
+    expect(out.businesses[0].cash).toBe('5000');
+    expect(out.businesses[0].valuation).toBe('130000');
+    expect(out.businesses[0].employees).toBe(4);
+    expect(out.businesses[0].status).toBe('operating');
+    expect(out.businesses[0].lastOperatedAt).toBe(9999);
+    expect(out.businesses[0].wageRate).toBe('450');
+    expect(out.businesses[0].lastValuationTick).toBe(12345);
+    // Existing liability fields preserved.
+    expect(out.businesses[0].liabilities[0].principal).toBe('100000');
+    expect(out.businesses[0].liabilities[0].interestRate).toBe(0.05);
+  });
+
+  it('v10 -> v11 migration preserves hand-patched inventory + accruedInterest values', () => {
+    // A v10 save someone hand-patched with non-default inventory +
+    // accruedInterest values must keep them — the migration only backfills
+    // missing fields, it never overwrites.
+    const v10State = freshState();
+    const handPatched = {
+      ...v10State,
+      businesses: [
+        {
+          id: 'business:test-mine',
+          name: 'Test Mine',
+          type: 'business:mineral-mine',
+          ownership: {
+            ownerId: 'player:personal',
+            structure: 'corporation',
+            share: 1,
+          },
+          cash: '20000',
+          assets: [],
+          liabilities: [
+            {
+              id: 'liability:1',
+              type: 'loan',
+              principal: '50000',
+              interestRate: 0.07,
+              dueAt: 200000,
+              accruedInterest: '1234', // hand-patched — must survive.
+            },
+          ],
+          revenue: '5000',
+          expenses: '3000',
+          valuation: '180000',
+          employees: 5,
+          production: {
+            inputResourceIds: [],
+            outputResourceId: 'resource:minerals',
+            rate: 50,
+            efficiency: 0.8,
+          },
+          status: 'operating',
+          lastOperatedAt: 5000,
+          supplyChainLevel: 0,
+          upstreamSupplierIds: [],
+          downstreamCustomerIds: [],
+          environmentalImpact: {
+            carbonEmissions: 0,
+            waterConsumption: 0,
+            soilDegradation: 0,
+            pollution: 0,
+            landDisturbance: 0,
+            biodiversityImpact: 0,
+          },
+          wageRate: '600',
+          marketParticipation: [],
+          lastValuationTick: 5000,
+          inventory: [
+            // hand-patched — must survive.
+            { resourceId: 'resource:minerals', quantity: 250 },
+          ],
+        },
+      ],
+    } as unknown as GameState;
+    const out = migrations.migrate(handPatched, 10, CURRENT_SCHEMA_VERSION);
+    // Hand-patched inventory preserved (not overwritten with []).
+    expect(out.businesses[0].inventory).toEqual([
+      { resourceId: 'resource:minerals', quantity: 250 },
+    ]);
+    // Hand-patched accruedInterest preserved (not overwritten with '0').
+    expect(out.businesses[0].liabilities[0].accruedInterest).toBe('1234');
+    // Other liability fields preserved.
+    expect(out.businesses[0].liabilities[0].principal).toBe('50000');
+    expect(out.businesses[0].liabilities[0].interestRate).toBe(0.07);
+  });
+
+  it('v10 -> v11 migration is idempotent on a v11 save (no field changes)', () => {
+    // A v11 save already has the P8c fields. Migrating from 10 to current
+    // (11) runs the v10 -> v11 step, which shallow-copies but applies no
+    // patches to a current-shape state, so the result is deep-equal to the
+    // input.
+    const v11State = freshState();
+    const out = migrations.migrate(v11State, 10, CURRENT_SCHEMA_VERSION);
+    expect(out).toEqual(v11State);
+  });
+
+  it('v10 -> v11 migration is a no-op on an empty businesses list', () => {
+    // A v10 save with `businesses: []` — nothing to backfill.
+    const v10State = freshState();
+    expect(v10State.businesses).toEqual([]);
+    const out = migrations.migrate(v10State, 10, CURRENT_SCHEMA_VERSION);
+    expect(out.businesses).toEqual([]);
+  });
+
+  it('v10 -> v11 migration backfills accruedInterest on every liability (multiple liabilities)', () => {
+    // A v10 business with multiple liabilities, all missing accruedInterest.
+    const v10State = freshState();
+    const v10Business = {
+      id: 'business:test-multi-loan',
+      name: 'Multi Loan Co',
+      type: 'business:equipment-factory',
+      ownership: {
+        ownerId: 'player:personal',
+        structure: 'corporation',
+        share: 1,
+      },
+      cash: '100000',
+      assets: [],
+      liabilities: [
+        { id: 'l1', type: 'loan', principal: '10000', interestRate: 0.05, dueAt: 1000 },
+        { id: 'l2', type: 'loan', principal: '20000', interestRate: 0.03, dueAt: 2000 },
+        { id: 'l3', type: 'bond', principal: '50000', interestRate: 0.08, dueAt: 5000 },
+      ],
+      revenue: '0',
+      expenses: '0',
+      valuation: '200000',
+      employees: 12,
+      production: {
+        inputResourceIds: ['resource:lumber', 'resource:steel'],
+        outputResourceId: 'resource:equipment',
+        rate: 8,
+        efficiency: 0.82,
+      },
+      status: 'operating',
+      lastOperatedAt: 0,
+      supplyChainLevel: 2,
+      upstreamSupplierIds: [],
+      downstreamCustomerIds: [],
+      environmentalImpact: {
+        carbonEmissions: 0,
+        waterConsumption: 0,
+        soilDegradation: 0,
+        pollution: 0,
+        landDisturbance: 0,
+        biodiversityImpact: 0,
+      },
+      wageRate: '800',
+      marketParticipation: ['market:equipment'],
+      lastValuationTick: 0,
+    };
+    const withoutP8c = {
+      ...v10State,
+      businesses: [v10Business],
+    } as unknown as GameState;
+    const out = migrations.migrate(withoutP8c, 10, CURRENT_SCHEMA_VERSION);
+    // Every liability got accruedInterest backfilled.
+    expect(out.businesses[0].liabilities).toHaveLength(3);
+    expect(out.businesses[0].liabilities[0].accruedInterest).toBe('0');
+    expect(out.businesses[0].liabilities[1].accruedInterest).toBe('0');
+    expect(out.businesses[0].liabilities[2].accruedInterest).toBe('0');
+    // Inventory backfilled.
+    expect(out.businesses[0].inventory).toEqual([]);
+  });
+
   it('current-version saves pass through migrations unchanged (identity)', () => {
     const s = freshState();
     const out = migrations.migrate(s, CURRENT_SCHEMA_VERSION, CURRENT_SCHEMA_VERSION);

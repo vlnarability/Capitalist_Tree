@@ -15,13 +15,15 @@
  *
  * Each step, for each business in `state.businesses` (in array order):
  *   1. Accrue interest on every liability (GDD §8.4 debt and interest growth
- *      pressure) — `accrueInterest(liabilities, dtSeconds)`.
+ *      pressure) — `accrueDebtInterest` (P8c: accrues into `accruedInterest`,
+ *      NOT principal — resolves P8b carry-forward #3).
  *   2. Run one production cycle via the shared `operateBusiness` helper
  *      (resolve inputs → run production → resolve outputs → move money via
- *      `transfer()` → apply environmental impact → emit `business-operated`).
- *      Skipped businesses (idle / bankrupt / liquidating / no-employees /
- *      insufficient-inputs / insufficient-funds) emit a `business-operated`
- *      event with `operated: false` + a `reason`.
+ *      `executeMarketTransaction` (P8c carry-forward #1: revenue from market
+ *      sale, not authority issuance) → apply environmental impact → emit
+ *      `business-operated`). Skipped businesses (idle / bankrupt / liquidating
+ *      / no-employees / insufficient-inputs / insufficient-funds) emit a
+ *      `business-operated` event with `operated: false` + a `reason`.
  *   3. Check bankruptcy — if `business.cash < PROVISIONAL_BUSINESS_
  *      BANKRUPTCY_THRESHOLD`, flip `status` to `'bankrupt'` and emit
  *      `business-bankrupt` (only on the fresh transition, not if already
@@ -30,6 +32,20 @@
  *      `(now − lastValuationTick) >= BUSINESS_VALUATION_INTERVAL_SECONDS`
  *      (one sim day), call `recomputeValuation` (TDD §11 — valuation ≠
  *      liquidity; recomputed on a slower cadence than per-tick cash moves).
+ *
+ * P8c growth-pressure (GDD §8.4), applied AFTER the per-business loop so they
+ * reflect this tick's activity:
+ *   - `clearMarkets(state, now)` runs FIRST (before the loop) so businesses
+ *     see current clearing prices. Ensures the 8 GDD §8.5 commodity markets
+ *     are live + advances each market's price toward the supply/demand
+ *     equilibrium (bounded by PROVISIONAL_BUSINESS_MARKET_PRICE_VOLATILITY).
+ *   - `applyInflationPressure(businesses, inflationIndex, dtSeconds, now)` —
+ *     operating costs (wageRate) rise with the economy's inflationIndex.
+ *   - `applyShareholderExpectations(businesses, dtSeconds, now)` —
+ *     corporations underperforming → notification + valuation reduction.
+ *   - `applyCompetitionPressure(businesses, dtSeconds, now)` — inefficient
+ *     businesses lose production rate when multiple share an output market.
+ * (Debt interest accrual runs per-business in step 1, before production.)
  *
  * RNG fork DEFERRED — R-P8-N (matching the R-P7-1 precedent for the
  * EnvironmentSystem + the PersonalSystem no-fork decision). The
@@ -64,7 +80,14 @@ import type { System, SystemContext, SystemResult } from './system.js';
 import { deepCopy } from '../deep-copy.js';
 import { getBusinessTypeById } from '@capitalist-tree/content';
 import { operateBusiness } from '../business/production.js';
-import { accrueInterest, checkBankruptcy } from '../business/accounting.js';
+import { checkBankruptcy } from '../business/accounting.js';
+import { clearMarkets } from '../business/market.js';
+import {
+  applyInflationPressure,
+  accrueDebtInterest,
+  applyShareholderExpectations,
+  applyCompetitionPressure,
+} from '../business/growth-pressure.js';
 import {
   recomputeValuation,
   shouldRecomputeValuation,
@@ -76,14 +99,32 @@ export const businessSystem: System = {
     let next: GameState = deepCopy(state);
     const events: SimulationEvent[] = [];
 
-    // Fast path — no businesses. (Also pins the no-fork contract: with no
-    // businesses the system consumes zero root RNG draws, so the downstream
-    // AutomationSystem/EnvironmentSystem sequences are unaffected.)
+    // P8c: clearMarkets FIRST (before business operations) so businesses see
+    // current clearing prices. Ensures all 8 GDD §8.5 commodity markets
+    // (water, fertilizer, seeds, equipment, food, energy, labor, land) have
+    // live MarketState entries + advances each market's price toward the
+    // supply/demand equilibrium, bounded by
+    // PROVISIONAL_BUSINESS_MARKET_PRICE_VOLATILITY per tick (GDD §8.5).
+    // Emits one `market-price-changed` event per market whose price moved.
+    // Even with zero businesses this runs so the market basket stays live
+    // (the EconomySystem at slot #6 also updates markets; clearMarkets adds
+    // the three P3b-deferred markets + the business-driven drift).
+    const cleared = clearMarkets(next, ctx.now);
+    next = cleared.state;
+    events.push(...cleared.events);
+
+    // Fast path — no businesses. clearMarkets above still ran (so the
+    // deferred markets are registered + prices advance). Growth-pressure
+    // helpers are no-ops on an empty businesses array. (Also pins the
+    // no-fork contract: with no businesses the system consumes zero root
+    // RNG draws, so the downstream AutomationSystem/EnvironmentSystem
+    // sequences are unaffected.)
     if (next.businesses.length === 0) {
       return { state: next, events };
     }
 
     const dtSeconds = ctx.stepSeconds;
+    const inflationIndex = next.economy.inflationIndex;
 
     // Iterate over a snapshot of the businesses array. operateBusiness does
     // NOT remove businesses (only the sell-business action does, which is an
@@ -94,11 +135,15 @@ export const businessSystem: System = {
     for (const business of snapshot) {
       // 1. Accrue interest on liabilities (GDD §8.4). Applied BEFORE
       //    production so this tick's bankruptcy check sees the grown
-      //    principal. Pure: returns a new liabilities array; we splice it
-      //    onto the business only if something actually changed.
+      //    accruedInterest. P8c: delegates to accrueDebtInterest (which
+      //    accrues into `accruedInterest`, NOT principal — resolves P8b
+      //    carry-forward #3). Pure: returns a new businesses array; we
+      //    splice the liabilities onto the business only if something
+      //    actually changed.
       const current0 = next.businesses.find((b) => b.id === business.id) ?? business;
       if (current0.liabilities.length > 0) {
-        const newLiabilities = accrueInterest(current0.liabilities, dtSeconds);
+        const accrued = accrueDebtInterest([current0], dtSeconds);
+        const newLiabilities = accrued[0]!.liabilities;
         const changed =
           newLiabilities.length !== current0.liabilities.length ||
           newLiabilities.some((l, i) => l !== current0.liabilities[i]);
@@ -180,6 +225,41 @@ export const businessSystem: System = {
         };
       }
     }
+
+    // P8c: apply growth-pressure mechanics AFTER the per-business production
+    // loop so they reflect this tick's activity (GDD §8.4 Growth Pressure).
+    //   - Inflation: operating costs (wageRate) rise with the economy's
+    //     inflationIndex (read-only by business — TDD §10.6).
+    //   - Shareholder expectations: corporations underperforming →
+    //     notification + valuation reduction.
+    //   - Competition: less-efficient businesses lose production rate when
+    //     multiple businesses share an output market.
+    // (Debt interest accrual is applied per-business in step 1 above, BEFORE
+    // production, so the bankruptcy check sees the grown accruedInterest.)
+    const inflationResult = applyInflationPressure(
+      next.businesses,
+      inflationIndex,
+      dtSeconds,
+      ctx.now,
+    );
+    next = { ...next, businesses: inflationResult.businesses };
+    events.push(...inflationResult.events);
+
+    const shareholderResult = applyShareholderExpectations(
+      next.businesses,
+      dtSeconds,
+      ctx.now,
+    );
+    next = { ...next, businesses: shareholderResult.businesses };
+    events.push(...shareholderResult.events);
+
+    const competitionResult = applyCompetitionPressure(
+      next.businesses,
+      dtSeconds,
+      ctx.now,
+    );
+    next = { ...next, businesses: competitionResult.businesses };
+    events.push(...competitionResult.events);
 
     return { state: next, events };
   },

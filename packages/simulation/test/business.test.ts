@@ -300,15 +300,18 @@ describe('production — operateBusiness (orchestration)', () => {
       revenue: '1800',
       expenses: '800',
     });
-    // Cash after: 0 + 1800 (revenue issuance) − 800 (wages sink) = 1000.
+    // Cash after: 0 + 1800 (market sale, P8c) − 800 (wages sink) = 1000.
     expect(ev!.payload.businessCashAfter).toBe('1000');
     const updated = result.state.businesses.find((b) => b.id === businessId)!;
     expect(updated.cash).toBe('1000');
     expect(updated.revenue).toBe('1800');
     expect(updated.expenses).toBe('800');
     expect(updated.lastOperatedAt).toBe(SECONDS_PER_DAY);
-    // Conservation: revenue issuance + wages sink net out in supply, but
-    // totalIssued += 1800 and totalSinks += 800. The invariant holds.
+    // Conservation (P8c): the market sale triggers a demand-injection
+    // issuance (authority → market:water, +1800 totalIssued) since the
+    // market account starts at '0'; the market → business transfer preserves
+    // money; the wages sink (business → authority, +800 totalSinks) removes
+    // money. Net: sum(balances) + totalSinks === initialSupply + totalIssued.
     expect(conservationDiscrepancy(result.state, INITIAL_SUPPLY)).toBe(0n);
   });
 
@@ -431,18 +434,21 @@ describe('accounting — applyRevenue / applyExpenses', () => {
   });
 
   it('revenue/expense movements are transactions (recorded in the ledger)', () => {
-    // operateBusiness calls transfer() directly (not via an action handler),
-    // so the transactions are recorded in state.economy.transactions (the
-    // audit trail) rather than emitted as transaction-recorded events.
+    // operateBusiness calls executeMarketTransaction (P8c) for the market
+    // sale + transfer() for wages, so the transactions are recorded in
+    // state.economy.transactions (the audit trail) rather than emitted as
+    // transaction-recorded events.
     const { state, business } = stateWithBusiness(WATER_EXTRACTION_PLANT, '0');
     const txnsBefore = state.economy.transactions.length;
     const result = operateBusiness(state, business, WATER_EXTRACTION_PLANT, {
       now: SECONDS_PER_DAY,
       dtSeconds: SECONDS_PER_DAY,
     });
-    // 2 transactions recorded: revenue (issuance authority→business) + wages
-    // (sink business→authority).
-    expect(result.state.economy.transactions.length).toBe(txnsBefore + 2);
+    // 3 transactions recorded (P8c): the market sale of 180 water @ 10 = 1800
+    // triggers a demand-injection issuance (authority → market:water, since
+    // the market account starts at '0') + the market → business transfer,
+    // then the wages sink (business → authority).
+    expect(result.state.economy.transactions.length).toBe(txnsBefore + 3);
     expect(conservationDiscrepancy(result.state, INITIAL_SUPPLY)).toBe(0n);
   });
 });
@@ -756,10 +762,14 @@ describe('actions — operate-business', () => {
     const ev = operatedEvent(result.events);
     expect(ev).toBeDefined();
     expect(ev!.payload).toMatchObject({ businessId, operated: true });
-    // One tick (60s): revenue = floor(0.125 × 10) = 1; wages = floor(0.555) = 0.
-    expect(ev!.payload.revenue).toBe('1');
+    // One tick (60s): outputProduced = 0.125 (fractional). P8c routes revenue
+    // through executeMarketTransaction, which floors the quantity to INTEGER
+    // units — floor(0.125) = 0, so no sale occurs (revenue = 0). The 0.125
+    // fractional output accumulates in business.inventory until it reaches a
+    // whole unit. wages = floor(2 × 400 × 60/86400) = floor(0.555) = 0.
+    expect(ev!.payload.revenue).toBe('0');
     expect(ev!.payload.expenses).toBe('0');
-    expect(ev!.payload.businessCashAfter).toBe('1');
+    expect(ev!.payload.businessCashAfter).toBe('0');
     expect(conservationDiscrepancy(result.state, INITIAL_SUPPLY)).toBe(0n);
   });
 

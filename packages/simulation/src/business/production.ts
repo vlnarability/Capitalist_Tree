@@ -41,14 +41,18 @@
  *   expenses         = wages + inputCosts
  *
  * Money movements (rule 3 — every movement a transaction via `transfer()`):
- *   - Revenue: authority → business cash account (issuance,
- *     `'business-revenue'`). New money recognized from selling output
- *     (@provisional — the market is the implicit buyer; P8c routes the
- *     payment from the market/downstream account).
+ *   - Revenue (P8c — resolves P8b carry-forward #1): market → business via
+ *     `executeMarketTransaction(buyer=marketAccount, seller=business,
+ *     price=clearingPrice)`. The market is a REAL PARTICIPANT — when its
+ *     account balance is insufficient, the authority injects just enough
+ *     liquidity (external demand) so the sale always succeeds. The transfer
+ *     is market → business, NOT authority → business issuance.
  *   - Wages: business → authority (sink, `'business-wages'`). Cash leaves
  *     circulation (external labor paid).
- *   - Market input purchases: business → market account (transfer,
- *     `'business-input'`). Inputs bought externally.
+ *   - Market input purchases (P8c): business → market via
+ *     `executeMarketTransaction(buyer=business, seller=marketAccount)`. The
+ *     purchased input is credited to `business.inventory` (then debited by
+ *     consumption — net zero when purchase qty === consume qty).
  *   - Inputs from inventory / upstream: no money movement (already paid for
  *     when they entered inventory / produced by the upstream).
  *
@@ -74,6 +78,11 @@ import { transfer, getBalance, parseAmount } from '../economy/ledger.js';
 import { applyEnvironmentalImpact } from '../environment/index.js';
 import { applyRevenue, applyExpenses } from './accounting.js';
 import {
+  executeMarketTransaction,
+  CATEGORY_BUSINESS_MARKET_SALE,
+  CATEGORY_BUSINESS_MARKET_BUY,
+} from './market.js';
+import {
   buildMarketPriceMap,
   resolveInputs,
   resolveOutputs,
@@ -85,10 +94,12 @@ import {
 export { SECONDS_PER_DAY };
 
 /** Transaction categories (free-form strings — NOT Zod enums, per
- *  `packages/shared/src/constants/economy.ts`). */
-const CATEGORY_BUSINESS_REVENUE = 'business-revenue';
+ *  `packages/shared/src/constants/economy.ts`). P8c routes revenue + input
+ *  purchases through `executeMarketTransaction` (market.ts), which uses
+ *  `CATEGORY_BUSINESS_MARKET_SALE` / `CATEGORY_BUSINESS_MARKET_BUY` /
+ *  `CATEGORY_BUSINESS_MARKET_DEMAND`. Wages remain a direct business →
+ *  authority sink transfer (`CATEGORY_BUSINESS_WAGES`). */
 const CATEGORY_BUSINESS_WAGES = 'business-wages';
-const CATEGORY_BUSINESS_INPUT = 'business-input';
 
 /** A required input consumed by production. */
 export interface ConsumedInput {
@@ -278,11 +289,20 @@ function skippedOperatedEvent(
  *   - Business cannot cover wages + market input costs (even with this-tick
  *     revenue) → reason `'insufficient-funds'`.
  *
- * Money movements (rule 3): revenue (authority → business, issuance), wages
- * (business → authority, sink), market input purchases (business → market
- * account, transfer). Each is a `transfer()` with a deterministic requestId
- * derived from `(saveId, now, businessId, kind)` so a re-processed step
- * (save/load) does not double-apply (idempotency, TDD §10.3).
+ * Money movements (rule 3): revenue (market → business via
+ * `executeMarketTransaction`, P8c carry-forward #1), wages (business →
+ * authority, sink), market input purchases (business → market via
+ * `executeMarketTransaction`). Each is a `transfer()` with a deterministic
+ * requestId derived from `(saveId, now, businessId, kind)` so a re-processed
+ * step (save/load) does not double-apply (idempotency, TDD §10.3).
+ *
+ * Inventory movements (P8c carry-forward #2): production consumes inputs from
+ * `business.inventory` (the per-business field); produced outputs are
+ * credited to `business.inventory` first, then sold outputs are debited
+ * (drained) when sold to the market. Market-purchased inputs are credited to
+ * `business.inventory` (replenish) then debited by consumption. The shared
+ * `state.inventory` is a backward-compat fallback only (player-bought
+ * resources).
  *
  * Environmental impact: applied via `applyEnvironmentalImpact` (pro-rated by
  * the step fraction) so the EnvironmentSystem at slot #10 consumes the
@@ -330,35 +350,65 @@ export function operateBusiness(
     return { state, events };
   }
 
-  // 6. Funds pre-check: the business must cover wages + market input costs,
-  //    net of this-tick revenue (revenue is credited first). transfer()
-  //    throws InsufficientFundsError on a negative real-account balance, so
-  //    we pre-check to emit a graceful 'insufficient-funds' skip instead.
+  // 6. Resolve outputs (downstream / market / stockpile) — BEFORE the funds
+  //    pre-check so the actual market-sale revenue (which may be 0 for
+  //    fractional sub-day output, since executeMarketTransaction floors the
+  //    quantity to integer units) is known.
+  const outputs = resolveOutputs(state, business, marketPriceEntries);
+
+  // 7. Compute the actual market-sale revenue (P8c carry-forward #1). The
+  //    market sale moves INTEGER units (executeMarketTransaction floors the
+  //    quantity); for fractional sub-day output (e.g. 0.125 units/tick) the
+  //    sale is a no-op (total = 0) and the output accumulates in
+  //    business.inventory until it reaches a whole unit. This differs from
+  //    P8b's plan.revenue (which floored the product outputProduced × price);
+  //    P8c recognizes revenue ONLY when a real market transaction occurs.
+  let actualRevenue = 0n;
+  let soldQty = 0;
+  if (
+    outputs.destination !== 'stockpile' &&
+    outputs.marketId !== undefined &&
+    outputs.marketAccountId !== undefined &&
+    outputs.unitPrice !== undefined
+  ) {
+    const unitPrice = parseAmount(outputs.unitPrice, 'unitPrice');
+    soldQty = Math.floor(plan.outputProduced);
+    actualRevenue = unitPrice * BigInt(soldQty);
+  }
+
+  // 8. Funds pre-check: the business must cover wages + market input costs,
+  //    net of this-tick actual revenue (revenue is credited first).
+  //    transfer() throws InsufficientFundsError on a negative real-account
+  //    balance, so we pre-check to emit a graceful 'insufficient-funds' skip.
   const marketCost = parseAmount(inputs.marketCost, 'marketCost');
   const businessAccountBalance = getBalance(state, business.id);
-  if (businessAccountBalance + plan.revenue < plan.wages + marketCost) {
+  if (businessAccountBalance + actualRevenue < plan.wages + marketCost) {
     events.push(skippedOperatedEvent(business, now, 'insufficient-funds'));
     return { state, events };
   }
 
-  // 7. Resolve outputs (downstream / market / stockpile).
-  const outputs = resolveOutputs(state, business, marketPriceEntries);
-
   let next: GameState = state;
   const saveId = state.metadata.saveId;
 
-  // 8. Apply money movements (revenue first so expenses can draw on it).
-  //    Revenue: authority → business (issuance).
-  if (plan.revenue > 0n && outputs.destination !== 'stockpile') {
-    next = transfer(next, {
-      sourceAccount: PROVISIONAL_ECONOMY_AUTHORITY_ACCOUNT_ID,
-      destinationAccount: business.id,
-      amount: plan.revenue.toString(10),
-      category: CATEGORY_BUSINESS_REVENUE,
-      description: `Business revenue: ${business.id} sold ${business.production.outputResourceId}`,
+  // 9. Apply money movements (revenue first so expenses can draw on it).
+  //    Revenue (P8c carry-forward #1): market → business via
+  //    executeMarketTransaction. The market is a REAL PARTICIPANT — when its
+  //    account balance is insufficient, the authority injects just enough
+  //    liquidity (external demand) so the sale always succeeds. The transfer
+  //    is market → business, NOT authority → business issuance.
+  if (actualRevenue > 0n && outputs.marketId !== undefined && outputs.marketAccountId !== undefined) {
+    const sale = executeMarketTransaction(next, {
+      marketId: outputs.marketId,
+      buyer: outputs.marketAccountId,
+      seller: business.id,
+      quantity: soldQty,
+      price: outputs.unitPrice!,
       timestamp: now,
+      category: CATEGORY_BUSINESS_MARKET_SALE,
+      description: `Business revenue: ${business.id} sold ${soldQty} ${business.production.outputResourceId} to ${outputs.marketAccountId}`,
       requestId: `business-revenue:${saveId}:${now}:${business.id}`,
     });
+    next = sale.state;
   }
 
   //    Wages: business → authority (sink).
@@ -374,56 +424,103 @@ export function operateBusiness(
     });
   }
 
-  //    Market input purchases: business → market account (per market-sourced
-  //    input). Inputs from inventory / upstream have no money movement.
+  //    Market input purchases (P8c): business → market via
+  //    executeMarketTransaction. Inputs from inventory / upstream have no
+  //    money movement. The purchased input is credited to business.inventory
+  //    in step 10 (replenish), then debited by consumption (net zero when
+  //    purchase qty === consume qty).
   for (const src of inputs.sources) {
     if (src.kind !== 'market') continue;
-    const cost = BigInt(src.unitPrice) * BigInt(Math.floor(src.quantity));
-    if (cost <= 0n) continue;
-    next = transfer(next, {
-      sourceAccount: business.id,
-      destinationAccount: src.marketAccountId,
-      amount: cost.toString(10),
-      category: CATEGORY_BUSINESS_INPUT,
-      description: `Business input: ${business.id} bought ${src.resourceId} from ${src.marketAccountId}`,
+    const purchaseQty = Math.floor(src.quantity);
+    if (purchaseQty <= 0) continue;
+    const purchase = executeMarketTransaction(next, {
+      marketId: src.marketId,
+      buyer: business.id,
+      seller: src.marketAccountId,
+      quantity: purchaseQty,
+      price: src.unitPrice,
       timestamp: now,
+      category: CATEGORY_BUSINESS_MARKET_BUY,
+      description: `Business input: ${business.id} bought ${purchaseQty} ${src.resourceId} from ${src.marketAccountId}`,
       requestId: `business-input:${saveId}:${now}:${business.id}:${src.resourceId}`,
     });
+    next = purchase.state;
   }
 
-  // 9. Apply inventory movements.
-  //    a. Deduct inputs sourced from the shared inventory.
-  //    b. Credit the produced output to inventory — but ONLY when the
-  //       destination is 'downstream' or 'stockpile' (a 'market' sale does
-  //       NOT stockpile; the output is sold to the market and leaves).
-  let newItems = next.inventory.items.map((item) => ({ ...item }));
+  // 10. Apply inventory movements (P8c carry-forward #2 — per-business
+  //     inventory). Production consumes from `business.inventory`; produced
+  //     outputs are credited to `business.inventory` first, then sold outputs
+  //     are debited (drained). Market-purchased inputs are credited
+  //     (replenish) then debited by consumption. The shared `state.inventory`
+  //     is debited only for 'inventory' (shared-pool) sources (backward
+  //     compat for player-bought resources).
+  //     a. Shared inventory deductions (backward-compat 'inventory' sources).
+  let newSharedItems = next.inventory.items.map((item) => ({ ...item }));
   for (const src of inputs.sources) {
     if (src.kind !== 'inventory') continue;
-    const idx = newItems.findIndex((i) => i.resourceId === src.resourceId);
+    const idx = newSharedItems.findIndex((i) => i.resourceId === src.resourceId);
     if (idx >= 0) {
-      const existing = newItems[idx]!;
-      newItems[idx] = {
+      const existing = newSharedItems[idx]!;
+      newSharedItems[idx] = {
         ...existing,
         quantity: Math.max(0, existing.quantity - src.quantity),
       };
     }
   }
-  if (plan.outputProduced > 0 && outputs.destination !== 'market') {
-    const outputResourceId = business.production.outputResourceId;
-    const idx = newItems.findIndex((i) => i.resourceId === outputResourceId);
+  next = { ...next, inventory: { items: newSharedItems } };
+
+  //     b. Per-business inventory: build the new business.inventory from the
+  //        current state (re-fetch after the money movements above may have
+  //        spliced the businesses array). Apply credits then debits.
+  const currentBiz = next.businesses.find((b) => b.id === business.id) ?? business;
+  let bizInv = currentBiz.inventory.map((item) => ({ ...item }));
+  const bizInvUpsert = (resourceId: string, delta: number) => {
+    const idx = bizInv.findIndex((i) => i.resourceId === resourceId);
     if (idx >= 0) {
-      const existing = newItems[idx]!;
-      newItems[idx] = {
+      const existing = bizInv[idx]!;
+      bizInv[idx] = {
         ...existing,
-        quantity: existing.quantity + plan.outputProduced,
+        quantity: Math.max(0, existing.quantity + delta),
       };
-    } else {
-      newItems = [...newItems, { resourceId: outputResourceId, quantity: plan.outputProduced }];
+    } else if (delta > 0) {
+      bizInv = [...bizInv, { resourceId, quantity: delta }];
+    }
+  };
+  // i.   Credit market-purchased inputs (replenish) — the input enters stock.
+  for (const src of inputs.sources) {
+    if (src.kind !== 'market') continue;
+    const purchaseQty = Math.floor(src.quantity);
+    if (purchaseQty > 0) bizInvUpsert(src.resourceId, purchaseQty);
+  }
+  // ii.  Debit consumed inputs from business.inventory ('business-inventory'
+  //      sources consumed from pre-existing stock; 'market' sources consumed
+  //      from the just-credited purchase).
+  for (const src of inputs.sources) {
+    if (src.kind === 'business-inventory' || src.kind === 'market') {
+      bizInvUpsert(src.resourceId, -src.quantity);
     }
   }
-  next = { ...next, inventory: { items: newItems } };
+  // iii. Credit produced output to business.inventory (always — the output
+  //      enters stock first).
+  if (plan.outputProduced > 0) {
+    bizInvUpsert(business.production.outputResourceId, plan.outputProduced);
+  }
+  // iv.  Debit sold output from business.inventory (drain — the sold integer
+  //      units leave stock). Only when a real sale occurred.
+  if (soldQty > 0) {
+    bizInvUpsert(business.production.outputResourceId, -soldQty);
+  }
+  // Drop zero-quantity entries (a sold output credited then debited nets to
+  // 0; keeping the entry is harmless but clutters the inventory).
+  const finalBizInv = bizInv.filter((i) => i.quantity > 0);
+  next = {
+    ...next,
+    businesses: next.businesses.map((b) =>
+      b.id === business.id ? { ...b, inventory: finalBizInv } : b,
+    ),
+  };
 
-  // 10. Apply environmental impact (pro-rated by the step fraction via the
+  // 11. Apply environmental impact (pro-rated by the step fraction via the
   //     centralized helper — same pattern as automation/execute.ts, so the
   //     EnvironmentSystem at slot #10 consumes the mutated env state).
   next = {
@@ -438,12 +535,14 @@ export function operateBusiness(
     },
   };
 
-  // 11. Update the business accounting fields: revenue + expenses
+  // 12. Update the business accounting fields: revenue + expenses
   //     accumulators + cash mirror + lastOperatedAt. The cash field mirrors
   //     the business account balance (transfers already updated the account);
   //     applyRevenue/applyExpenses bump the accumulators + cash field by the
   //     same delta so the mirror stays in sync (same coupling as
-  //     player.personalCash).
+  //     player.personalCash). P8c: revenue = actualRevenue (the real market
+  //     sale total), NOT plan.revenue (the theoretical product-floored value
+  //     — they differ for fractional sub-day output where no sale occurs).
   const totalInputCost = inputs.sources.reduce((sum, src) => {
     if (src.kind !== 'market') return sum;
     return sum + BigInt(src.unitPrice) * BigInt(Math.floor(src.quantity));
@@ -454,7 +553,7 @@ export function operateBusiness(
     ...next,
     businesses: next.businesses.map((b) => {
       if (b.id !== business.id) return b;
-      let nb = applyRevenue(b, plan.revenue);
+      let nb = applyRevenue(b, actualRevenue);
       nb = applyExpenses(nb, totalExpenses);
       // Sync the cash mirror to the authoritative account balance (catches
       // any drift from the per-component applyRevenue/applyExpenses).
@@ -464,7 +563,7 @@ export function operateBusiness(
     }),
   };
 
-  // 12. Emit business-operated (operated: true).
+  // 13. Emit business-operated (operated: true).
   const updatedBusiness = next.businesses.find((b) => b.id === business.id)!;
   events.push({
     type: 'business-operated',
@@ -474,7 +573,7 @@ export function operateBusiness(
       operated: true,
       outputResourceId: business.production.outputResourceId,
       outputQuantity: plan.outputProduced,
-      revenue: plan.revenue.toString(10),
+      revenue: actualRevenue.toString(10),
       expenses: totalExpenses.toString(10),
       environmentalImpact: { ...business.environmentalImpact },
       businessCashAfter: updatedBusiness.cash,
