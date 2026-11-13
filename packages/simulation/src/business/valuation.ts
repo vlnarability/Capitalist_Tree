@@ -55,6 +55,12 @@ import { sumAssets, sumLiabilities, parseBusinessAmount } from './accounting.js'
  * not every tick, so it does not flicker with per-tick wage/input payments
  * (TDD §11). @provisional — tunable; promote to a shared PROVISIONAL_
  * constant once playtesting calibrates it.
+ *
+ * R-P8-5 (carry-forward): this is a LOCAL @provisional const (NOT promoted
+ * to a shared `PROVISIONAL_BUSINESS_*` constant in `packages/shared/src/
+ * constants/business.ts`). P8a froze `packages/shared` before the cadence
+ * was tuned; promoting it would need a constants-file addition
+ * (backward-compatible, no migration). See docs/business.md §16 (R-P8-5).
  */
 export const BUSINESS_VALUATION_INTERVAL_SECONDS = 24 * 60 * 60;
 

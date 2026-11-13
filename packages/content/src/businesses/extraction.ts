@@ -86,6 +86,12 @@ export const MINERAL_MINE: BusinessTypeDefinition = {
     biodiversityImpact: 0.4, // habitat loss (PROVISIONAL)
   },
   baseValuation: '180000', // $1800.00 (PROVISIONAL)
+  // R-P8-6 (carry-forward): marketParticipation is empty because minerals
+  // are NOT in the GDD §8.5 initial market list (water, fertilizer, seeds,
+  // equipment, food, energy, labor, land) — the mineral-mine sells B2B via
+  // vertical integration (to a downstream chemical-plant), not into a
+  // commodity market. resolveOutputs returns 'stockpile' unless a player-
+  // owned downstream customer exists. See docs/business.md §16 (R-P8-6).
   marketParticipation: [], // B2B vertical integration — no commodity market
   supportedActions: [
     'purchase-business',

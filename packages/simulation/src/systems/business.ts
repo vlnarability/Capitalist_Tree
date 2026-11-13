@@ -47,7 +47,7 @@
  *     businesses lose production rate when multiple share an output market.
  * (Debt interest accrual runs per-business in step 1, before production.)
  *
- * RNG fork DEFERRED — R-P8-N (matching the R-P7-1 precedent for the
+ * RNG fork DEFERRED — R-P8-1 (matching the R-P7-1 precedent for the
  * EnvironmentSystem + the PersonalSystem no-fork decision). The
  * BusinessSystem's transforms are fully deterministic (production /
  * accounting / valuation / interest are pure arithmetic — no stochastic

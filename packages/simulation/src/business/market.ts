@@ -55,6 +55,13 @@
  * demand) — the linear supply/demand price drift + the demand-injection
  * liquidity backstop are starter mechanics; P5+ tuning will calibrate from
  * playtest data.
+ *
+ * R-P8-2 (carry-forward): the demand-injection liquidity backstop stands in
+ * for external market demand so the market can always absorb output at game
+ * start (when market accounts hold '0'). Real downstream→upstream payment
+ * routing (the downstream business paying the upstream for the input it
+ * consumed via vertical integration) is DEFERRED — the backstop is the
+ * P8c placeholder. See docs/business.md §16 (R-P8-2).
  */
 import type { GameState, MarketState, SimulationEvent } from '@capitalist-tree/shared';
 import {
@@ -78,6 +85,14 @@ const CATEGORY_BUSINESS_MARKET_DEMAND = 'business-market-demand';
  * P8c's `clearMarkets` adds them on first encounter with these baseline
  * prices + commodity ids. The other 5 markets (water, fertilizer, seeds,
  * food, energy) are registered by P3b's initial state.
+ *
+ * R-P8-8 (carry-forward): these 3 markets are referenced by id in content
+ * (e.g. `business:equipment-factory.marketParticipation` includes
+ * `'market:equipment'`) but have NO live `MarketState` entries pre-seeded in
+ * the initial state — they are created on first encounter via `clearMarkets`.
+ * A future phase may pre-seed them in `initial-state.ts` so the
+ * EconomySystem's `updateMarkets` mean-reverts them from tick 0. See
+ * docs/business.md §16 (R-P8-8).
  *
  * @provisional (GDD §17: market simulation / initial market prices).
  */

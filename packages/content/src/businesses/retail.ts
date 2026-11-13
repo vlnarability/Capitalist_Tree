@@ -12,6 +12,12 @@
  * `productionStateSchema` caps efficiency at [0,1] and P8a must not break
  * that P0 constraint).
  *
+ * R-P8-7 (carry-forward): the retail markup is a valuation profitability
+ * concern (`PROVISIONAL_BUSINESS_OPERATING_MARGIN` scales cumulative profit
+ * into the valuation), NOT a production-efficiency value. A future phase may
+ * add an explicit per-business `markup` field. See docs/business.md §16
+ * (R-P8-7).
+ *
  * PROVISIONAL: every numeric field per GDD §17 ("detailed resource simulation
  * equations" + business balance). Costs are bigint minor units as string
  * (TDD §10.1).

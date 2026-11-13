@@ -153,6 +153,11 @@ export interface RunProductionOptions {
  * output); money amounts are floored to bigint minor units per step (small
  * per-tick amounts floor to 0 — @provisional, mirrors the automation
  * maintenance cost flooring in `automation/execute.ts`).
+ *
+ * R-P8-4 (carry-forward): per-tick wages, input costs, and revenue floor to
+ * 0 for small amounts (a fractional accumulator would smooth this but no
+ * schema field exists yet). Mirrors `docs/offline-automation.md` §6.5.
+ * See docs/business.md §16 (R-P8-4).
  */
 export function runProduction(
   business: BusinessState,
@@ -175,6 +180,9 @@ export function runProduction(
 
   // Inputs consumed: 1:1 with output (@provisional — a future phase derives
   // per-input consumption ratios from the business type).
+  // R-P8-3 (carry-forward): the 1:1 input→output consumption ratio has no
+  // per-input transformation efficiency modeling beyond the production rate.
+  // See docs/business.md §16 (R-P8-3).
   const inputsConsumed: ConsumedInput[] = business.production.inputResourceIds.map(
     (resourceId) => ({ resourceId, quantity: outputProduced }),
   );
