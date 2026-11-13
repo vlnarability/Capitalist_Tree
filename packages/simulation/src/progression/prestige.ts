@@ -350,13 +350,16 @@ export function applyPrestigeReset(
   const next: GameState = {
     // PRESERVED verbatim: metadata, clock (no rewind), history, rngState
     // (zero root draws — R-P9-1), rngStreams (weather sequence stays
-    // deterministic), scheduler.
+    // deterministic), scheduler, eventState (the EventSystem's scheduler +
+    // global/regional world state — preserved like the P0 scheduler; the
+    // EventSystem (P10b) may refine whether active events clear on prestige).
     metadata: state.metadata,
     clock: state.clock,
     history: state.history,
     rngState: state.rngState,
     rngStreams: state.rngStreams,
     scheduler: state.scheduler,
+    eventState: state.eventState,
     // P9c play-state reset — borrowed from the fresh template.
     originalTree: template.originalTree, // sapling of newTreeSpeciesId; id='original'
     player: template.player, // starting cash + neutral well-being
