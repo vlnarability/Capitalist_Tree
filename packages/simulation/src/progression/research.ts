@@ -167,7 +167,7 @@ export function ensureResearchNodeRecord(
  * `genetics.availableTraits`. Non-trait unlocks (equipment ids like
  * `'equipment:carbon-capture-unit'`, ownership ids like
  * `'ownership:corporation'`, etc.) are NOT extracted here — their wiring into
- * the equipment / business systems is a future task (R-P9-N). The
+ * the equipment / business systems is a future task (R-P9-3). The
  * `unlock-research` event carries the node id; downstream systems read
  * `effects.unlocks` from the content definition for the non-trait branches.
  *
@@ -270,7 +270,7 @@ export interface UnlockResearchResult {
  *      node's `effects.unlocks` trait ids (those prefixed `trait:`) are added
  *      to `genetics.availableTraits` so the lineage can acquire them via
  *      `activate-trait` (GDD §11.2). Non-trait unlocks are NOT routed here
- *      (future task R-P9-N). The idempotent path (already unlocked) does not
+ *      (future task R-P9-3). The idempotent path (already unlocked) does not
  *      re-add — the traits are already available.
  *
  * `tick` is the simulation second at which the unlock runs — explicit so the
@@ -368,7 +368,7 @@ export function unlockResearchNode(
   // `activate-trait` (GDD §11.2 — genetic legacy unlocks genetic
   // modifications). Non-trait unlocks (equipment ids, ownership-structure
   // ids, etc.) are NOT routed here — their wiring into the equipment /
-  // business systems is a future task (R-P9-N). The unlock-research event
+  // business systems is a future task (R-P9-3). The unlock-research event
   // already carries the node id; downstream systems read `effects.unlocks`
   // from the content definition for the non-trait branches.
   const traitUnlocks = extractTraitUnlocks(definition);

@@ -74,6 +74,9 @@ type GeneticsState = ProgressionState['genetics'];
 // sustained lineage development (GDD §11.3 — generational progress, not a
 // numerical reset-for-multiplier). `prestigeMultiplier = 1 + 0.1 *
 // totalGenerations` (after increment). PROVISIONAL — tuned during playtesting.
+// R-P9-7: this growth constant is a LOCAL @provisional (NOT promoted to a
+// shared PROVISIONAL_PRESTIGE_ constant in packages/shared); promote it once
+// playtesting calibrates the prestige-multiplier curve.
 const PROVISIONAL_PRESTIGE_MULTIPLIER_PER_GENERATION = 0.1;
 
 // ---------------------------------------------------------------------------

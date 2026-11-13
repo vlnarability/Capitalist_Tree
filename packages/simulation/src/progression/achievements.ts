@@ -50,7 +50,7 @@ import { PROVISIONAL_ACHIEVEMENT_CHECK_INTERVAL_TICKS } from '@capitalist-tree/s
 import { ACHIEVEMENTS, getAchievementById } from '@capitalist-tree/content';
 
 // ---------------------------------------------------------------------------
-// Local @provisional thresholds (GDD §17 — achievement thresholds)
+// Local @provisional thresholds (GDD §17 — achievement thresholds) — R-P9-4
 // ---------------------------------------------------------------------------
 // The AchievementDefinition.completionCriteria strings reference
 // `PROVISIONAL_ACHIEVEMENT_*` thresholds descriptively (e.g. "personalCash >=
@@ -97,7 +97,8 @@ const PROVISIONAL_ACHIEVEMENT_BALANCE_FINANCIAL_SECURITY = 0.8;
 // cumulative-extraction counter (no schema field); P9b approximates "cumulative
 // extraction exceeds threshold" by checking that total currency sinks
 // (`economy.totalSinks`) exceed a provisional minor-unit threshold. This is a
-// coarse proxy — a real extraction ledger lands in a later phase. PROVISIONAL.
+// coarse proxy — a real extraction ledger lands in a later phase (R-P9-5).
+// PROVISIONAL.
 const PROVISIONAL_ACHIEVEMENT_EXTRACTION_SINKS_THRESHOLD = 1_000_000n;
 
 // ---------------------------------------------------------------------------
@@ -269,7 +270,7 @@ export function evaluateAchievementProgress(
         env.landUse.degraded / PROVISIONAL_ACHIEVEMENT_DESTRUCTION_DEGRADED_MIN,
       );
       // Cumulative extraction proxied by economy.totalSinks (a real extraction
-      // ledger lands in a later phase — @provisional).
+      // ledger lands in a later phase — R-P9-5, @provisional).
       const sinks = BigInt(state.economy.totalSinks);
       const extractionFrac =
         PROVISIONAL_ACHIEVEMENT_EXTRACTION_SINKS_THRESHOLD > 0n
@@ -285,7 +286,7 @@ export function evaluateAchievementProgress(
         state.player.financialSecurity / PROVISIONAL_ACHIEVEMENT_BALANCE_FINANCIAL_SECURITY,
       );
       // P9b proxies "ecosystem self-sustaining" by ecosystemResilience (a real
-      // year-over-year stability check is deferred — @provisional).
+      // year-over-year stability check is deferred — R-P9-6, @provisional).
       const sustainFrac = clamp(
         env.ecosystemResilience / PROVISIONAL_ACHIEVEMENT_RESTORATION_THRESHOLD,
       );

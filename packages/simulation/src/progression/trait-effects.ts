@@ -15,7 +15,7 @@
  *     (expressed) trait's benefit + trade-off into the parameter set,
  *     returning a new `BiologyParameters` with the multipliers applied.
  *
- * WIRING (R-P9-N — carry-forward): the BiologySystem (slot #3) is the
+ * WIRING (R-P9-2 — carry-forward): the BiologySystem (slot #3) is the
  * intended consumer of these multipliers — it would call
  * `applyTraitEffects(defaultBiologyParameters(), state.progression.genetics.
  * activeTraits)` each tick and apply the resulting multipliers to its
@@ -51,7 +51,7 @@ import { getTraitById } from '@capitalist-tree/content';
  * field defaults to 1.0 (neutral — no effect); `applyTraitEffects` multiplies
  * the relevant fields by each active trait's factor.
  *
- * The BiologySystem (slot #3, in a future task R-P9-N) applies these
+ * The BiologySystem (slot #3, in a future task R-P9-2) applies these
  * multipliers to its per-tick computation:
  *   - `growthRateMultiplier`        : scales height / trunk / branch growth.
  *   - `earlyGrowthMultiplier`       : scales early-development growth (the

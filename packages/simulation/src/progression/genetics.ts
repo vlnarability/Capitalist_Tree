@@ -225,7 +225,7 @@ export interface TraitEffectInfo {
  * trait whose definition is no longer registered.
  *
  * Used by `trait-effects.ts` to apply trait effects to biology parameters
- * (and, in a future task R-P9-N, by the BiologySystem to wire those
+ * (and, in a future task R-P9-2, by the BiologySystem to wire those
  * multipliers into the per-tick biology computation). Pure read.
  */
 export function getActiveTraitEffects(

@@ -5,7 +5,7 @@
  * Asserts that `unlockResearchNode` auto-populates
  * `genetics.availableTraits` from the node's `effects.unlocks` trait ids,
  * while non-trait unlocks (equipment / ownership ids) are NOT routed there
- * (future task R-P9-N).
+ * (future task R-P9-3).
  */
 import { describe, it, expect } from 'vitest';
 import {
