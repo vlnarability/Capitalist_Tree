@@ -114,7 +114,16 @@ import {
   updateGovernmentPolicy,
   updateMonetaryPolicy,
   seedDefaultRegions,
+  applyClimateFeedback,
+  applyEnvironmentalFeedback,
+  evolveGlobalMarketIndices,
+  rollRandomEvents,
+  evaluateObjectives,
+  diffObjectives,
 } from '../events/index.js';
+import {
+  PROVISIONAL_SIMULATION_STEP_SECONDS,
+} from '@capitalist-tree/shared';
 
 export const eventSystem: System = {
   id: 'EventSystem',
@@ -124,7 +133,15 @@ export const eventSystem: System = {
     const events: SimulationEvent[] = [];
 
     // @provisional RNG fork DEFERRED — see R-P10-N in the file-level doc.
-    // The EventSystem does NOT call `ctx.rng.fork('EventSystem')`.
+    // The EventSystem does NOT call `ctx.rng.fork('EventSystem')`. P10c's
+    // stochastic event rolling (`rollRandomEvents`) uses a SEEDED sub-RNG
+    // derived from a hash of (state.rngState, currentTick, 'events') — ZERO
+    // root draws (R-P10-N resolved; see events/random.ts).
+
+    // 0. Evaluate end-game objectives on the INPUT state (before the tick's
+    //    transforms) so the post-tick diff can emit `objective-achieved`
+    //    notifications for objectives that flip false → true this tick.
+    const objectivesBefore = evaluateObjectives(state);
 
     // 1. Seed regions on the first tick (idempotent — a non-empty regions
     //    list is preserved). The v13 migration leaves `regions` empty; the
@@ -134,37 +151,85 @@ export const eventSystem: System = {
       next = seedDefaultRegions(next);
     }
 
-    // 2. processScheduledEvents (self-throttled by
+    // 2. rollRandomEvents (self-throttled by
+    //    PROVISIONAL_EVENT_CHECK_INTERVAL_TICKS) — stochastic event rolling
+    //    via a SEEDED sub-RNG (zero root draws — R-P10-N resolved). Rolls
+    //    eligible events weighted by probabilityWeight × triggerConditions,
+    //    schedules them to fire next tick.
+    const currentTick = Math.floor(ctx.now / PROVISIONAL_SIMULATION_STEP_SECONDS);
+    const rollResult = rollRandomEvents(next, currentTick);
+    next = rollResult.state;
+    events.push(...rollResult.events);
+
+    // 3. processScheduledEvents (self-throttled by
     //    PROVISIONAL_EVENT_CHECK_INTERVAL_TICKS) — fire due scheduled events,
     //    apply their effects, retire concluded active events.
     const schedulerResult = processScheduledEvents(next, ctx.now);
     next = schedulerResult.state;
     events.push(...schedulerResult.events);
 
-    // 3. evolveRegions (every tick) — drift regional indicators.
+    // 4. evolveRegions (every tick) — drift regional indicators.
     const evolveResult = evolveRegions(next, ctx.stepSeconds);
     next = evolveResult.state;
     events.push(...evolveResult.events);
 
-    // 4. aggregateGlobalIndicators (every tick) — recompute global averages
+    // 5. applyClimateFeedback (every tick) — the P7↔P10 bridge: GHG →
+    //    temperature → regional climate baseline drift → increased
+    //    extreme-weather event probability (read by rollRandomEvents next
+    //    tick). Reads P7's globalTemperature + atmosphericCarbon.
+    const climateResult = applyClimateFeedback(next, ctx.stepSeconds);
+    next = climateResult.state;
+    events.push(...climateResult.events);
+
+    // 6. applyEnvironmentalFeedback (every tick) — GDD §10.3 secondary
+    //    consequences: deforestation → erosion → soilHealth; soil degradation
+    //    → reduced productivity; water scarcity → higher resource prices;
+    //    biodiversity loss → reduced resilience; species extinction
+    //    irreversible below threshold.
+    const envFeedbackResult = applyEnvironmentalFeedback(next);
+    next = envFeedbackResult.state;
+    events.push(...envFeedbackResult.events);
+
+    // 7. evolveGlobalMarketIndices (every tick) — per-tick global market-index
+    //    evolution (mean-reversion + supply/monetary/policy/active-event
+    //    pressure). GDD §563 markets at global scale.
+    const marketResult = evolveGlobalMarketIndices(next, ctx.stepSeconds);
+    next = marketResult.state;
+    events.push(...marketResult.events);
+
+    // 8. aggregateGlobalIndicators (every tick) — recompute global averages
     //    from regional conditions.
     const aggregateResult = aggregateGlobalIndicators(next);
     next = aggregateResult.state;
-    // aggregateGlobalIndicators emits no events (it only writes state); the
-    // minIndicators return value is consumed by tests / future policy logic.
     events.push(...aggregateResult.events);
 
-    // 5. updateGovernmentPolicy (self-throttled by
+    // 9. updateGovernmentPolicy (self-throttled by
     //    PROVISIONAL_GOVERNMENT_POLICY_INTERVAL_DAYS).
     const govResult = updateGovernmentPolicy(next, ctx.now);
     next = govResult.state;
     events.push(...govResult.events);
 
-    // 6. updateMonetaryPolicy (self-throttled by
-    //    PROVISIONAL_MONETARY_POLICY_INTERVAL_DAYS).
+    // 10. updateMonetaryPolicy (self-throttled by
+    //     PROVISIONAL_MONETARY_POLICY_INTERVAL_DAYS).
     const monetaryResult = updateMonetaryPolicy(next, ctx.now);
     next = monetaryResult.state;
     events.push(...monetaryResult.events);
+
+    // 11. evaluateObjectives (read-only) on the post-tick state + diff against
+    //     the pre-tick map → emit `objective-achieved` notifications for
+    //     objectives that flipped false → true this tick (GDD §12 endings).
+    const objectivesAfter = evaluateObjectives(next);
+    for (const id of diffObjectives(objectivesBefore, objectivesAfter)) {
+      events.push({
+        type: 'notification',
+        at: ctx.now,
+        payload: {
+          severity: 'critical',
+          code: 'objective-achieved',
+          message: `Objective achieved: ${objectivesAfter[id].description}`,
+        },
+      });
+    }
 
     return { state: next, events };
   },

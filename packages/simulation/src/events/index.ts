@@ -73,3 +73,34 @@ export {
   setGovernmentPolicyHandler,
   setMonetaryPolicyHandler,
 } from './actions.js';
+// P10c — climate feedback loop + secondary environmental consequences.
+export {
+  applyClimateFeedback,
+  applyEnvironmentalFeedback,
+  environmentalEventProbabilityMultiplier,
+  CLIMATE_CONSTANTS,
+} from './climate.js';
+// P10c — global market index evolution (GDD §563).
+export {
+  evolveGlobalMarketIndices,
+  getGlobalMarketIndex,
+  MARKET_CONSTANTS,
+} from './markets.js';
+// P10c — stochastic event rolling (seeded sub-RNG, zero root draws — R-P10-N).
+export {
+  rollRandomEvents,
+  collectEligibleEvents,
+  globalDegradation,
+  createEventSubRng,
+  RANDOM_CONSTANTS,
+} from './random.js';
+// P10c — end-game objectives (GDD §12).
+export {
+  evaluateObjectives,
+  diffObjectives,
+  OBJECTIVE_IDS,
+  OBJECTIVE_CONSTANTS,
+  type ObjectiveId,
+  type ObjectiveResult,
+  type ObjectiveMap,
+} from './objectives.js';
