@@ -49,9 +49,10 @@ describe('P10c random rolling — throttle + eligibility', () => {
 
   it('triggerConditions gate eligibility — drought eligible only in a low-water region', () => {
     const base = freshState();
-    // Default arid-highlands has waterAvailability 0.3 (< 0.4) → drought
-    // eligible there. The temperate-lowlands has 0.7 → drought NOT eligible.
-    const eligible = collectEligibleEvents(base);
+    // The drought definition requires `season in (summer, autumn)`; the engine
+    // default is day 0 (winter), so advance the clock into summer.
+    const summer: GameState = { ...base, clock: { ...base.clock, day: 180 } };
+    const eligible = collectEligibleEvents(summer);
     const droughtEligible = eligible.filter(
       (e) => e.definition.id === 'event:drought',
     );

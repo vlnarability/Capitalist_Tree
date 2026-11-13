@@ -76,15 +76,30 @@ describe('P10c climate feedback — applyClimateFeedback', () => {
 
   it('is a no-op with no warming (anomaly ≈ 0)', () => {
     const base = freshState();
-    // globalTemperature defaults to ~14 (baseline) → no drift.
-    const result = applyClimateFeedback(base, 365 * 24 * 60 * 60);
-    expect(result.state).toBe(base);
+    // Force the global temperature to the preindustrial baseline so the
+    // warming anomaly is zero (the engine default is warmer).
+    const noWarm: GameState = {
+      ...base,
+      world: {
+        ...base.world,
+        environment: { ...base.world.environment, globalTemperature: 14 },
+      },
+    };
+    const result = applyClimateFeedback(noWarm, 365 * 24 * 60 * 60);
+    expect(result.state).toBe(noWarm);
     expect(result.events).toEqual([]);
   });
 
   it('environmentalEventProbabilityMultiplier scales with warming', () => {
     const base = freshState();
-    expect(environmentalEventProbabilityMultiplier(base)).toBe(1);
+    const noWarm: GameState = {
+      ...base,
+      world: {
+        ...base.world,
+        environment: { ...base.world.environment, globalTemperature: 14 },
+      },
+    };
+    expect(environmentalEventProbabilityMultiplier(noWarm)).toBe(1);
     const warmed: GameState = {
       ...base,
       world: {

@@ -19,6 +19,7 @@ import {
   diffObjectives,
   OBJECTIVE_IDS,
   OBJECTIVE_CONSTANTS,
+  seedDefaultRegions,
   type ObjectiveMap,
 } from '../src/index.js';
 import { DEFAULT_GAME_CONFIG } from '../src/initial-state.js';
@@ -28,7 +29,7 @@ function cfg(seed: number): GameConfig {
   return { ...DEFAULT_GAME_CONFIG, seed };
 }
 function freshState(seed = 42): GameState {
-  return engine.initialize(cfg(seed));
+  return seedDefaultRegions(engine.initialize(cfg(seed)));
 }
 
 /** Overwrite the aggregated indicators (shallow helper for tests). */
