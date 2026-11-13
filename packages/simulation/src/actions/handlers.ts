@@ -68,6 +68,13 @@ import {
   layOffEmployeesHandler,
   setBusinessStatusHandler,
 } from '../business/actions.js';
+import {
+  unlockResearchHandler,
+  activateTraitHandler,
+  deactivateTraitHandler,
+  prestigeResetHandler,
+  recordHistoricalEventHandler,
+} from '../progression/actions.js';
 
 export type ActionListener<A extends GameAction = GameAction> = (
   state: GameState,
@@ -413,6 +420,12 @@ export const actionHandlers: Record<string, ActionListener> = {
   'hire-employees': hireEmployeesHandler as ActionListener,
   'lay-off-employees': layOffEmployeesHandler as ActionListener,
   'set-business-status': setBusinessStatusHandler as ActionListener,
+  // P9b: progression actions (TDD §5.7 / §11, GDD §11 / §12).
+  'unlock-research': unlockResearchHandler as ActionListener,
+  'activate-trait': activateTraitHandler as ActionListener,
+  'deactivate-trait': deactivateTraitHandler as ActionListener,
+  'prestige-reset': prestigeResetHandler as ActionListener,
+  'record-historical-event': recordHistoricalEventHandler as ActionListener,
 };
 
 /** Dispatch a GameAction to its handler. Raises UnknownActionError for unknown types. */

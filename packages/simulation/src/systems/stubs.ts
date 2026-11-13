@@ -29,10 +29,15 @@
  * These are no longer exported from this file — `systems/index.ts` imports
  * them from their dedicated modules.
  *
- * The remaining stubs (progression, event) are no-ops until their phases:
+ * The remaining stub (event) is a no-op until its phase:
  *
- *   - ProgressionSystem — P6+/P8
  *   - EventSystem       — P3+
+ *
+ * P9b has REPLACED the ProgressionSystem (see `progression.ts`) stub with a
+ * real implementation that seeds the tracked-achievements list on first tick
+ * and runs the throttled achievement evaluation every
+ * PROVISIONAL_ACHIEVEMENT_CHECK_INTERVAL_TICKS ticks, emitting
+ * `achievement-unlocked` events for newly-completed achievements.
  *
  * The `id` strings are part of the public interface — downstream agents
  * reference them in tests and event logs. Do NOT rename.
@@ -43,5 +48,4 @@
 import type { System } from './system.js';
 import { noopSystem } from './system.js';
 
-export const progressionSystem: System = noopSystem('ProgressionSystem');
 export const eventSystem: System = noopSystem('EventSystem');
