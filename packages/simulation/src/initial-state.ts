@@ -339,10 +339,34 @@ export function initializeState(config: GameConfig): GameState {
       items: [],
     },
     automation: [],
+    // P9a (v12): full ProgressionState shape (GDD §11 Progression and
+    // Generations, §12 Player Objectives). The P0 stub `{research:[],
+    // achievements:[], geneticLegacy:0}` was replaced by the nested-object
+    // shape. Every field is populated explicitly so the deep-equal round-trip
+    // (serialize -> deserialize -> toEqual) holds — Zod's `.default(...)`
+    // pipeline would otherwise re-add fields on deserialize and the
+    // post-deserialize state would not match the pre-serialize state.
+    // `genetics.originalLineageId` is set to `'original'` (matching
+    // `originalTree.id`) and NEVER changes across prestige resets (GDD §11.2).
+    // The ProgressionSystem (P9b) will populate research nodes / traits /
+    // achievements / generation history as the player progresses; at game
+    // start everything is empty.
     progression: {
-      research: [],
-      achievements: [],
-      geneticLegacy: 0,
+      research: { nodes: [], totalSpent: '0' },
+      genetics: {
+        activeTraits: [],
+        availableTraits: [],
+        originalLineageId: 'original',
+      },
+      achievements: { tracked: [] },
+      prestige: {
+        geneticLegacyPoints: '0',
+        totalGenerations: 0,
+        currentGeneration: 1,
+        prestigeMultiplier: 1.0,
+        historicalRecords: [],
+      },
+      generationHistory: [],
     },
     history: {
       snapshots: [],

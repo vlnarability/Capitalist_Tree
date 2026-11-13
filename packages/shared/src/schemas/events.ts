@@ -39,6 +39,14 @@ import {
   employeesHiredEventSchema,
   employeesLaidOffEventSchema,
 } from './events-business.js';
+import {
+  researchUnlockedEventSchema,
+  traitActivatedEventSchema,
+  traitDeactivatedEventSchema,
+  generationEstablishedEventSchema,
+  achievementUnlockedEventSchema,
+  historicalEventRecordedEventSchema,
+} from './events-progression.js';
 
 /**
  * SimulationEvent — discriminated union emitted by systems during `advance`.
@@ -161,6 +169,15 @@ export const simulationEventSchema = z.discriminatedUnion('type', [
   businessBankruptEventSchema,
   employeesHiredEventSchema,
   employeesLaidOffEventSchema,
+  // P9a: progression events emitted by the ProgressionSystem (P9b) and the
+  // progression action handlers. Schema-only in P9a; the system that emits
+  // them lands in P9b.
+  researchUnlockedEventSchema,
+  traitActivatedEventSchema,
+  traitDeactivatedEventSchema,
+  generationEstablishedEventSchema,
+  achievementUnlockedEventSchema,
+  historicalEventRecordedEventSchema,
 ]);
 export type SimulationEvent = z.infer<typeof simulationEventSchema>;
 
@@ -181,3 +198,6 @@ export * from './events-automation.js';
 // P8a: re-export business event variants so consumers can import them from
 // @capitalist-tree/shared without reaching into the business submodule.
 export * from './events-business.js';
+// P9a: re-export progression event variants so consumers can import them from
+// @capitalist-tree/shared without reaching into the progression submodule.
+export * from './events-progression.js';

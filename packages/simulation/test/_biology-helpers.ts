@@ -241,7 +241,24 @@ export function testState(treeOverrides: Partial<TreeState> = {}): GameState {
     businesses: [],
     inventory: { items: [] },
     automation: [],
-    progression: { research: [], achievements: [], geneticLegacy: 0 },
+    // P9a (v12): full ProgressionState shape (matches shared _helpers baseState).
+    progression: {
+      research: { nodes: [], totalSpent: '0' },
+      genetics: {
+        activeTraits: [],
+        availableTraits: [],
+        originalLineageId: 'original',
+      },
+      achievements: { tracked: [] },
+      prestige: {
+        geneticLegacyPoints: '0',
+        totalGenerations: 0,
+        currentGeneration: 1,
+        prestigeMultiplier: 1.0,
+        historicalRecords: [],
+      },
+      generationHistory: [],
+    },
     history: { snapshots: [], archive: [] },
     rngState: [0, 0, 0, 0],
     rngStreams: { weather: [0, 0, 0, 0] },

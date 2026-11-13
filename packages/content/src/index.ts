@@ -17,6 +17,8 @@
 //   - businesses/        : Business type definitions (TDD §5.7/§11, GDD §8) [P8a]
 //   - weather/           : Weather event definitions (GDD §4.3, TDD §9)     [P2]
 //   - upgrades/          : Upgrade definitions (GDD §11)                    [P6+]
+//   - progression/       : Research / genetics / achievement definitions    [P9a]
+//                         (GDD §11 Progression & Generations, §12 Objectives)
 //
 // All content lives here — never hardcoded in engine logic (rule 5).
 export * from './species/index.js';
@@ -26,3 +28,4 @@ export * from './monetary-policy/index.js';
 export * from './markets/index.js';
 export * from './equipment/index.js';
 export * from './businesses/index.js';
+export * from './progression/index.js';

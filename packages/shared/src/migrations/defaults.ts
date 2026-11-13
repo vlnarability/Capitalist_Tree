@@ -805,3 +805,190 @@ const v10ToV11: Migration = (state: GameState): GameState => {
 };
 
 migrations.register(10, v10ToV11);
+
+// P9a: v11 -> v12 migration. REPLACES the P0 progression stub with the full
+// ProgressionState shape required by GDD §11 (Progression and Generations) and
+// §12 (Player Objectives) — TDD §5.1 (`progression: ProgressionState`), TDD
+// line 199 (ProgressionSystem: research, genetics, achievements). The P0 stub
+// (unchanged from v0 through v11) was:
+//   { research: [{id, completedAt}], achievements: [{id, completedAt}],
+//     geneticLegacy: number }
+// v12 is:
+//   { research: { nodes: ResearchNodeState[], totalSpent: string },
+//     genetics: { activeTraits: GeneticTraitState[], availableTraits: string[],
+//                 originalLineageId: string },
+//     achievements: { tracked: AchievementState[] },
+//     prestige: { geneticLegacyPoints: string, totalGenerations: number,
+//                 currentGeneration: number, prestigeMultiplier: number,
+//                 historicalRecords: string[] },
+//     generationHistory: GenerationHistoryEntry[] }
+//
+// This is a STRUCTURAL migration (not a simple field backfill): the v11
+// `research` / `achievements` arrays and `geneticLegacy` number are replaced
+// by the v12 nested-object shape. Because the ProgressionSystem was a no-op
+// stub through v11, no real v11 save has non-empty research / achievements /
+// geneticLegacy (they were always `[]` / `[]` / `0` at init), so the
+// restructure discards no player data — it upgrades the empty stub to the
+// empty v12 defaults.
+//
+// `genetics.originalLineageId` is backfilled to `'original'` (matching
+// `originalTree.id` — GDD §16.1/16.2 and §11.2: the original tree's lineage
+// remains identifiable). It is set once and NEVER changes across prestige
+// resets (the ProgressionSystem in P9b preserves it).
+//
+// All v12 fields have Zod `.default(...)`, so once the migration restructures
+// the progression field, the v12 schema validates cleanly. The migration is
+// idempotent: a v12-shaped progression (already restructured) is rebuilt with
+// the same nested values, so the result deep-equals the input. It is a
+// defensive no-op when `state.progression` is absent or non-object (lets
+// strict validation report the malformation downstream). The migration is pure
+// and does NOT touch `originalTree.id` or `originalTree.isOriginal`
+// (GDD §16.1/16.2).
+const v11ToV12: Migration = (state: GameState): GameState => {
+  const out: GameState = { ...state };
+  const progression = out.progression as unknown;
+
+  // Defensive: `progression` is required by the schema, but a malformed save
+  // might lack it or have a non-object. Bail out unchanged and let strict
+  // validation report the malformation downstream rather than crashing the
+  // migration.
+  if (!progression || typeof progression !== 'object' || Array.isArray(progression)) {
+    return out;
+  }
+
+  const p = progression as Record<string, unknown>;
+
+  // 1. research — v11 was an array of {id, completedAt}; v12 is {nodes, totalSpent}.
+  const existingResearch = p.research;
+  let research: { nodes: unknown[]; totalSpent: string };
+  if (
+    existingResearch &&
+    typeof existingResearch === 'object' &&
+    !Array.isArray(existingResearch) &&
+    Array.isArray((existingResearch as { nodes?: unknown }).nodes)
+  ) {
+    // v12-shaped — preserve, backfilling any missing sub-field defensively.
+    const r = existingResearch as { nodes?: unknown[]; totalSpent?: unknown };
+    research = {
+      nodes: Array.isArray(r.nodes) ? r.nodes : [],
+      totalSpent: typeof r.totalSpent === 'string' ? r.totalSpent : '0',
+    };
+  } else {
+    // v11 array (or missing) — restructure to empty v12 defaults. The old
+    // array entries ({id, completedAt}) are discarded: no real v11 save had
+    // any (ProgressionSystem was a no-op stub).
+    research = { nodes: [], totalSpent: '0' };
+  }
+
+  // 2. genetics — v12 only (v11 had no genetics field).
+  const existingGenetics = p.genetics;
+  let genetics: {
+    activeTraits: unknown[];
+    availableTraits: unknown[];
+    originalLineageId: string;
+  };
+  if (
+    existingGenetics &&
+    typeof existingGenetics === 'object' &&
+    !Array.isArray(existingGenetics)
+  ) {
+    const g = existingGenetics as {
+      activeTraits?: unknown;
+      availableTraits?: unknown;
+      originalLineageId?: unknown;
+    };
+    genetics = {
+      activeTraits: Array.isArray(g.activeTraits) ? g.activeTraits : [],
+      availableTraits: Array.isArray(g.availableTraits) ? g.availableTraits : [],
+      originalLineageId:
+        typeof g.originalLineageId === 'string' && g.originalLineageId.length >= 1
+          ? g.originalLineageId
+          : 'original',
+    };
+  } else {
+    genetics = { activeTraits: [], availableTraits: [], originalLineageId: 'original' };
+  }
+
+  // 3. achievements — v11 was an array of {id, completedAt}; v12 is {tracked}.
+  const existingAchievements = p.achievements;
+  let achievements: { tracked: unknown[] };
+  if (
+    existingAchievements &&
+    typeof existingAchievements === 'object' &&
+    !Array.isArray(existingAchievements) &&
+    Array.isArray((existingAchievements as { tracked?: unknown }).tracked)
+  ) {
+    // v12-shaped — preserve.
+    const a = existingAchievements as { tracked?: unknown[] };
+    achievements = { tracked: Array.isArray(a.tracked) ? a.tracked : [] };
+  } else {
+    // v11 array (or missing) — restructure to empty v12 defaults.
+    achievements = { tracked: [] };
+  }
+
+  // 4. prestige — v12 only (v11 had `geneticLegacy: number`, superseded by
+  //    `prestige.geneticLegacyPoints: string`). The numeric geneticLegacy is
+  //    NOT carried over: it was always 0 on real v11 saves (no-op stub), and
+  //    the v12 currency is a bigint string with different units.
+  const existingPrestige = p.prestige;
+  let prestige: {
+    geneticLegacyPoints: string;
+    totalGenerations: number;
+    currentGeneration: number;
+    prestigeMultiplier: number;
+    historicalRecords: unknown[];
+  };
+  if (
+    existingPrestige &&
+    typeof existingPrestige === 'object' &&
+    !Array.isArray(existingPrestige)
+  ) {
+    const pr = existingPrestige as {
+      geneticLegacyPoints?: unknown;
+      totalGenerations?: unknown;
+      currentGeneration?: unknown;
+      prestigeMultiplier?: unknown;
+      historicalRecords?: unknown;
+    };
+    prestige = {
+      geneticLegacyPoints: typeof pr.geneticLegacyPoints === 'string' ? pr.geneticLegacyPoints : '0',
+      totalGenerations:
+        typeof pr.totalGenerations === 'number' && Number.isFinite(pr.totalGenerations)
+          ? pr.totalGenerations
+          : 0,
+      currentGeneration:
+        typeof pr.currentGeneration === 'number' && Number.isFinite(pr.currentGeneration)
+          ? pr.currentGeneration
+          : 1,
+      prestigeMultiplier:
+        typeof pr.prestigeMultiplier === 'number' && Number.isFinite(pr.prestigeMultiplier)
+          ? pr.prestigeMultiplier
+          : 1.0,
+      historicalRecords: Array.isArray(pr.historicalRecords) ? pr.historicalRecords : [],
+    };
+  } else {
+    prestige = {
+      geneticLegacyPoints: '0',
+      totalGenerations: 0,
+      currentGeneration: 1,
+      prestigeMultiplier: 1.0,
+      historicalRecords: [],
+    };
+  }
+
+  // 5. generationHistory — v12 only.
+  const existingHistory = p.generationHistory;
+  const generationHistory = Array.isArray(existingHistory) ? existingHistory : [];
+
+  out.progression = {
+    research,
+    genetics,
+    achievements,
+    prestige,
+    generationHistory,
+  } as typeof out.progression;
+
+  return out;
+};
+
+migrations.register(11, v11ToV12);
