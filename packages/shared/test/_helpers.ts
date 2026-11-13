@@ -191,6 +191,48 @@ export function baseState(overrides: Partial<GameState> = {}): GameState {
     rngState: [0, 0, 0, 0],
     rngStreams: { weather: [0, 0, 0, 0] },
     scheduler: { events: [] },
+    // P10a (v13): EventSystem state (slot #12). The full v13 shape is
+    // populated explicitly so the deep-equal round-trip
+    // (serialize -> deserialize -> toEqual) holds — otherwise Zod's
+    // `.default(...)` pipeline would re-add fields on deserialize and the
+    // post-deserialize state would not match the pre-serialize state (same
+    // pattern as P7a/P8a/P9a explicit field population). aggregatedIndicators
+    // are seeded from the environment defaults above (co2 410, temp 14, soil
+    // health 1, biodiversity 0.8, forest 0.3, resilience 0.8) so the global
+    // block starts consistent with the P7 EnvironmentState. regions is empty
+    // (the EventSystem (P10b) will seed the regional breakdown); government /
+    // monetary policy are at their schema defaults.
+    eventState: {
+      scheduler: {
+        scheduled: [],
+        active: [],
+        history: [],
+        nextEventId: 0,
+      },
+      global: {
+        regions: [],
+        aggregatedIndicators: {
+          atmosphericCarbon: 410,
+          globalTemperature: 14,
+          avgSoilHealth: 1,
+          avgBiodiversity: 0.8,
+          avgForestCoverage: 0.3,
+          ecosystemResilience: 0.8,
+          speciesExtinctionRate: 0,
+        },
+        governmentPolicy: {
+          environmentalRegulations: 0.3,
+          carbonTaxRate: 0,
+          subsidies: [],
+        },
+        monetaryPolicy: {
+          interestRate: 0.05,
+          inflationTarget: 0.02,
+          moneySupplyGrowth: 0.03,
+        },
+        globalMarketIndices: {},
+      },
+    },
   };
   return { ...base, ...overrides };
 }

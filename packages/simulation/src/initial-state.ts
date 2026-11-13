@@ -381,6 +381,51 @@ export function initializeState(config: GameConfig): GameState {
     scheduler: {
       events: [],
     },
+    // P10a (v13): EventSystem state (slot #12 — TDD line 200; GDD §10, §148-152,
+    // §404-408; TDD §6.4 Event Scheduling). The full v13 shape is populated
+    // explicitly so the deep-equal round-trip (serialize -> deserialize ->
+    // toEqual) holds — otherwise Zod's `.default(...)` pipeline would re-add
+    // fields on deserialize and the post-deserialize state would not match the
+    // pre-serialize state (same pattern as P7a/P8a/P9a explicit field
+    // population). aggregatedIndicators are seeded from the environment values
+    // above (co2 410, globalTemperature startTempC, soil health 1,
+    // biodiversity 0.8, forest 0.3, resilience 0.8) so the global block starts
+    // consistent with the P7 EnvironmentState. regions is empty — the
+    // EventSystem (P10b) will seed the regional breakdown on its first tick;
+    // the stub in systems/stubs.ts stays a no-op until P10b. government /
+    // monetary policy are at their schema defaults (the EventSystem updates
+    // them on the PROVISIONAL_*_POLICY_INTERVAL_DAYS cadence in P10b).
+    eventState: {
+      scheduler: {
+        scheduled: [],
+        active: [],
+        history: [],
+        nextEventId: 0,
+      },
+      global: {
+        regions: [],
+        aggregatedIndicators: {
+          atmosphericCarbon: 410,
+          globalTemperature: startTempC,
+          avgSoilHealth: 1,
+          avgBiodiversity: 0.8,
+          avgForestCoverage: 0.3,
+          ecosystemResilience: 0.8,
+          speciesExtinctionRate: 0,
+        },
+        governmentPolicy: {
+          environmentalRegulations: 0.3,
+          carbonTaxRate: 0,
+          subsidies: [],
+        },
+        monetaryPolicy: {
+          interestRate: 0.05,
+          inflationTarget: 0.02,
+          moneySupplyGrowth: 0.03,
+        },
+        globalMarketIndices: {},
+      },
+    },
   };
 
   // Sanity: PROVISIONAL_DAYS_PER_YEAR is referenced here only to ensure the

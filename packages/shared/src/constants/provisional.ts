@@ -352,7 +352,49 @@ export const PROVISIONAL_INITIAL_INTEREST_RATE = 0;
 // non-object (lets strict validation report the malformation downstream). The
 // migration is pure and does NOT touch `originalTree.id` or
 // `originalTree.isOriginal` (GDD §16.1/16.2).
-export const CURRENT_SCHEMA_VERSION = 12;
+//
+// v13 (P10a): adds the top-level `eventState: EventState` field for the
+// EventSystem (slot #12 — TDD line 200 "EventSystem: Simulation events and
+// consequences"; GDD §10 Environment and Climate, §148-152 influence over
+// regional/global markets/governments/regulations/environmental conditions,
+// §404-408 monetary authority; TDD §6.4 Event Scheduling; TDD Milestone 9:
+// Regional environments, Industrial systems, Governments, Monetary policy,
+// Global markets, Climate feedback, Global objectives). `eventState` composes:
+//   - `scheduler: EventSchedulerState` — the EventSystem scheduler (scheduled
+//     / active / history / nextEventId). DISTINCT from the P0 `scheduler`
+//     field (the simple priority queue used by the PersonalSystem for
+//     `bill-due` events): the EventSystem scheduler additionally tracks
+//     active (in-progress) events + a history of resolved/expired events,
+//     keyed by event *type* ids from content (`packages/content/src/events/`).
+//   - `global: GlobalState` — the regional breakdown + aggregated indicators
+//     derived from regional conditions (GDD §10.2 — "A healthy global average
+//     must not conceal a collapsing local ecosystem") + government policy +
+//     monetary policy + global market indices. EXTENDS P7's `EnvironmentState`
+//     (which already models atmosphericCarbon/globalTemperature/soil.health/
+//     biodiversity/forestCoverage/ecosystemResilience as a single global
+//     block) with a regional breakdown; does NOT duplicate P7's globals.
+//
+// P10a ships the schema + content + migration only; the EventSystem
+// implementation lands in P10b (the stub in
+// `packages/simulation/src/systems/stubs.ts` stays a no-op).
+//
+// All v13 fields have Zod `.default(...)`, so v12 saves already parse cleanly
+// under v13, but the migration backfills `eventState` explicitly so consumers
+// can rely on the field being present without re-running through zod's default
+// pipeline (matching the v3 -> v4 / ... / v11 -> v12 convention). The
+// migration is idempotent (a v13 save with `eventState` already present is
+// left untouched) and is a defensive no-op when the state is malformed (lets
+// strict validation report the malformation downstream). The migration seeds
+// `eventState.global.aggregatedIndicators` from the save's existing P7
+// `EnvironmentState` globals (atmosphericCarbon from
+// `atmosphere.co2Concentration`, globalTemperature from
+// `environment.globalTemperature`, avgSoilHealth from `soil.health`,
+// avgBiodiversity from `biodiversity.index`, avgForestCoverage from
+// `forestCoverage`, ecosystemResilience from `ecosystemResilience,
+// speciesExtinctionRate 0) so a migrated save starts consistent. The
+// migration is pure and does NOT touch `originalTree.id` or
+// `originalTree.isOriginal` (GDD §16.1/16.2).
+export const CURRENT_SCHEMA_VERSION = 13;
 
 // Used by migration tests to exercise the v0 -> v1 path. Real saves are
 // always written at CURRENT_SCHEMA_VERSION.

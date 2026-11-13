@@ -14,6 +14,12 @@ export * from './rng.js';
 export * from './scheduler.js';
 export * from './events.js';
 export * from './actions.js';
+// P10a: EventSystem state (slot #12) + event content schema. Distinct from
+// the P0 `./scheduler.js` + the `./events.js` SimulationEvent union. The
+// EventSystem action + event variants are re-exported transitively via
+// `./actions.js` + `./events.js` (same convention as the progression
+// action/event variants).
+export * from './event-system.js';
 export * from './config.js';
 export * from './game-state.js';
 export * from './save.js';
