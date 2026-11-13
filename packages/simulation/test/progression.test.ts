@@ -137,7 +137,7 @@ function deepFreeze<T>(v: T): T {
 }
 
 /** Build a SystemContext for a single step at `now`. */
-function ctxAt(state: GameState, now: number, seed = 42): SystemContext {
+function ctxAt(state: GameState, now: number): SystemContext {
   return {
     now,
     stepSeconds: STEP,

@@ -109,7 +109,10 @@ export function effectiveResearchCost(
 ): bigint {
   const base = BigInt(definition.cost);
   const tier = researchNodeTier(definition.id);
-  if (tier === 0 || PROVISIONAL_RESEARCH_COST_MULTIPLIER === 0) {
+  if (tier === 0) {
+    // Root nodes (no prerequisites) are tier 0 → factor = 1 → no scaling.
+    // (If PROVISIONAL_RESEARCH_COST_MULTIPLIER were ever 0 the formula below
+    // would also yield factor = 1, so the no-scaling case is fully covered.)
     return base;
   }
   const factor = 1 + tier * PROVISIONAL_RESEARCH_COST_MULTIPLIER;
