@@ -325,6 +325,15 @@ export function initializeState(config: GameConfig): GameState {
       // monetary operations (taxes, fees, central-bank interventions).
       totalSinks: '0',
     },
+    // P8a (v10): businesses starts empty — the BusinessSystem + purchase-business
+    // action handler land in P8b. When a business entry IS instantiated (P8b's
+    // purchase-business flow), the handler populates the v10 operational fields
+    // (status / lastOperatedAt / supplyChainLevel / upstreamSupplierIds /
+    // downstreamCustomerIds / environmentalImpact / wageRate /
+    // marketParticipation / lastValuationTick) from the BusinessTypeDefinition
+    // so the deep-equal round-trip (serialize -> deserialize -> toEqual) holds.
+    // With an empty array at init time there are no per-entry fields to
+    // populate, so the round-trip passes as `[] === []`.
     businesses: [],
     inventory: {
       items: [],

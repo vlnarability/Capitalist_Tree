@@ -148,6 +148,18 @@ export function baseState(overrides: Partial<GameState> = {}): GameState {
       totalIssued: '0',
       totalSinks: '0',
     },
+    // P8a (v10): businesses starts empty — the BusinessSystem + purchase-business
+    // action land in P8b. When a business entry IS present (e.g. in migration
+    // tests that hand-construct one), the v10 operational fields
+    // (status / lastOperatedAt / supplyChainLevel / upstreamSupplierIds /
+    // downstreamCustomerIds / environmentalImpact / wageRate /
+    // marketParticipation / lastValuationTick) MUST be populated explicitly so
+    // the deep-equal round-trip (serialize -> deserialize -> toEqual) holds —
+    // otherwise Zod's `.default(...)` pipeline would add them on deserialize
+    // and the post-deserialize state would not match the pre-serialize state.
+    // With an empty array there are no per-entry fields to populate, so the
+    // round-trip passes as `[] === []` (same pattern as P7a's empty
+    // automation list).
     businesses: [],
     inventory: { items: [] },
     automation: [],

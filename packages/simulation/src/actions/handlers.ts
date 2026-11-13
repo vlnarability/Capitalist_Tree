@@ -58,6 +58,16 @@ import {
   disableAutomationHandler,
   purchaseEquipmentHandler,
 } from '../automation/actions.js';
+import {
+  purchaseBusinessHandler,
+  operateBusinessHandler,
+  sellBusinessHandler,
+  takeLoanHandler,
+  repayLoanHandler,
+  hireEmployeesHandler,
+  layOffEmployeesHandler,
+  setBusinessStatusHandler,
+} from '../business/actions.js';
 
 export type ActionListener<A extends GameAction = GameAction> = (
   state: GameState,
@@ -394,6 +404,15 @@ export const actionHandlers: Record<string, ActionListener> = {
   'enable-automation': enableAutomationHandler as ActionListener,
   'disable-automation': disableAutomationHandler as ActionListener,
   'purchase-equipment': purchaseEquipmentHandler as ActionListener,
+  // P8b: business actions (TDD §5.7 / §11, GDD §8).
+  'purchase-business': purchaseBusinessHandler as ActionListener,
+  'operate-business': operateBusinessHandler as ActionListener,
+  'sell-business': sellBusinessHandler as ActionListener,
+  'take-loan': takeLoanHandler as ActionListener,
+  'repay-loan': repayLoanHandler as ActionListener,
+  'hire-employees': hireEmployeesHandler as ActionListener,
+  'lay-off-employees': layOffEmployeesHandler as ActionListener,
+  'set-business-status': setBusinessStatusHandler as ActionListener,
 };
 
 /** Dispatch a GameAction to its handler. Raises UnknownActionError for unknown types. */

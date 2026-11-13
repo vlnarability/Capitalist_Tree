@@ -29,6 +29,16 @@ import {
   automationSkippedEventSchema,
   equipmentPurchasedEventSchema,
 } from './events-automation.js';
+import {
+  businessPurchasedEventSchema,
+  businessOperatedEventSchema,
+  businessSoldEventSchema,
+  loanTakenEventSchema,
+  loanRepaidEventSchema,
+  businessBankruptEventSchema,
+  employeesHiredEventSchema,
+  employeesLaidOffEventSchema,
+} from './events-business.js';
 
 /**
  * SimulationEvent — discriminated union emitted by systems during `advance`.
@@ -140,6 +150,17 @@ export const simulationEventSchema = z.discriminatedUnion('type', [
   automationTriggeredEventSchema,
   automationSkippedEventSchema,
   equipmentPurchasedEventSchema,
+  // P8a: business events emitted by the BusinessSystem (P8b) and the business
+  // action handlers. Schema-only in P8a; the system that emits them lands in
+  // P8b.
+  businessPurchasedEventSchema,
+  businessOperatedEventSchema,
+  businessSoldEventSchema,
+  loanTakenEventSchema,
+  loanRepaidEventSchema,
+  businessBankruptEventSchema,
+  employeesHiredEventSchema,
+  employeesLaidOffEventSchema,
 ]);
 export type SimulationEvent = z.infer<typeof simulationEventSchema>;
 
@@ -157,3 +178,6 @@ export * from './offline.js';
 // P6b1: re-export automation event variants so consumers can import them
 // from @capitalist-tree/shared without reaching into the automation submodule.
 export * from './events-automation.js';
+// P8a: re-export business event variants so consumers can import them from
+// @capitalist-tree/shared without reaching into the business submodule.
+export * from './events-business.js';

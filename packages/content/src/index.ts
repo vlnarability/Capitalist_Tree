@@ -14,6 +14,7 @@
 //   - monetary-policy/   : Issuance policy + caps (TDD §10.3, GDD §6.2)    [P3a]
 //   - markets/           : Commodity market definitions (GDD §8.5)          [P3b]
 //   - equipment/         : Equipment definitions (TDD §12)                [P6b1]
+//   - businesses/        : Business type definitions (TDD §5.7/§11, GDD §8) [P8a]
 //   - weather/           : Weather event definitions (GDD §4.3, TDD §9)     [P2]
 //   - upgrades/          : Upgrade definitions (GDD §11)                    [P6+]
 //
@@ -24,3 +25,4 @@ export * from './fertilizers/index.js';
 export * from './monetary-policy/index.js';
 export * from './markets/index.js';
 export * from './equipment/index.js';
+export * from './businesses/index.js';

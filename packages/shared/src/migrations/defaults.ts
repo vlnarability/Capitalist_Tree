@@ -570,3 +570,238 @@ const v8ToV9: Migration = (state: GameState): GameState => {
 };
 
 migrations.register(8, v8ToV9);
+
+// P8a: v9 -> v10 migration. Extends each `BusinessState` entry with nine new
+// operational fields for the BusinessSystem (TDD §5.7 / §11, GDD §8.2 supply
+// chains, §8.3 economic organizations, §8.4 growth pressure, §8.5 market
+// simulation):
+//   - `status: 'operating'` — operational state.
+//   - `lastOperatedAt: 0` — sim seconds of last operate step.
+//   - `supplyChainLevel: 0` — position in the supply chain.
+//   - `upstreamSupplierIds: []` — business ids this one buys inputs from.
+//   - `downstreamCustomerIds: []` — business ids this one sells outputs to.
+//   - `environmentalImpact: { all-zero }` — per-business impact (reuses the
+//     P6 `environmentalImpactSchema` — pillar 4).
+//   - `wageRate: '0'` — bigint minor-units wage per employee per pay period.
+//   - `marketParticipation: []` — which commodity markets this business
+//     participates in.
+//   - `lastValuationTick: 0` — sim seconds of last valuation recompute.
+//
+// Also note: the `OwnershipState.structure` enum was widened with
+// `'sustainable-enterprise'` (GDD §8.3 — the P0 enum was missing it). Zod
+// enum widening is backward-compatible, so NO data migration is needed for
+// the enum change — existing saves with old enum values parse cleanly under
+// the widened enum. The migration here only backfills the nine new
+// BusinessState fields.
+//
+// All v10 fields have Zod `.default(...)`, so v9 saves already parse cleanly
+// under v10, but the migration backfills them explicitly so consumers can
+// rely on the fields being present without re-running through zod's default
+// pipeline (matching the v3 -> v4 / v5 -> v6 / v6 -> v7 / v8 -> v9 convention).
+//
+// Each field is backfilled only if missing — fields already present on a v10
+// save (or a v9 save hand-patched with any of these values) are left
+// untouched. This makes the migration idempotent under repeated application
+// (defensive — the framework doesn't re-run migrations, but tests do). If
+// `state.businesses` is absent or empty the migration returns the state
+// unchanged (defensive no-op — this is the P0 case, since fresh games start
+// with `businesses: []`; strict post-migration validation catches a
+// malformed `businesses` field downstream).
+//
+// The migration is pure and does NOT touch `originalTree.id` or
+// `originalTree.isOriginal` (GDD §16.1/16.2).
+const v9ToV10: Migration = (state: GameState): GameState => {
+  const out: GameState = { ...state };
+
+  // Defensive: `businesses` is required by the schema, but a malformed save
+  // might lack it or have a non-array. Bail out unchanged and let strict
+  // validation report the malformation downstream rather than crashing the
+  // migration. The P0 case (empty `businesses: []`) also short-circuits here
+  // — there is nothing to backfill.
+  if (!Array.isArray(out.businesses) || out.businesses.length === 0) {
+    return out;
+  }
+
+  let mutated = false;
+  const patchedBusinesses = out.businesses.map((entry) => {
+    const withMaybe = entry as typeof entry & {
+      status?: unknown;
+      lastOperatedAt?: unknown;
+      supplyChainLevel?: unknown;
+      upstreamSupplierIds?: unknown;
+      downstreamCustomerIds?: unknown;
+      environmentalImpact?: unknown;
+      wageRate?: unknown;
+      marketParticipation?: unknown;
+      lastValuationTick?: unknown;
+    };
+    const patch: Record<string, unknown> = {};
+
+    // 1. status — backfill with 'operating' if missing or not a valid enum.
+    if (typeof withMaybe.status !== 'string') {
+      patch.status = 'operating';
+    }
+
+    // 2. lastOperatedAt — backfill with 0 if missing or non-finite number.
+    if (
+      typeof withMaybe.lastOperatedAt !== 'number' ||
+      !Number.isFinite(withMaybe.lastOperatedAt)
+    ) {
+      patch.lastOperatedAt = 0;
+    }
+
+    // 3. supplyChainLevel — backfill with 0 if missing or non-finite number.
+    if (
+      typeof withMaybe.supplyChainLevel !== 'number' ||
+      !Number.isFinite(withMaybe.supplyChainLevel)
+    ) {
+      patch.supplyChainLevel = 0;
+    }
+
+    // 4. upstreamSupplierIds — backfill with [] if missing or non-array.
+    if (!Array.isArray(withMaybe.upstreamSupplierIds)) {
+      patch.upstreamSupplierIds = [];
+    }
+
+    // 5. downstreamCustomerIds — backfill with [] if missing or non-array.
+    if (!Array.isArray(withMaybe.downstreamCustomerIds)) {
+      patch.downstreamCustomerIds = [];
+    }
+
+    // 6. environmentalImpact — backfill with all-zero if missing or non-object.
+    if (
+      typeof withMaybe.environmentalImpact !== 'object' ||
+      withMaybe.environmentalImpact === null ||
+      Array.isArray(withMaybe.environmentalImpact)
+    ) {
+      patch.environmentalImpact = {
+        carbonEmissions: 0,
+        waterConsumption: 0,
+        soilDegradation: 0,
+        pollution: 0,
+        landDisturbance: 0,
+        biodiversityImpact: 0,
+      };
+    }
+
+    // 7. wageRate — backfill with '0' if missing or non-string.
+    if (typeof withMaybe.wageRate !== 'string') {
+      patch.wageRate = '0';
+    }
+
+    // 8. marketParticipation — backfill with [] if missing or non-array.
+    if (!Array.isArray(withMaybe.marketParticipation)) {
+      patch.marketParticipation = [];
+    }
+
+    // 9. lastValuationTick — backfill with 0 if missing or non-finite number.
+    if (
+      typeof withMaybe.lastValuationTick !== 'number' ||
+      !Number.isFinite(withMaybe.lastValuationTick)
+    ) {
+      patch.lastValuationTick = 0;
+    }
+
+    if (Object.keys(patch).length === 0) {
+      return entry;
+    }
+    mutated = true;
+    return { ...entry, ...patch };
+  });
+
+  if (mutated) {
+    out.businesses = patchedBusinesses;
+  }
+
+  return out;
+};
+
+migrations.register(9, v9ToV10);
+
+// P8c: v10 -> v11 migration. Extends each `BusinessState` with a per-business
+// `inventory` field and each `Liability` with an `accruedInterest` field for
+// the market simulation + growth pressure work (TDD §11, GDD §8.4 Growth
+// Pressure, §8.5 Market Simulation; resolves the P8b carry-forwards):
+//   - `businesses[*].inventory: Array<{ resourceId, quantity }>` — per-business
+//     resource stocks. P8b used the shared `state.inventory` pool as a
+//     workaround; P8c gives each business its own inventory so production
+//     consumes from / credits to the business's stock. Default `[]`.
+//   - `businesses[*].liabilities[*].accruedInterest: string` — accrued-but-
+//     unpaid interest, tracked SEPARATELY from `principal`. P8b compounded
+//     interest into `principal`; P8c accrues into this field and `repay-loan`
+//     pays it FIRST, then reduces `principal`. Default `'0'`.
+//
+// Both v11 fields have Zod `.default(...)`, so v10 saves already parse cleanly
+// under v11, but the migration backfills them explicitly so consumers can rely
+// on the fields being present without re-running through zod's default
+// pipeline (matching the v3 -> v4 / v5 -> v6 / v6 -> v7 / v8 -> v9 / v9 -> v10
+// convention).
+//
+// Each field is backfilled only if missing — fields already present on a v11
+// save (or a v10 save hand-patched with any of these values) are left
+// untouched. This makes the migration idempotent under repeated application
+// (defensive — the framework doesn't re-run migrations, but tests do). If
+// `state.businesses` is absent or empty the migration returns the state
+// unchanged (defensive no-op — this is the P0 case, since fresh games start
+// with `businesses: []`; strict post-migration validation catches a
+// malformed `businesses` field downstream).
+//
+// The migration is pure and does NOT touch `originalTree.id` or
+// `originalTree.isOriginal` (GDD §16.1/16.2).
+const v10ToV11: Migration = (state: GameState): GameState => {
+  const out: GameState = { ...state };
+
+  // Defensive: `businesses` is required by the schema, but a malformed save
+  // might lack it or have a non-array. Bail out unchanged and let strict
+  // validation report the malformation downstream rather than crashing the
+  // migration. The P0 case (empty `businesses: []`) also short-circuits here
+  // — there is nothing to backfill.
+  if (!Array.isArray(out.businesses) || out.businesses.length === 0) {
+    return out;
+  }
+
+  let mutated = false;
+  const patchedBusinesses = out.businesses.map((entry) => {
+    const withMaybe = entry as typeof entry & {
+      inventory?: unknown;
+    };
+    const patch: Record<string, unknown> = {};
+
+    // 1. inventory — backfill with [] if missing or non-array.
+    if (!Array.isArray(withMaybe.inventory)) {
+      patch.inventory = [];
+    }
+
+    // 2. liabilities[*].accruedInterest — backfill with '0' on each liability
+    //    that is missing it.
+    let liabilitiesPatched = false;
+    const patchedLiabilities = Array.isArray(entry.liabilities)
+      ? entry.liabilities.map((l) => {
+          const lWithMaybe = l as typeof l & { accruedInterest?: unknown };
+          if (typeof lWithMaybe.accruedInterest !== 'string') {
+            liabilitiesPatched = true;
+            return { ...l, accruedInterest: '0' };
+          }
+          return l;
+        })
+      : entry.liabilities;
+
+    if (liabilitiesPatched) {
+      patch.liabilities = patchedLiabilities;
+    }
+
+    if (Object.keys(patch).length === 0) {
+      return entry;
+    }
+    mutated = true;
+    return { ...entry, ...patch };
+  });
+
+  if (mutated) {
+    out.businesses = patchedBusinesses;
+  }
+
+  return out;
+};
+
+migrations.register(10, v10ToV11);
