@@ -52,7 +52,7 @@ import {
   PROVISIONAL_BUSINESS_COMPETITION_EROSION_RATE,
   PROVISIONAL_BUSINESS_OPERATING_MARGIN,
 } from '@capitalist-tree/shared';
-import { accrueInterest, parseBusinessAmount, addAmount, subAmount } from './accounting.js';
+import { accrueInterest, parseBusinessAmount } from './accounting.js';
 
 /** SECONDS_PER_DAY — used to pro-rate per-day quantities to per-step. */
 const SECONDS_PER_DAY = 24 * 60 * 60;

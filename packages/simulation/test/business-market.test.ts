@@ -26,7 +26,6 @@ import {
   operateBusiness,
   clearMarkets,
   executeMarketTransaction,
-  buildMarketPriceMap,
   createBusinessFromDefinition,
 } from '../src/index.js';
 import {

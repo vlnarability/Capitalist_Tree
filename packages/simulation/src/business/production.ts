@@ -455,7 +455,7 @@ export function operateBusiness(
   //     is debited only for 'inventory' (shared-pool) sources (backward
   //     compat for player-bought resources).
   //     a. Shared inventory deductions (backward-compat 'inventory' sources).
-  let newSharedItems = next.inventory.items.map((item) => ({ ...item }));
+  const newSharedItems = next.inventory.items.map((item) => ({ ...item }));
   for (const src of inputs.sources) {
     if (src.kind !== 'inventory') continue;
     const idx = newSharedItems.findIndex((i) => i.resourceId === src.resourceId);

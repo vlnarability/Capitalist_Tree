@@ -19,13 +19,11 @@ import {
   engine,
   operateBusiness,
   resolveInputs,
-  resolveOutputs,
   buildMarketPriceMap,
   createBusinessFromDefinition,
 } from '../src/index.js';
 import {
   conservationDiscrepancy,
-  getBalance,
   registerAccount,
   parseAmount,
   transfer,
