@@ -293,21 +293,18 @@ export const deactivateTraitHandler: ActionListener<DeactivateTraitAction> = (
  *      the current generation started — rejects with `GenerationTooEarlyError`
  *      if not). Prevents instant-reset farming (GDD §17).
  *   2. Delegate to the pure `applyPrestigeReset(state, newTreeSpeciesId,
- *      tick)` for the progression-state-side skeleton: credit earned points,
+ *      tick)` for the FULL generational reset (P9c): credit earned points,
  *      increment generation counters, finalise + append history entries,
- *      preserve the research fraction, preserve `originalLineageId` +
- *      `activeTraits` + `geneticLegacyPoints` + `historicalRecords`.
+ *      preserve the research fraction, carry the lineage's active traits into
+ *      the new generation via `inheritTraits` (GDD §11.2), and perform the
+ *      full play-state reset (replant originalTree as a sapling, reset player
+ *      cash + businesses + automation + inventory + environment, re-seed the
+ *      economy), preserving `originalLineageId` + `geneticLegacyPoints` +
+ *      `historicalRecords` + `achievements` + the root RNG (zero draws,
+ *      R-P9-1).
  *   3. Emit `generation-established` carrying the new generation number, the
  *      previous generation number, the points earned, the resulting balance,
  *      the new prestige multiplier, and the new species.
- *
- * DEFERRED TO P9c: the full play-state reset (clearing cash / accounts /
- * businesses / automation / inventory, replanting originalTree as a sapling
- * of `newTreeSpeciesId`, re-seeding the economy, trait-inheritance mechanics).
- * P9b does NOT touch the play state — the skeleton is testable in isolation,
- * and the `generation-established` event still fires so downstream systems /
- * the UI can react. The P9c reset will be atomic and will land alongside the
- * trait-inheritance design.
  *
  * Pure: returns a new state + events. Deterministic given (state, action).
  * `originalLineageId` is preserved verbatim (NEVER modified — GDD §11.2).

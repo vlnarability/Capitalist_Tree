@@ -1,5 +1,6 @@
 /**
- * Prestige pure helpers (P9b — TDD §5.7 / §11, GDD §11.3 Prestige).
+ * Prestige pure helpers (P9b skeleton + P9c full reset — TDD §5.7 / §11, GDD
+ * §11.3 Prestige).
  *
  * GDD §11.3 is explicit: "Prestige should represent generational progress
  * rather than simply resetting the game for a numerical multiplier." The
@@ -14,37 +15,30 @@
  *     are integers; the prestige currency uses bigint minor-units string
  *     precision discipline — TDD §10.1). This is a pure read — it does NOT
  *     mutate state.
- *   - `applyPrestigeReset(state, newTreeSpeciesId, tick)` : the skeleton of
- *     the actual reset — credits the earned points to `geneticLegacyPoints`,
- *     increments `totalGenerations` + `currentGeneration`, finalises the
- *     current `generationHistory` entry (`endDate: tick`, `outcome:
- *     'completed'`, `prestigeEarned`), appends the new generation's history
- *     entry (`generationNumber: currentGeneration + 1`, `treeSpeciesId:
- *     newTreeSpeciesId`, `startDate: tick`, `outcome: 'ongoing'`), preserves
- *     the `PROVISIONAL_PRESTIGE_PRESERVED_RESOURCES` fraction of unlocked
- *     research (some research carries over; the rest is reset), and PRESERVES
- *     across the reset: `originalLineageId` (permanent — GDD §11.2), the
- *     acquired `activeTraits` (genetic material), the full `generationHistory`,
- *     and `geneticLegacyPoints` (which only grows). Returns `{ state, event }`
- *     (the `generation-established` SimulationEvent).
+ *   - `applyPrestigeReset(state, newTreeSpeciesId, tick)` : the FULL
+ *     generational reset (P9c, resolves P9b deferred item #1) — credits the
+ *     earned points to `geneticLegacyPoints`, increments `totalGenerations` +
+ *     `currentGeneration`, finalises the current `generationHistory` entry,
+ *     appends the new generation's history entry, preserves the
+ *     `PROVISIONAL_PRESTIGE_PRESERVED_RESOURCES` fraction of unlocked research,
+ *     carries the lineage's active traits into the new generation via
+ *     `inheritTraits` (GDD §11.2 — genetic material preserved; magnitude
+ *     lightly mutated), and performs the full play-state reset: replants
+ *     `originalTree` as a sapling of `newTreeSpeciesId` (keeping `id ===
+ *     'original'` + `isOriginal === true` — GDD §16.1 / §16.2), resets
+ *     `player` to the starting baseline, clears `businesses` + `automation` +
+ *     `inventory`, resets `world.environment` to the ecological baseline, and
+ *     re-seeds the `economy`. PRESERVES across the reset: `originalLineageId`
+ *     (permanent — GDD §11.2), `geneticLegacyPoints` (grows), the full
+ *     `generationHistory`, `historicalRecords`, `achievements` (permanent —
+ *     GDD §12), `metadata`, `clock`, `history`, `rngState` (zero root draws —
+ *     R-P9-1), `rngStreams`, and `scheduler`. Returns `{ state, event }` (the
+ *     `generation-established` SimulationEvent).
  *   - `computeGenerationStart(state)` : the simulation second at which the
  *     current generation started (0 if no prestige has happened yet; the last
  *     `generationHistory` entry's `startDate` otherwise). Used by the
  *     `prestige-reset` action handler to enforce
  *     `PROVISIONAL_PRESTIGE_GENERATION_MIN_DURATION_DAYS`.
- *
- * DEFERRED TO P9c (the full prestige-reset mechanics — documented here so the
- * contract is clear): the actual play-state reset — clearing `player.cash` +
- * `economy.accounts`, removing `businesses` + `automation` + `inventory`,
- * replanting `originalTree` as a sapling of `newTreeSpeciesId` (keeping
- * `originalTree.id === 'original'` + `isOriginal === true` per GDD §16.1 /
- * §16.2), re-seeding the economy, and the trait-inheritance mechanics (which
- * traits carry forward at what magnitude, how `prestigeMultiplier` grows with
- * generations). P9b implements only the progression-state-side changes (the
- * currency credit + generation counters + history + research preservation);
- * the play-state reset is a no-op in P9b so the skeleton is testable in
- * isolation. The `generation-established` event still fires so downstream
- * systems / the UI can react.
  *
  * `originalLineageId` is NEVER modified by `applyPrestigeReset` — GDD §11.2
  * "the original tree's lineage should remain identifiable". The
@@ -56,6 +50,7 @@
 import type {
   GameState,
   GenerationHistoryEntry,
+  GeneticsState,
   ResearchNodeState,
   SimulationEvent,
 } from '@capitalist-tree/shared';
@@ -65,7 +60,10 @@ import {
   PROVISIONAL_PRESTIGE_PRESERVED_RESOURCES,
   PROVISIONAL_PRESTIGE_GENERATION_MIN_DURATION_DAYS,
 } from '@capitalist-tree/shared';
+import { findSpeciesById } from '@capitalist-tree/content';
 import { SECONDS_PER_DAY } from '../systems/time-system.js';
+import { initializeState, DEFAULT_GAME_CONFIG } from '../initial-state.js';
+import { inheritTraits } from './genetics.js';
 
 // PROVISIONAL (GDD §17: Prestige and Generational Progression — §11.3)
 //
@@ -131,7 +129,7 @@ export function computePrestigeEarned(state: GameState): bigint {
 }
 
 // ---------------------------------------------------------------------------
-// applyPrestigeReset — the skeleton of the actual reset
+// applyPrestigeReset — the FULL generational reset (P9c)
 // ---------------------------------------------------------------------------
 
 export interface ApplyPrestigeResetResult {
@@ -140,8 +138,9 @@ export interface ApplyPrestigeResetResult {
 }
 
 /**
- * Apply a prestige reset — establish a new generation (GDD §11.3). The
- * progression-state-side skeleton:
+ * Apply a prestige reset — establish a new generation (GDD §11.3 — prestige
+ * is generational progress, NOT a numerical reset-for-multiplier). The FULL
+ * reset (P9c, resolves P9b deferred item #1):
  *
  *   1. Compute the genetic-legacy points earned this generation via
  *      `computePrestigeEarned(state)`.
@@ -154,32 +153,66 @@ export interface ApplyPrestigeResetResult {
  *   5. Finalise the current `generationHistory` entry (`endDate: tick`,
  *      `outcome: 'completed'`, `prestigeEarned: <earned>`). If no history
  *      exists yet (first prestige), synthesise the generation-1 entry from
- *      the original tree's current species (the player has been playing
- *      generation 1 as `originalTree.speciesId` since game start).
+ *      the original tree's current species.
  *   6. Append the new generation's history entry (`generationNumber:
  *      currentGeneration` AFTER increment, `treeSpeciesId: newTreeSpeciesId`,
  *      `startDate: tick`, `endDate: null`, `outcome: 'ongoing'`,
  *      `prestigeEarned: '0'`).
  *   7. Preserve the `PROVISIONAL_PRESTIGE_PRESERVED_RESOURCES` fraction of
- *      unlocked research (GDD §11.3 reward: research advantages). The
- *      preserved nodes stay `unlocked: true`; the rest are flipped back to
- *      `unlocked: false` / `unlockedAt: 0` (the player re-earns them in the
- *      new generation). The node RECORDS themselves stay (their
- *      definition-derived `categoryId` / `prerequisites` / `cost` are
- *      preserved) — only their `unlocked` flag is reset for the non-preserved
- *      fraction.
+ *      unlocked research (GDD §11.3 reward: research advantages).
  *   8. PRESERVE across the reset (GDD §11.2 / §11.3): `originalLineageId`
- *      (NEVER modified), the acquired `activeTraits` (genetic material), the
- *      full `generationHistory`, `geneticLegacyPoints` (which grew in step 2),
- *      and `historicalRecords` (the lineage's recorded history is permanent).
+ *      (NEVER modified), the acquired `activeTraits` (genetic material —
+ *      carried into the new generation via `inheritTraits`, re-stamped to the
+ *      new generation + lightly mutated), the full `generationHistory`,
+ *      `geneticLegacyPoints` (which grew in step 2), `historicalRecords`,
+ *      `availableTraits` (genetic potential unlocked via research stays
+ *      unlocked for acquisition), and `achievements` (permanent — GDD §12).
+ *   9. P9c play-state reset — CLEAR / re-seed the per-generation play state:
+ *        a. `originalTree` REPLANTED as a sapling of `newTreeSpeciesId`
+ *           (age 0, alive, biology reset to the species' `initial` block).
+ *           The tree's `id` stays `'original'` + `isOriginal` stays `true`
+ *           (GDD §16.1 / §16.2) — the original tree is the PERMANENT anchor;
+ *           only its biological state resets. `originalLineageId` (the
+ *           genetic identity) is preserved separately on `genetics`.
+ *        b. `player` reset to the starting baseline (personalCash =
+ *           startingPersonalCash, health/happiness/financialSecurity at
+ *           neutral, unpaidDays 0, livingExpenses zeroed — a new generation
+ *           starts fresh financially).
+ *        c. `businesses` CLEARED (they do not survive generations — GDD §11.3
+ *           prestige resets the commercial empire).
+ *        d. `automation` CLEARED.
+ *        e. `inventory` CLEARED.
+ *        f. `world.environment` RESET to the ecological baseline (a new
+ *           generation starts fresh ecologically — GDD §11.3 reward: new
+ *           starting environments; P9c uses the canonical baseline). The
+ *           persisted `rngStreams.weather` is preserved so the WeatherSystem
+ *           sequence stays deterministic across the reset.
+ *        g. `economy` RE-SEEDED (markets back to base prices + initial
+ *           supply, accounts reset to the starting cash distribution,
+ *           monetarySupply / totalIssued / totalSinks reset to the starting
+ *           values, monetaryAuthority structure preserved with fresh
+ *           policy). The conservation invariant is re-established at the new
+ *           generation's start.
+ *   10. PRESERVE across the reset (non-play state): `metadata`, `clock` (the
+ *       game does not rewind — the prestige-reset is an action at `tick`),
+ *       `history` (snapshots/archive), `rngState` (root RNG — prestige-reset
+ *       consumes ZERO root RNG draws; `inheritTraits` derives independent
+ *       seeded rngs, R-P9-1), `rngStreams`, and `scheduler`.
  *
- * DEFERRED TO P9c: the play-state reset — clearing `player.cash` +
- * `economy.accounts`, removing `businesses` + `automation` + `inventory`,
- * replanting `originalTree` as a sapling of `newTreeSpeciesId`, re-seeding the
- * economy, and the trait-inheritance mechanics. P9b does NOT touch any of
- * these — the skeleton is testable in isolation, and the play-state reset is
- * an atomic operation that belongs in P9c alongside the trait-inheritance
- * design (which decides what carries forward at what magnitude).
+ * The play-state slices in step 9 are borrowed from a fresh
+ * `initializeState({...DEFAULT_GAME_CONFIG, speciesId: newTreeSpeciesId,
+ * seed: <old seed>})` template. This guarantees the reset slices EXACTLY
+ * match a fresh game of the new species (correct sapling biology, baseline
+ * environment, re-seeded economy, starting cash) without duplicating the
+ * initial-state construction logic. The template's RNG (root + weather fork)
+ * is DISCARDED — the old state's `rngState` + `rngStreams` are preserved so
+ * the simulation's RNG determinism contract survives the reset (TDD §18.3).
+ *
+ * `newTreeSpeciesId` MUST be a registered species id (`findSpeciesById`).
+ * An unknown id throws — the prestige-reset cannot replant a sapling of an
+ * unregistered species. The action handler does not pre-validate (the
+ * schema's `prestigeResetActionSchema` only requires a non-empty string);
+ * this helper is the gatekeeper.
  *
  * `tick` is the simulation second at which the reset runs — explicit so the
  * history stamps + event `at` are deterministic given (state,
@@ -193,6 +226,17 @@ export function applyPrestigeReset(
   newTreeSpeciesId: string,
   tick: number,
 ): ApplyPrestigeResetResult {
+  // Resolve the new species — the originalTree is replanted as a sapling of
+  // this species. An unknown id throws (the prestige-reset cannot replant an
+  // unregistered species).
+  const species = findSpeciesById(newTreeSpeciesId);
+  if (!species) {
+    throw new Error(
+      `applyPrestigeReset: unknown species id "${newTreeSpeciesId}". ` +
+        `Register the species in packages/content/src/species/ (findSpeciesById).`,
+    );
+  }
+
   const earned = computePrestigeEarned(state);
   const previousGeneration = state.progression.prestige.currentGeneration;
   const newGenerationNumber = previousGeneration + 1;
@@ -271,23 +315,66 @@ export function applyPrestigeReset(
       return { ...node, unlocked: false, unlockedAt: 0 };
     });
 
+  // --- P9c trait inheritance (GDD §11.2) ---
+  // Active traits carry into the new generation, re-stamped to the new
+  // generation + lightly mutated. originalLineageId + availableTraits are
+  // preserved verbatim by inheritTraits.
+  const inheritedGenetics: GeneticsState = inheritTraits(
+    state,
+    newGenerationNumber,
+  );
+
+  // --- P9c play-state reset: borrow slices from a fresh init template ---
+  // The template is a full fresh GameState of the new species with the SAME
+  // seed. Only the play-state slices (originalTree sapling, baseline
+  // environment, re-seeded economy, starting player, empty
+  // businesses/inventory/automation) are borrowed; the template's RNG +
+  // metadata + clock + history + scheduler + progression are DISCARDED (the
+  // old state's are preserved below). Deterministic given (seed, speciesId).
+  const template = initializeState({
+    ...DEFAULT_GAME_CONFIG,
+    seed: state.metadata.randomSeed,
+    saveId: state.metadata.saveId,
+    speciesId: newTreeSpeciesId,
+    createdAt: state.metadata.createdAt,
+    startingDay: state.clock.day,
+  });
+
   // --- Build the next state ---
-  // PRESERVED verbatim: originalLineageId, activeTraits, historicalRecords,
-  // generationHistory (the new full history). totalSpent is preserved (the
-  // cumulative genetic-legacy points spent on research — a historical tally,
-  // not a per-generation budget). availableTraits is preserved (genetic
-  // material unlocked via research stays unlocked for acquisition, even if the
-  // research that unlocked them is reset — GDD §11.2 genetic material is
-  // preserved across the lineage).
   const next: GameState = {
-    ...state,
+    // PRESERVED verbatim: metadata, clock (no rewind), history, rngState
+    // (zero root draws — R-P9-1), rngStreams (weather sequence stays
+    // deterministic), scheduler.
+    metadata: state.metadata,
+    clock: state.clock,
+    history: state.history,
+    rngState: state.rngState,
+    rngStreams: state.rngStreams,
+    scheduler: state.scheduler,
+    // P9c play-state reset — borrowed from the fresh template.
+    originalTree: template.originalTree, // sapling of newTreeSpeciesId; id='original'
+    player: template.player, // starting cash + neutral well-being
+    businesses: template.businesses, // [] — cleared
+    inventory: template.inventory, // { items: [] } — cleared
+    automation: template.automation, // [] — cleared
+    // Environment reset to baseline + weather reset to initial condition;
+    // preserve the old regionId (the plot is the same across generations).
+    world: { ...template.world, regionId: state.world.regionId },
+    // Economy re-seeded (markets at base price, accounts at starting cash,
+    // monetarySupply/totalIssued/totalSinks reset; monetaryAuthority
+    // structure preserved with fresh policy).
+    economy: template.economy,
     progression: {
       research: {
         nodes: newResearchNodes,
+        // totalSpent is preserved (cumulative genetic-legacy points spent on
+        // research — a historical tally, not a per-generation budget).
         totalSpent: state.progression.research.totalSpent,
       },
-      genetics: state.progression.genetics, // preserved verbatim (incl. originalLineageId)
-      achievements: state.progression.achievements, // preserved (achievements are permanent — GDD §12)
+      // P9c — inherited genetics (activeTraits carried into the new
+      // generation; availableTraits + originalLineageId preserved verbatim).
+      genetics: inheritedGenetics,
+      achievements: state.progression.achievements, // preserved (permanent — GDD §12)
       prestige: {
         geneticLegacyPoints: balanceAfter.toString(10),
         totalGenerations: newTotalGenerations,
@@ -297,10 +384,6 @@ export function applyPrestigeReset(
       },
       generationHistory: newHistory,
     },
-    // DEFERRED TO P9c: the play-state reset (cash, accounts, businesses,
-    // automation, inventory, originalTree replant, economy re-seed,
-    // trait inheritance). P9b does NOT touch these — the skeleton is testable
-    // in isolation. The play-state reset lands atomically in P9c.
   };
 
   const event: SimulationEvent = {

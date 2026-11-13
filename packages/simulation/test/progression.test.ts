@@ -711,9 +711,12 @@ describe('prestige — applyPrestigeReset (skeleton)', () => {
     const before = state.progression.genetics.originalLineageId;
     const minDurationSeconds =
       PROVISIONAL_PRESTIGE_GENERATION_MIN_DURATION_DAYS * SECONDS_PER_DAY;
+    // P9c: applyPrestigeReset now resolves the new species via findSpeciesById
+    // and replants the originalTree as a sapling of that species — use a
+    // registered species id.
     const result = applyPrestigeReset(
       state,
-      'species:red-maple',
+      'species:white-oak',
       minDurationSeconds,
     );
     expect(result.state.progression.genetics.originalLineageId).toBe(before);

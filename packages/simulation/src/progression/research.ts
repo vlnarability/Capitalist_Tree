@@ -156,6 +156,54 @@ export function ensureResearchNodeRecord(
 }
 
 // ---------------------------------------------------------------------------
+// Research→trait wiring (P9c — resolves P9b deferred item #6)
+// ---------------------------------------------------------------------------
+
+/**
+ * The trait ids a research node's `effects.unlocks` makes available for
+ * acquisition (GDD §11.2 — genetic legacy unlocks genetic modifications). A
+ * node's `effects.unlocks` is an optional list of content ids (equipment /
+ * business types / trait ids); only the ids prefixed `trait:` are routed to
+ * `genetics.availableTraits`. Non-trait unlocks (equipment ids like
+ * `'equipment:carbon-capture-unit'`, ownership ids like
+ * `'ownership:corporation'`, etc.) are NOT extracted here — their wiring into
+ * the equipment / business systems is a future task (R-P9-N). The
+ * `unlock-research` event carries the node id; downstream systems read
+ * `effects.unlocks` from the content definition for the non-trait branches.
+ *
+ * Pure: reads only the definition.
+ */
+export function extractTraitUnlocks(
+  definition: ResearchNodeDefinition,
+): string[] {
+  const unlocks = definition.effects.unlocks;
+  if (!unlocks || unlocks.length === 0) return [];
+  return unlocks.filter((id) => id.startsWith('trait:'));
+}
+
+/**
+ * Merge a list of trait ids into the lineage's `availableTraits`, preserving
+ * insertion order and skipping ids already present (idempotent — a re-unlock
+ * of a node whose traits are already available does not duplicate them).
+ *
+ * Pure: returns a new array.
+ */
+export function mergeTraitUnlocks(
+  availableTraits: readonly string[],
+  traitUnlocks: readonly string[],
+): string[] {
+  const existing = new Set(availableTraits);
+  const merged = [...availableTraits];
+  for (const id of traitUnlocks) {
+    if (!existing.has(id)) {
+      merged.push(id);
+      existing.add(id);
+    }
+  }
+  return merged;
+}
+
+// ---------------------------------------------------------------------------
 // Queries (used by other systems + the UI to gate features)
 // ---------------------------------------------------------------------------
 
@@ -218,6 +266,12 @@ export interface UnlockResearchResult {
  *   7. Debit the cost from `geneticLegacyPoints`, add it to
  *      `research.totalSpent`, and flip the node record to `unlocked: true` /
  *      `unlockedAt: tick`.
+ *   8. P9c — research→trait wiring (resolves P9b deferred item #6): the
+ *      node's `effects.unlocks` trait ids (those prefixed `trait:`) are added
+ *      to `genetics.availableTraits` so the lineage can acquire them via
+ *      `activate-trait` (GDD §11.2). Non-trait unlocks are NOT routed here
+ *      (future task R-P9-N). The idempotent path (already unlocked) does not
+ *      re-add — the traits are already available.
  *
  * `tick` is the simulation second at which the unlock runs — explicit so the
  * event payload + state stamp are deterministic given (state, nodeId, tick)
@@ -307,6 +361,25 @@ export function unlockResearchNode(
       : n,
   );
 
+  // P9c — research→trait wiring (resolves P9b deferred item #6). When a
+  // research node is unlocked, its `effects.unlocks` lists the content ids
+  // the node makes available. Trait ids (those prefixed `trait:`) are added
+  // to `genetics.availableTraits` so the lineage can acquire them via
+  // `activate-trait` (GDD §11.2 — genetic legacy unlocks genetic
+  // modifications). Non-trait unlocks (equipment ids, ownership-structure
+  // ids, etc.) are NOT routed here — their wiring into the equipment /
+  // business systems is a future task (R-P9-N). The unlock-research event
+  // already carries the node id; downstream systems read `effects.unlocks`
+  // from the content definition for the non-trait branches.
+  const traitUnlocks = extractTraitUnlocks(definition);
+  const availableTraitsAfter =
+    traitUnlocks.length === 0
+      ? state.progression.genetics.availableTraits
+      : mergeTraitUnlocks(
+          state.progression.genetics.availableTraits,
+          traitUnlocks,
+        );
+
   const nextState: GameState = {
     ...state,
     progression: {
@@ -314,6 +387,12 @@ export function unlockResearchNode(
       research: {
         nodes: updatedNodes,
         totalSpent: totalSpentAfter.toString(10),
+      },
+      genetics: {
+        ...state.progression.genetics,
+        availableTraits: availableTraitsAfter,
+        // originalLineageId preserved verbatim (NEVER modified — GDD §11.2).
+        originalLineageId: state.progression.genetics.originalLineageId,
       },
       prestige: {
         ...state.progression.prestige,

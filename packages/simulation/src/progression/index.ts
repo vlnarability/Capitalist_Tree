@@ -54,4 +54,6 @@ export * from './errors.js';
 export * from './research.js';
 export * from './achievements.js';
 export * from './prestige.js';
+export * from './genetics.js';
+export * from './trait-effects.js';
 export * from './actions.js';
