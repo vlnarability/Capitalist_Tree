@@ -157,22 +157,38 @@ function ensureDeferredMarkets(state: GameState): GameState {
  *   - If `demand > supply`, price rises.
  *   - If `supply > demand`, price falls.
  *   - The magnitude is `(demand - supply) / max(supply + demand, MIN_SCALE) ×
- *     volatility`, clamped to `±volatility × currentPrice` (the GDD §8.5
+ *     volatility`, clamped to `±volatility × anchorPrice` (the GDD §8.5
  *     bound: prices move at most ±volatility fraction per tick).
  *
  * `MIN_SCALE = 1` floors the denominator so a fresh market (supply = demand
  * = 0) has zero drift (no NaN, no spurious movement). Pure — deterministic.
+ *
+ * `anchorPrice` is the price the drift is applied to. For markets with a
+ * content definition (the 5 P3b markets), the anchor is the CURRENT price
+ * (the EconomySystem's `updateMarkets` mean-reverts them toward their base
+ * via `basePriceById`, so they stay bounded). For the three P3b-deferred
+ * markets (equipment, labor, land — no content definition), the anchor is
+ * the PROVISIONAL base price: this mean-reverts the deferred price toward
+ * its base each tick so the EconomySystem's `updateMarkets` (which uses the
+ * CURRENT price as the base for markets lacking a `basePriceById` entry)
+ * cannot compound it to Infinity over a long run. Without this anchor, a
+ * 80000-tick biology simulation with harvest-leaves issuances grows the
+ * deferred prices exponentially until `Number(price)` overflows to Infinity
+ * and `BigInt(Infinity)` throws.
  */
-function computePriceDrift(market: MarketState, volatility: number): bigint {
+function computePriceDrift(
+  market: MarketState,
+  volatility: number,
+  anchorPrice: bigint,
+): bigint {
   const supply = market.supply;
   const demand = market.demand;
   const denom = Math.max(supply + demand, 1);
   const imbalance = (demand - supply) / denom; // in [-1, +1]
   // Fractional price change, bounded by ±volatility.
   const fractionChange = clamp(imbalance * volatility, -volatility, volatility);
-  const currentPrice = parseAmount(market.price, 'price');
-  // New price = current × (1 + fractionChange), floored to >= 1 minor unit.
-  const newPriceFloat = Number(currentPrice) * (1 + fractionChange);
+  // New price = anchor × (1 + fractionChange), floored to >= 1 minor unit.
+  const newPriceFloat = Number(anchorPrice) * (1 + fractionChange);
   const newPrice = BigInt(Math.max(1, Math.floor(newPriceFloat)));
   return newPrice;
 }
@@ -210,11 +226,28 @@ export function clearMarkets(state: GameState, now: number): ClearMarketsResult 
   // 1. Ensure all 8 markets exist.
   const withMarkets = ensureDeferredMarkets(state);
 
-  // 2. Advance each market's clearing price.
+  // 2. Build the deferred-market base-price map (the three P3b-deferred
+  //    markets have no content `MarketDefinition`, so the EconomySystem's
+  //    `updateMarkets` cannot mean-revert them via `basePriceById` — it uses
+  //    the CURRENT price as the base, which compounds exponentially over a
+  //    long run. clearMarkets anchors the deferred drift to the PROVISIONAL
+  //    base price so the deferred prices stay bounded near their baseline
+  //    (within ±volatility per tick), preventing `Number(price)` from
+  //    overflowing to Infinity on a long simulation.
+  const deferredBasePrice = new Map<string, bigint>();
+  for (const seed of DEFERRED_MARKETS) {
+    deferredBasePrice.set(seed.id, parseAmount(seed.basePrice, 'basePrice'));
+  }
+
+  // 3. Advance each market's clearing price.
   const events: SimulationEvent[] = [];
   const newMarkets: MarketState[] = withMarkets.economy.markets.map((m) => {
-    const newPrice = computePriceDrift(m, PROVISIONAL_BUSINESS_MARKET_PRICE_VOLATILITY);
     const currentPrice = parseAmount(m.price, 'price');
+    // Anchor: the deferred markets drift around their PROVISIONAL base price
+    // (mean-reverting); the P3b markets drift around their current price
+    // (the EconomySystem mean-reverts them via basePriceById).
+    const anchor = deferredBasePrice.get(m.id) ?? currentPrice;
+    const newPrice = computePriceDrift(m, PROVISIONAL_BUSINESS_MARKET_PRICE_VOLATILITY, anchor);
     if (newPrice === currentPrice) {
       return { ...m, lastPriceUpdate: now };
     }
