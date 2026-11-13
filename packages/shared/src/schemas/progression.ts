@@ -324,8 +324,9 @@ export type ProgressionState = z.infer<typeof progressionStateSchema>;
 export const researchEffectsSchema = z.object({
   /** Human-readable summary of what the unlock does. */
   description: z.string(),
-  /** Content ids unlocked (equipment / business types / trait ids). */
-  unlocks: z.array(z.string().min(1)).default([]),
+  /** Content ids unlocked (equipment / business types / trait ids). Optional —
+   *  a node may grant only a multiplier with no content unlocks. */
+  unlocks: z.array(z.string().min(1)).optional(),
   /** Optional numeric bonus the node applies (e.g. +0.1 growth rate). */
   multiplier: z.number().optional(),
 });

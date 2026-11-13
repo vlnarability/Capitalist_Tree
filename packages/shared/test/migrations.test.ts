@@ -829,6 +829,173 @@ describe('MigrationRegistry', () => {
     expect(out.businesses[0].inventory).toEqual([]);
   });
 
+  it('v11 -> v12 migration restructures the P0 progression stub into the full ProgressionState (P9a)', () => {
+    // A v11 save carries the P0 progression stub shape:
+    //   { research: [{id, completedAt}], achievements: [{id, completedAt}],
+    //     geneticLegacy: number }
+    // v12 replaces it with the nested-object ProgressionState (GDD §11/§12).
+    const v11State = freshState();
+    const withoutP9a = {
+      ...v11State,
+      progression: {
+        research: [{ id: 'research:stub', completedAt: 100 }],
+        achievements: [{ id: 'achievement:stub', completedAt: 200 }],
+        geneticLegacy: 5,
+      },
+    } as unknown as GameState;
+    const out = migrations.migrate(withoutP9a, 11, CURRENT_SCHEMA_VERSION);
+    // research restructured to {nodes, totalSpent} (old array discarded).
+    expect(Array.isArray(out.progression.research.nodes)).toBe(true);
+    expect(out.progression.research.nodes).toEqual([]);
+    expect(out.progression.research.totalSpent).toBe('0');
+    // genetics backfilled (v11 had none); originalLineageId defaults to 'original'.
+    expect(Array.isArray(out.progression.genetics.activeTraits)).toBe(true);
+    expect(out.progression.genetics.activeTraits).toEqual([]);
+    expect(out.progression.genetics.availableTraits).toEqual([]);
+    expect(out.progression.genetics.originalLineageId).toBe('original');
+    // achievements restructured to {tracked} (old array discarded).
+    expect(Array.isArray(out.progression.achievements.tracked)).toBe(true);
+    expect(out.progression.achievements.tracked).toEqual([]);
+    // prestige backfilled (v11 geneticLegacy number is NOT carried over —
+    // different units; it was always 0 on real v11 saves).
+    expect(out.progression.prestige.geneticLegacyPoints).toBe('0');
+    expect(out.progression.prestige.totalGenerations).toBe(0);
+    expect(out.progression.prestige.currentGeneration).toBe(1);
+    expect(out.progression.prestige.prestigeMultiplier).toBeCloseTo(1.0, 5);
+    expect(out.progression.prestige.historicalRecords).toEqual([]);
+    // generationHistory backfilled (v11 had none).
+    expect(Array.isArray(out.progression.generationHistory)).toBe(true);
+    expect(out.progression.generationHistory).toEqual([]);
+  });
+
+  it('v11 -> v12 migration preserves hand-patched v12 progression values', () => {
+    // A v11 save someone hand-patched with a partial/full v12 progression must
+    // keep the v12 values — the migration only backfills missing sub-fields,
+    // it never overwrites.
+    const v11State = freshState();
+    const handPatchedProgression = {
+      research: { nodes: [{ id: 'research:x', categoryId: 'biology', unlocked: true, unlockedAt: 55, prerequisites: [], cost: '10' }], totalSpent: '10' },
+      genetics: {
+        activeTraits: [{ traitId: 'trait:rapid-growth', active: true, generation: 1, magnitude: 0.8 }],
+        availableTraits: ['trait:deep-roots'],
+        originalLineageId: 'lineage:custom',
+      },
+      achievements: { tracked: [{ id: 'achievement:first-million', unlocked: true, unlockedAt: 99, progress: 1 }] },
+      prestige: { geneticLegacyPoints: '42', totalGenerations: 2, currentGeneration: 3, prestigeMultiplier: 1.5, historicalRecords: ['history:x'] },
+      generationHistory: [{ generationNumber: 1, treeSpeciesId: 'species:white-oak', startDate: 0, endDate: 1000, outcome: 'completed', prestigeEarned: '10' }],
+    };
+    const withP9a = {
+      ...v11State,
+      progression: handPatchedProgression,
+    } as unknown as GameState;
+    const out = migrations.migrate(withP9a, 11, CURRENT_SCHEMA_VERSION);
+    // Every hand-patched value preserved.
+    expect(out.progression.research.nodes).toHaveLength(1);
+    expect(out.progression.research.nodes[0].id).toBe('research:x');
+    expect(out.progression.research.nodes[0].unlocked).toBe(true);
+    expect(out.progression.research.totalSpent).toBe('10');
+    expect(out.progression.genetics.activeTraits).toHaveLength(1);
+    expect(out.progression.genetics.activeTraits[0].traitId).toBe('trait:rapid-growth');
+    expect(out.progression.genetics.availableTraits).toEqual(['trait:deep-roots']);
+    expect(out.progression.genetics.originalLineageId).toBe('lineage:custom');
+    expect(out.progression.achievements.tracked).toHaveLength(1);
+    expect(out.progression.achievements.tracked[0].id).toBe('achievement:first-million');
+    expect(out.progression.prestige.geneticLegacyPoints).toBe('42');
+    expect(out.progression.prestige.totalGenerations).toBe(2);
+    expect(out.progression.prestige.currentGeneration).toBe(3);
+    expect(out.progression.prestige.prestigeMultiplier).toBeCloseTo(1.5, 5);
+    expect(out.progression.prestige.historicalRecords).toEqual(['history:x']);
+    expect(out.progression.generationHistory).toHaveLength(1);
+    expect(out.progression.generationHistory[0].generationNumber).toBe(1);
+  });
+
+  it('v11 -> v12 migration is idempotent on a v12 save (no field changes)', () => {
+    // A v12 save already has the full progression shape. Migrating from 11 to
+    // current (12) runs the v11 -> v12 step, which rebuilds the progression
+    // with the same nested values, so the result is deep-equal to the input.
+    const v12State = freshState();
+    const out = migrations.migrate(v12State, 11, CURRENT_SCHEMA_VERSION);
+    expect(out).toEqual(v12State);
+  });
+
+  it('v11 -> v12 migration is a no-op when progression is missing or non-object', () => {
+    // Defensive: a malformed save lacking progression (or with a non-object)
+    // must not crash the migration — it returns the state unchanged and lets
+    // strict validation report the malformation downstream.
+    const v11State = freshState();
+    const withoutProgression = {
+      ...v11State,
+      progression: undefined,
+    } as unknown as GameState;
+    expect(() => migrations.migrate(withoutProgression, 11, CURRENT_SCHEMA_VERSION)).not.toThrow();
+    const out = migrations.migrate(withoutProgression, 11, CURRENT_SCHEMA_VERSION);
+    // progression still absent — migration did not add it.
+    expect((out as { progression?: unknown }).progression).toBeUndefined();
+
+    // Non-object progression (e.g. a stray string) also short-circuits.
+    const withString = { ...v11State, progression: 'oops' } as unknown as GameState;
+    expect(() => migrations.migrate(withString, 11, CURRENT_SCHEMA_VERSION)).not.toThrow();
+  });
+
+  it('v10 -> v12 multi-hop migration backfills both P8c business fields + P9a progression', () => {
+    // A v10 save predates BOTH the P8c BusinessState additions AND the P9a
+    // ProgressionState restructure. It has a business entry written by P8a/P8b
+    // (no `inventory` / `accruedInterest`) and the P0 progression stub. The
+    // runner walks v10 -> v11 -> v12, applying both migrations in sequence.
+    const v10State = freshState();
+    // Restore the P0 progression stub (freshState is now v12-shaped).
+    const v10Progression = {
+      research: [{ id: 'research:stub', completedAt: 0 }],
+      achievements: [],
+      geneticLegacy: 0,
+    };
+    const v10Business = {
+      id: 'business:test-farm',
+      name: 'Test Farm',
+      type: 'business:farm',
+      ownership: { ownerId: 'player:personal', structure: 'sole-proprietorship', share: 1 },
+      cash: '5000',
+      assets: [],
+      liabilities: [{ id: 'liability:1', type: 'loan', principal: '100000', interestRate: 0.05, dueAt: 100000 }],
+      revenue: '1000',
+      expenses: '800',
+      valuation: '130000',
+      employees: 4,
+      production: { inputResourceIds: ['fertilizer:balanced-10-10-10'], outputResourceId: 'resource:food', rate: 15, efficiency: 0.8 },
+      status: 'operating',
+      lastOperatedAt: 9999,
+      supplyChainLevel: 5,
+      upstreamSupplierIds: [],
+      downstreamCustomerIds: [],
+      environmentalImpact: { carbonEmissions: 0.3, waterConsumption: 30, soilDegradation: 0.05, pollution: 0.1, landDisturbance: 0.15, biodiversityImpact: 0.2 },
+      wageRate: '450',
+      marketParticipation: ['market:food'],
+      lastValuationTick: 12345,
+      // No inventory — P8c backfills this.
+    };
+    const withoutP8cP9a = {
+      ...v10State,
+      businesses: [v10Business],
+      progression: v10Progression,
+    } as unknown as GameState;
+    const out = migrations.migrate(withoutP8cP9a, 10, CURRENT_SCHEMA_VERSION);
+    // P8c business fields backfilled by the v10 -> v11 hop.
+    expect(out.businesses).toHaveLength(1);
+    expect(out.businesses[0].inventory).toEqual([]);
+    expect(out.businesses[0].liabilities[0].accruedInterest).toBe('0');
+    // P9a progression restructured by the v11 -> v12 hop.
+    expect(out.progression.research.nodes).toEqual([]);
+    expect(out.progression.research.totalSpent).toBe('0');
+    expect(out.progression.genetics.originalLineageId).toBe('original');
+    expect(out.progression.achievements.tracked).toEqual([]);
+    expect(out.progression.prestige.geneticLegacyPoints).toBe('0');
+    expect(out.progression.prestige.currentGeneration).toBe(1);
+    expect(out.progression.generationHistory).toEqual([]);
+    // Existing business fields preserved across both hops.
+    expect(out.businesses[0].id).toBe('business:test-farm');
+    expect(out.businesses[0].valuation).toBe('130000');
+  });
+
   it('current-version saves pass through migrations unchanged (identity)', () => {
     const s = freshState();
     const out = migrations.migrate(s, CURRENT_SCHEMA_VERSION, CURRENT_SCHEMA_VERSION);
