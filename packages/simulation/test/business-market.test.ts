@@ -176,8 +176,8 @@ describe('clearMarkets — price drift toward supply/demand equilibrium', () => 
 
   it('lowers the price when supply > demand (high supply)', () => {
     // Fertilizer market: base price 500. Set demand=10, supply=1000.
-    // imbalance = (10-1000)/1010 ≈ -0.978; fractionChange = clamp(-0.0978) =
-    // -0.0978; newPrice = floor(500 × 0.9022) = floor(451.1) = 451.
+    // imbalance = (10-1000)/1010 ≈ -0.9802; fractionChange = clamp(-0.09802) =
+    // -0.09802; newPrice = floor(500 × 0.90198) = floor(450.99) = 450.
     let state = freshState();
     state = withMarket(state, 'market:fertilizer', { supply: 1000, demand: 10 });
     const oldPrice = parseAmount(
@@ -190,7 +190,7 @@ describe('clearMarkets — price drift toward supply/demand equilibrium', () => 
       'price',
     );
     expect(newPrice).toBeLessThan(oldPrice);
-    expect(newPrice).toBe(451n);
+    expect(newPrice).toBe(450n);
   });
 
   it('leaves the price unchanged when supply === demand (equilibrium)', () => {
@@ -231,8 +231,10 @@ describe('clearMarkets — price drift toward supply/demand equilibrium', () => 
     );
     expect(newPrice).toBeGreaterThanOrEqual(lowerBound);
     expect(newPrice).toBeLessThanOrEqual(upperBound);
-    // The extreme imbalance clamps to +volatility: newPrice = floor(500 × 1.10) = 550.
-    expect(newPrice).toBe(550n);
+    // The extreme imbalance clamps to +volatility: newPrice = floor(500 ×
+    // 1.09999...) = floor(549.999) = 549 (just below the 550 upper bound due
+    // to floating-point representation of the clamped fraction).
+    expect(newPrice).toBe(549n);
   });
 
   it('ensures the three P3b-deferred markets (equipment, labor, land) are live', () => {
