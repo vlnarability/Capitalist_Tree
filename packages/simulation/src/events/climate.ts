@@ -264,7 +264,7 @@ export function applyEnvironmentalFeedback(
   const shiftedRegions = next.eventState.global.regions.map((region) => {
     let soilHealth = region.soilHealth;
     let industrialActivity = region.industrialActivity;
-    let biodiversity = region.biodiversity;
+    const biodiversity = region.biodiversity;
 
     // 1. Deforestation → erosion (low forestCoverage erodes soilHealth).
     const missingForest = 1 - region.forestCoverage;

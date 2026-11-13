@@ -146,12 +146,6 @@ function clamp01(v: number): number {
  */
 function evaluateWealthiestBeing(state: GameState): ObjectiveResult {
   const cash = BigInt(state.player.personalCash || '0');
-  const cashProgress = Number(
-    (cash * 1000n) / (PROVISIONAL_WEALTHIEST_BEING_CASH_MINOR / 1000n > 0n
-      ? PROVISIONAL_WEALTHIEST_BEING_CASH_MINOR
-      : 1n),
-  ) / 1000;
-  // Safer: compute cashProgress via floating ratio (cash is bigint; convert).
   const cashFloat = Number(cash) / Number(PROVISIONAL_WEALTHIEST_BEING_CASH_MINOR);
   const indices = state.eventState.global.globalMarketIndices;
   const indexValues = Object.values(indices);
