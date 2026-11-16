@@ -50,7 +50,6 @@
  */
 import type { GameState, SimulationEvent, TreeState, TreeDamageState } from '@capitalist-tree/shared';
 import type { System, SystemContext, SystemResult } from './system.js';
-import { deepCopy } from '../deep-copy.js';
 import {
   biologyContextFromState,
   photosynthesisForStep,
@@ -86,7 +85,17 @@ function hasPendingIssuances(tree: TreeState): boolean {
 export const biologySystem: System = {
   id: 'BiologySystem',
   execute(state: GameState, ctx: SystemContext): SystemResult {
-    const next = deepCopy(state);
+    // Targeted clone (R-P10-6 perf — avoids a full structuredClone of the
+    // entire GameState per tick). BiologySystem is the sole writer to
+    // `originalTree` biology fields (energy, foliage, structure, roots, stress,
+    // damage, health, ageDays, alive); only that slice is deep-cloned. The rest
+    // of the state (clock, world, economy, businesses, eventState, ...) is
+    // shared by reference — read-only here. Pure: the frozen input is never
+    // touched (a new top-level object + a new originalTree).
+    const next: GameState = {
+      ...state,
+      originalTree: structuredClone(state.originalTree),
+    };
     const events: SimulationEvent[] = [];
     const tree = next.originalTree;
 

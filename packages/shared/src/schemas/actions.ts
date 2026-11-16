@@ -31,6 +31,14 @@ import {
   prestigeResetActionSchema,
   recordHistoricalEventActionSchema,
 } from './actions-progression.js';
+import {
+  scheduleEventActionSchema,
+  cancelEventActionSchema,
+  triggerEventActionSchema,
+  resolveEventActionSchema,
+  setGovernmentPolicyActionSchema,
+  setMonetaryPolicyActionSchema,
+} from './actions-events.js';
 
 /**
  * GameAction — discriminated union of player actions handled by
@@ -92,6 +100,13 @@ export const gameActionSchema = z.discriminatedUnion('type', [
   deactivateTraitActionSchema,
   prestigeResetActionSchema,
   recordHistoricalEventActionSchema,
+  // P10a: EventSystem actions (schema-only — handlers + EventSystem land in P10b).
+  scheduleEventActionSchema,
+  cancelEventActionSchema,
+  triggerEventActionSchema,
+  resolveEventActionSchema,
+  setGovernmentPolicyActionSchema,
+  setMonetaryPolicyActionSchema,
 ]);
 export type GameAction = z.infer<typeof gameActionSchema>;
 export type NoOpAction = z.infer<typeof noOpActionSchema>;
@@ -119,3 +134,7 @@ export * from './actions-business.js';
 // `UnlockResearchAction` etc. from @capitalist-tree/shared without
 // reaching into the progression submodule.
 export * from './actions-progression.js';
+// P10a: re-export EventSystem action variants so consumers can import
+// `ScheduleEventAction` etc. from @capitalist-tree/shared without
+// reaching into the events submodule.
+export * from './actions-events.js';

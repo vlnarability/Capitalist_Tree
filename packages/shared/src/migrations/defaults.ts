@@ -992,3 +992,223 @@ const v11ToV12: Migration = (state: GameState): GameState => {
 };
 
 migrations.register(11, v11ToV12);
+
+// P10a: v12 -> v13 migration. Adds the top-level `eventState: EventState`
+// field for the EventSystem (slot #12 — TDD line 200; GDD §10 Environment and
+// Climate, §148-152, §404-408; TDD §6.4 Event Scheduling; TDD Milestone 9).
+// `eventState` composes:
+//   - `scheduler` — the EventSystem scheduler (scheduled / active / history /
+//     nextEventId). DISTINCT from the P0 `GameState.scheduler` (the simple
+//     priority queue used by the PersonalSystem).
+//   - `global` — the regional breakdown + aggregated indicators (derived from
+//     regional conditions per GDD §10.2) + government policy + monetary
+//     policy + global market indices. EXTENDS P7's `EnvironmentState` with a
+//     regional breakdown; does NOT duplicate P7's globals.
+//
+// All v13 fields have Zod `.default(...)`, so v12 saves already parse cleanly
+// under v13, but the migration backfills `eventState` explicitly so consumers
+// can rely on the field being present without re-running through zod's default
+// pipeline (matching the v3 -> v4 / ... / v11 -> v12 convention).
+//
+// The migration seeds `eventState.global.aggregatedIndicators` from the save's
+// existing P7 `EnvironmentState` globals so a migrated save starts consistent:
+//   - atmosphericCarbon  <- world.environment.atmosphere.co2Concentration (410)
+//   - globalTemperature  <- world.environment.globalTemperature (14)
+//   - avgSoilHealth      <- world.environment.soil.health (1)
+//   - avgBiodiversity    <- world.environment.biodiversity.index (0.8)
+//   - avgForestCoverage  <- world.environment.forestCoverage (0.3)
+//   - ecosystemResilience<- world.environment.ecosystemResilience (0.8)
+//   - speciesExtinctionRate <- 0 (no extinction accumulated yet)
+// When a source field is absent/malformed the migration falls back to neutral
+// defaults rather than crashing (defensive — strict post-migration validation
+// catches a malformed environment downstream).
+//
+// The migration is idempotent: a v13 save with `eventState` already present is
+// rebuilt with the same nested values (missing sub-fields backfilled), so the
+// result deep-equals the input. It is a defensive no-op when `state` itself is
+// non-object (lets strict validation report the malformation downstream). It
+// preserves hand-patched `eventState` values — only missing sub-fields are
+// backfilled, never overwritten. The migration is pure and does NOT touch
+// `originalTree.id` or `originalTree.isOriginal` (GDD §16.1/16.2).
+const v12ToV13: Migration = (state: GameState): GameState => {
+  const out: GameState = { ...state };
+
+  // Defensive: a malformed non-object state must not crash the migration.
+  if (!out || typeof out !== 'object' || Array.isArray(out)) {
+    return out;
+  }
+
+  // Read the existing P7 EnvironmentState globals (defensive — every field is
+  // optional). Used to seed aggregatedIndicators so a migrated save starts
+  // consistent with its pre-v13 environment.
+  const env = (out as { world?: { environment?: Record<string, unknown> } }).world
+    ?.environment;
+  const envObj =
+    env && typeof env === 'object' && !Array.isArray(env) ? env : undefined;
+  const atmosphere = envObj?.atmosphere as
+    | { co2Concentration?: unknown }
+    | undefined;
+  const soil = envObj?.soil as { health?: unknown } | undefined;
+  const biodiversity = envObj?.biodiversity as { index?: unknown } | undefined;
+  const num = (v: unknown, fallback: number): number =>
+    typeof v === 'number' && Number.isFinite(v) ? v : fallback;
+
+  const seededAggregatedIndicators = {
+    atmosphericCarbon: num(atmosphere?.co2Concentration, 410),
+    globalTemperature: num(envObj?.globalTemperature, 14),
+    avgSoilHealth: num(soil?.health, 0.5),
+    avgBiodiversity: num(biodiversity?.index, 0.5),
+    avgForestCoverage: num(envObj?.forestCoverage, 0.3),
+    ecosystemResilience: num(envObj?.ecosystemResilience, 0.5),
+    speciesExtinctionRate: 0,
+  };
+
+  const existing = (out as { eventState?: unknown }).eventState;
+  const isObject = (v: unknown): v is Record<string, unknown> =>
+    !!v && typeof v === 'object' && !Array.isArray(v);
+
+  let eventState: Record<string, unknown>;
+
+  if (!isObject(existing)) {
+    // v12 save (eventState absent or non-object) — initialize fresh defaults.
+    eventState = {
+      scheduler: {
+        scheduled: [],
+        active: [],
+        history: [],
+        nextEventId: 0,
+      },
+      global: {
+        regions: [],
+        aggregatedIndicators: seededAggregatedIndicators,
+        governmentPolicy: {
+          environmentalRegulations: 0.3,
+          carbonTaxRate: 0,
+          subsidies: [],
+        },
+        monetaryPolicy: {
+          interestRate: 0.05,
+          inflationTarget: 0.02,
+          moneySupplyGrowth: 0.03,
+        },
+        globalMarketIndices: {},
+      },
+    };
+  } else {
+    // v13 save (eventState present) — backfill only missing sub-fields;
+    // preserve every hand-patched value.
+    const existingScheduler = existing.scheduler as Record<string, unknown> | undefined;
+    const scheduler = isObject(existingScheduler)
+      ? {
+          scheduled: Array.isArray(existingScheduler.scheduled)
+            ? existingScheduler.scheduled
+            : [],
+          active: Array.isArray(existingScheduler.active) ? existingScheduler.active : [],
+          history: Array.isArray(existingScheduler.history)
+            ? existingScheduler.history
+            : [],
+          nextEventId:
+            typeof existingScheduler.nextEventId === 'number' &&
+            Number.isFinite(existingScheduler.nextEventId)
+              ? existingScheduler.nextEventId
+              : 0,
+        }
+      : {
+          scheduled: [],
+          active: [],
+          history: [],
+          nextEventId: 0,
+        };
+
+    const existingGlobal = existing.global as Record<string, unknown> | undefined;
+    const global = isObject(existingGlobal)
+      ? (() => {
+          const g: Record<string, unknown> = {};
+          // regions — preserve if array, else [].
+          g.regions = Array.isArray(existingGlobal.regions) ? existingGlobal.regions : [];
+          // aggregatedIndicators — preserve present sub-fields, backfill missing
+          // ones from the seeded (environment-derived) values.
+          const existingAgg = existingGlobal.aggregatedIndicators as
+            | Record<string, unknown>
+            | undefined;
+          g.aggregatedIndicators = isObject(existingAgg)
+            ? {
+                atmosphericCarbon: num(
+                  existingAgg.atmosphericCarbon,
+                  seededAggregatedIndicators.atmosphericCarbon,
+                ),
+                globalTemperature: num(
+                  existingAgg.globalTemperature,
+                  seededAggregatedIndicators.globalTemperature,
+                ),
+                avgSoilHealth: num(
+                  existingAgg.avgSoilHealth,
+                  seededAggregatedIndicators.avgSoilHealth,
+                ),
+                avgBiodiversity: num(
+                  existingAgg.avgBiodiversity,
+                  seededAggregatedIndicators.avgBiodiversity,
+                ),
+                avgForestCoverage: num(
+                  existingAgg.avgForestCoverage,
+                  seededAggregatedIndicators.avgForestCoverage,
+                ),
+                ecosystemResilience: num(
+                  existingAgg.ecosystemResilience,
+                  seededAggregatedIndicators.ecosystemResilience,
+                ),
+                speciesExtinctionRate: num(
+                  existingAgg.speciesExtinctionRate,
+                  seededAggregatedIndicators.speciesExtinctionRate,
+                ),
+              }
+            : { ...seededAggregatedIndicators };
+          // governmentPolicy — preserve present sub-fields, backfill missing.
+          const existingGov = existingGlobal.governmentPolicy as
+            | Record<string, unknown>
+            | undefined;
+          g.governmentPolicy = isObject(existingGov)
+            ? {
+                environmentalRegulations: num(
+                  existingGov.environmentalRegulations,
+                  0.3,
+                ),
+                carbonTaxRate: num(existingGov.carbonTaxRate, 0),
+                subsidies: Array.isArray(existingGov.subsidies)
+                  ? existingGov.subsidies
+                  : [],
+              }
+            : { environmentalRegulations: 0.3, carbonTaxRate: 0, subsidies: [] };
+          // monetaryPolicy — preserve present sub-fields, backfill missing.
+          const existingMon = existingGlobal.monetaryPolicy as
+            | Record<string, unknown>
+            | undefined;
+          g.monetaryPolicy = isObject(existingMon)
+            ? {
+                interestRate: num(existingMon.interestRate, 0.05),
+                inflationTarget: num(existingMon.inflationTarget, 0.02),
+                moneySupplyGrowth: num(existingMon.moneySupplyGrowth, 0.03),
+              }
+            : { interestRate: 0.05, inflationTarget: 0.02, moneySupplyGrowth: 0.03 };
+          // globalMarketIndices — preserve if record, else {}.
+          g.globalMarketIndices = isObject(existingGlobal.globalMarketIndices)
+            ? existingGlobal.globalMarketIndices
+            : {};
+          return g;
+        })()
+      : {
+          regions: [],
+          aggregatedIndicators: { ...seededAggregatedIndicators },
+          governmentPolicy: { environmentalRegulations: 0.3, carbonTaxRate: 0, subsidies: [] },
+          monetaryPolicy: { interestRate: 0.05, inflationTarget: 0.02, moneySupplyGrowth: 0.03 },
+          globalMarketIndices: {},
+        };
+
+    eventState = { scheduler, global };
+  }
+
+  (out as { eventState: unknown }).eventState = eventState;
+  return out;
+};
+
+migrations.register(12, v12ToV13);

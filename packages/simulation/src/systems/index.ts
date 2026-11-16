@@ -23,7 +23,12 @@
  * seeds the tracked-achievements list on first tick and runs the throttled
  * achievement evaluation every PROVISIONAL_ACHIEVEMENT_CHECK_INTERVAL_TICKS
  * ticks, emitting achievement-unlocked events for newly-completed
- * achievements.
+ * achievements. P10b replaces the EventSystem stub — the LAST remaining stub
+ * (slot #12) — with a real implementation that seeds the regional breakdown,
+ * runs the throttled scheduled-event processing, drifts regional indicators,
+ * recomputes global aggregated indicators, and runs the throttled government
+ * + monetary policy reactions. With P10b, ALL 12 systems are real
+ * implementations — there are no remaining stubs.
  */
 import { SystemRegistry } from './registry.js';
 import { timeSystem } from './time-system.js';
@@ -37,7 +42,7 @@ import { businessSystem } from './business.js';
 import { automationSystem } from './automation.js';
 import { environmentSystem } from './environment.js';
 import { progressionSystem } from './progression.js';
-import { eventSystem } from './stubs.js';
+import { eventSystem } from './events.js';
 
 export const defaultSystems = [
   timeSystem,
@@ -69,4 +74,5 @@ export * from './business.js';
 export * from './automation.js';
 export * from './environment.js';
 export * from './progression.js';
+export * from './events.js';
 export * from './stubs.js';

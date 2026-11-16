@@ -12,6 +12,7 @@ import { progressionStateSchema } from './progression.js';
 import { historicalStateSchema } from './history.js';
 import { rngStateSchema } from './rng.js';
 import { schedulerStateSchema } from './scheduler.js';
+import { eventStateSchema } from './event-system.js';
 
 /**
  * Per-system RNG sub-streams (P2 — TDD §18.3).
@@ -67,6 +68,49 @@ export const gameStateSchema = z
     // P2 addition: per-system RNG sub-streams that need to survive save/load
     // (TDD §18.3). Currently only WeatherSystem needs this.
     rngStreams: rngStreamsSchema.default(() => ({ weather: [0, 0, 0, 0] as [number, number, number, number] })),
+    // P10a (v13): EventSystem state (slot #12 — TDD line 200 "EventSystem:
+    // Simulation events and consequences"; GDD §10 Environment, §148-152
+    // influence over regional/global markets/governments/regulations/
+    // environmental conditions). The EventSystem implementation lands in P10b;
+    // the stub in packages/simulation/src/systems/stubs.ts stays a no-op. The
+    // field has a `.default(...)` so v12 saves parse cleanly under v13 even
+    // without re-running the migration, and the v12 -> v13 migration backfills
+    // it explicitly so consumers can rely on its presence (matching the v3 ->
+    // v4 / ... / v11 -> v12 convention). Distinct from the P0 `scheduler`
+    // field above (which is the simple priority queue used by the
+    // PersonalSystem); `eventState.scheduler` is the richer EventSystem
+    // scheduler (scheduled / active / history).
+    eventState: eventStateSchema.default(() => ({
+      scheduler: {
+        scheduled: [],
+        active: [],
+        history: [],
+        nextEventId: 0,
+      },
+      global: {
+        regions: [],
+        aggregatedIndicators: {
+          atmosphericCarbon: 410,
+          globalTemperature: 14,
+          avgSoilHealth: 0.5,
+          avgBiodiversity: 0.5,
+          avgForestCoverage: 0.3,
+          ecosystemResilience: 0.5,
+          speciesExtinctionRate: 0,
+        },
+        governmentPolicy: {
+          environmentalRegulations: 0.3,
+          carbonTaxRate: 0,
+          subsidies: [],
+        },
+        monetaryPolicy: {
+          interestRate: 0.05,
+          inflationTarget: 0.02,
+          moneySupplyGrowth: 0.03,
+        },
+        globalMarketIndices: {},
+      },
+    })),
   })
   .superRefine((s, ctx) => {
     // GDD §16.1: The original tree cannot be sold.

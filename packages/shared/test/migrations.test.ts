@@ -996,6 +996,246 @@ describe('MigrationRegistry', () => {
     expect(out.businesses[0].valuation).toBe('130000');
   });
 
+  it('v12 -> v13 migration backfills eventState (absent) with defaults derived from the environment (P10a)', () => {
+    // A v12 save predates the P10a eventState addition. It has a full P7
+    // EnvironmentState but no eventState. The migration seeds eventState with
+    // empty scheduler queues, empty regions, aggregatedIndicators derived from
+    // the environment, and default government/monetary policy.
+    const v12State = freshState();
+    // Strip eventState to simulate a v12 save (freshState is now v13-shaped).
+    const { eventState: _es, ...withoutEventState } = v12State;
+    void _es;
+    const out = migrations.migrate(
+      withoutEventState as unknown as GameState,
+      12,
+      CURRENT_SCHEMA_VERSION,
+    );
+    // eventState backfilled.
+    expect(out.eventState).toBeDefined();
+    // scheduler — empty queues + zeroed id counter.
+    expect(out.eventState.scheduler.scheduled).toEqual([]);
+    expect(out.eventState.scheduler.active).toEqual([]);
+    expect(out.eventState.scheduler.history).toEqual([]);
+    expect(out.eventState.scheduler.nextEventId).toBe(0);
+    // global.regions — empty (the EventSystem (P10b) seeds the regional breakdown).
+    expect(out.eventState.global.regions).toEqual([]);
+    // aggregatedIndicators — derived from the environment values in freshState
+    // (co2 410, globalTemperature 14, soil health 1, biodiversity 0.8,
+    // forest 0.3, resilience 0.8, extinction 0).
+    expect(out.eventState.global.aggregatedIndicators.atmosphericCarbon).toBe(410);
+    expect(out.eventState.global.aggregatedIndicators.globalTemperature).toBe(14);
+    expect(out.eventState.global.aggregatedIndicators.avgSoilHealth).toBeCloseTo(1, 5);
+    expect(out.eventState.global.aggregatedIndicators.avgBiodiversity).toBeCloseTo(0.8, 5);
+    expect(out.eventState.global.aggregatedIndicators.avgForestCoverage).toBeCloseTo(0.3, 5);
+    expect(out.eventState.global.aggregatedIndicators.ecosystemResilience).toBeCloseTo(0.8, 5);
+    expect(out.eventState.global.aggregatedIndicators.speciesExtinctionRate).toBe(0);
+    // governmentPolicy — schema defaults.
+    expect(out.eventState.global.governmentPolicy).toEqual({
+      environmentalRegulations: 0.3,
+      carbonTaxRate: 0,
+      subsidies: [],
+    });
+    // monetaryPolicy — schema defaults.
+    expect(out.eventState.global.monetaryPolicy).toEqual({
+      interestRate: 0.05,
+      inflationTarget: 0.02,
+      moneySupplyGrowth: 0.03,
+    });
+    // globalMarketIndices — empty.
+    expect(out.eventState.global.globalMarketIndices).toEqual({});
+  });
+
+  it('v12 -> v13 migration preserves hand-patched eventState values', () => {
+    // A v12 save someone hand-patched with a partial/full eventState must keep
+    // the values — the migration only backfills missing sub-fields, it never
+    // overwrites.
+    const v12State = freshState();
+    const handPatched = {
+      ...v12State,
+      eventState: {
+        scheduler: {
+          scheduled: [
+            {
+              id: 'evt-0',
+              type: 'event:drought',
+              scheduledAt: 100,
+              payload: { severity: 'severe' },
+              resolved: false,
+              resolvedAt: 0,
+              priority: 'high',
+            },
+          ],
+          active: [],
+          history: [
+            {
+              id: 'evt-old',
+              type: 'event:heat-wave',
+              occurredAt: 50,
+              resolvedAt: 80,
+              severity: 'moderate',
+              outcome: 'mitigated',
+              description: 'mitigated heat wave',
+            },
+          ],
+          nextEventId: 7,
+        },
+        global: {
+          regions: [
+            {
+              id: 'region:temperate-lowlands',
+              name: 'Temperate Lowlands',
+              climate: {
+                temperatureBaseline: 14,
+                precipitationBaseline: 800,
+                humidityBaseline: 0.6,
+              },
+              soilHealth: 0.7,
+              waterAvailability: 0.5,
+              biodiversity: 0.4,
+              forestCoverage: 0.2,
+              industrialActivity: 0.6,
+              pollution: { air: 30, water: 15, soil: 10 },
+              vulnerabilities: ['drought-prone'],
+              population: 100000,
+            },
+          ],
+          aggregatedIndicators: {
+            atmosphericCarbon: 440,
+            globalTemperature: 15.2,
+            avgSoilHealth: 0.7,
+            avgBiodiversity: 0.4,
+            avgForestCoverage: 0.2,
+            ecosystemResilience: 0.4,
+            speciesExtinctionRate: 0.01,
+          },
+          governmentPolicy: {
+            environmentalRegulations: 0.6,
+            carbonTaxRate: 0.15,
+            subsidies: [{ type: 'subsidy:renewable-energy', rate: 0.3 }],
+          },
+          monetaryPolicy: {
+            interestRate: 0.08,
+            inflationTarget: 0.025,
+            moneySupplyGrowth: 0.04,
+          },
+          globalMarketIndices: { 'index:commodity-basket': 110.5 },
+        },
+      },
+    } as unknown as GameState;
+    const out = migrations.migrate(handPatched, 12, CURRENT_SCHEMA_VERSION);
+    // scheduler — every hand-patched value preserved.
+    expect(out.eventState.scheduler.scheduled).toHaveLength(1);
+    expect(out.eventState.scheduler.scheduled[0].id).toBe('evt-0');
+    expect(out.eventState.scheduler.scheduled[0].type).toBe('event:drought');
+    expect(out.eventState.scheduler.scheduled[0].priority).toBe('high');
+    expect(out.eventState.scheduler.history).toHaveLength(1);
+    expect(out.eventState.scheduler.history[0].outcome).toBe('mitigated');
+    expect(out.eventState.scheduler.nextEventId).toBe(7);
+    // global.regions — hand-patched region preserved.
+    expect(out.eventState.global.regions).toHaveLength(1);
+    expect(out.eventState.global.regions[0].id).toBe('region:temperate-lowlands');
+    expect(out.eventState.global.regions[0].population).toBe(100000);
+    // aggregatedIndicators — every hand-patched value preserved.
+    expect(out.eventState.global.aggregatedIndicators.atmosphericCarbon).toBe(440);
+    expect(out.eventState.global.aggregatedIndicators.globalTemperature).toBeCloseTo(15.2, 5);
+    expect(out.eventState.global.aggregatedIndicators.speciesExtinctionRate).toBeCloseTo(0.01, 5);
+    // governmentPolicy — hand-patched values preserved.
+    expect(out.eventState.global.governmentPolicy.environmentalRegulations).toBeCloseTo(0.6, 5);
+    expect(out.eventState.global.governmentPolicy.carbonTaxRate).toBeCloseTo(0.15, 5);
+    expect(out.eventState.global.governmentPolicy.subsidies).toEqual([
+      { type: 'subsidy:renewable-energy', rate: 0.3 },
+    ]);
+    // monetaryPolicy — hand-patched values preserved.
+    expect(out.eventState.global.monetaryPolicy.interestRate).toBeCloseTo(0.08, 5);
+    expect(out.eventState.global.monetaryPolicy.inflationTarget).toBeCloseTo(0.025, 5);
+    // globalMarketIndices — hand-patched index preserved.
+    expect(out.eventState.global.globalMarketIndices).toEqual({
+      'index:commodity-basket': 110.5,
+    });
+  });
+
+  it('v12 -> v13 migration is idempotent on a v13 save (no field changes)', () => {
+    // A v13 save already has the full eventState shape. Migrating from 12 to
+    // current (13) runs the v12 -> v13 step, which rebuilds eventState with
+    // the same nested values (backfilling no missing sub-fields), so the
+    // result is deep-equal to the input.
+    const v13State = freshState();
+    const out = migrations.migrate(v13State, 12, CURRENT_SCHEMA_VERSION);
+    expect(out).toEqual(v13State);
+  });
+
+  it('v12 -> v13 migration is a defensive no-op on the environment derivation when world.environment is missing', () => {
+    // Defensive: a malformed save lacking world.environment (so the migration
+    // cannot derive aggregatedIndicators from it) must not crash. The
+    // migration still backfills eventState with neutral aggregatedIndicators
+    // (the fallback defaults) and leaves world without environment (it does
+    // NOT add environment — strict validation catches the malformation
+    // downstream).
+    const v12State = freshState();
+    const { eventState: _es, ...withoutEventState } = v12State;
+    void _es;
+    const { environment: _env, ...worldWithoutEnv } = withoutEventState.world as typeof withoutEventState.world & {
+      environment?: unknown;
+    };
+    void _env;
+    const withoutEnv = {
+      ...withoutEventState,
+      world: worldWithoutEnv,
+    } as unknown as GameState;
+    expect(() =>
+      migrations.migrate(withoutEnv, 12, CURRENT_SCHEMA_VERSION),
+    ).not.toThrow();
+    const out = migrations.migrate(withoutEnv, 12, CURRENT_SCHEMA_VERSION);
+    // eventState backfilled with neutral (fallback) aggregatedIndicators.
+    expect(out.eventState).toBeDefined();
+    expect(out.eventState.global.aggregatedIndicators.atmosphericCarbon).toBe(410);
+    expect(out.eventState.global.aggregatedIndicators.globalTemperature).toBe(14);
+    expect(out.eventState.global.aggregatedIndicators.avgSoilHealth).toBeCloseTo(0.5, 5);
+    expect(out.eventState.global.aggregatedIndicators.avgBiodiversity).toBeCloseTo(0.5, 5);
+    // world still without environment — migration did not add it.
+    expect((out.world as { environment?: unknown }).environment).toBeUndefined();
+  });
+
+  it('v11 -> v13 multi-hop migration restructures progression AND backfills eventState (P9a + P10a)', () => {
+    // A v11 save predates BOTH the P9a ProgressionState restructure AND the
+    // P10a eventState addition. It has the P0 progression stub and no
+    // eventState. The runner walks v11 -> v12 -> v13, applying both
+    // migrations in sequence.
+    const v11State = freshState();
+    const withoutP9aP10a = {
+      ...v11State,
+      progression: {
+        research: [{ id: 'research:stub', completedAt: 0 }],
+        achievements: [],
+        geneticLegacy: 0,
+      },
+    } as unknown as GameState;
+    // Strip eventState to simulate a v11 save (freshState is now v13-shaped).
+    const { eventState: _es, ...rest } = withoutP9aP10a;
+    void _es;
+    const out = migrations.migrate(rest as unknown as GameState, 11, CURRENT_SCHEMA_VERSION);
+    // P9a progression restructured by the v11 -> v12 hop.
+    expect(out.progression.research.nodes).toEqual([]);
+    expect(out.progression.research.totalSpent).toBe('0');
+    expect(out.progression.genetics.originalLineageId).toBe('original');
+    expect(out.progression.achievements.tracked).toEqual([]);
+    expect(out.progression.prestige.geneticLegacyPoints).toBe('0');
+    expect(out.progression.prestige.currentGeneration).toBe(1);
+    expect(out.progression.generationHistory).toEqual([]);
+    // P10a eventState backfilled by the v12 -> v13 hop (derived from the
+    // environment that survived the v11 -> v12 hop unchanged).
+    expect(out.eventState).toBeDefined();
+    expect(out.eventState.scheduler.scheduled).toEqual([]);
+    expect(out.eventState.scheduler.nextEventId).toBe(0);
+    expect(out.eventState.global.regions).toEqual([]);
+    expect(out.eventState.global.aggregatedIndicators.atmosphericCarbon).toBe(410);
+    expect(out.eventState.global.aggregatedIndicators.globalTemperature).toBe(14);
+    expect(out.eventState.global.aggregatedIndicators.avgSoilHealth).toBeCloseTo(1, 5);
+    expect(out.eventState.global.governmentPolicy.environmentalRegulations).toBeCloseTo(0.3, 5);
+    expect(out.eventState.global.monetaryPolicy.interestRate).toBeCloseTo(0.05, 5);
+    expect(out.eventState.global.globalMarketIndices).toEqual({});
+  });
+
   it('current-version saves pass through migrations unchanged (identity)', () => {
     const s = freshState();
     const out = migrations.migrate(s, CURRENT_SCHEMA_VERSION, CURRENT_SCHEMA_VERSION);

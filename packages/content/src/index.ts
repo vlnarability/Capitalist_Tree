@@ -19,6 +19,8 @@
 //   - upgrades/          : Upgrade definitions (GDD §11)                    [P6+]
 //   - progression/       : Research / genetics / achievement definitions    [P9a]
 //                         (GDD §11 Progression & Generations, §12 Objectives)
+//   - events/            : EventSystem event definitions (GDD §10.3, §8, §6, [P10a]
+//                         §5; TDD §6.4 Event Scheduling)
 //
 // All content lives here — never hardcoded in engine logic (rule 5).
 export * from './species/index.js';
@@ -29,3 +31,4 @@ export * from './markets/index.js';
 export * from './equipment/index.js';
 export * from './businesses/index.js';
 export * from './progression/index.js';
+export * from './events/index.js';

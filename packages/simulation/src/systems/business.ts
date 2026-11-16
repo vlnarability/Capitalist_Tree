@@ -77,7 +77,6 @@
 import type { GameState, SimulationEvent } from '@capitalist-tree/shared';
 import { PROVISIONAL_BUSINESS_BANKRUPTCY_THRESHOLD } from '@capitalist-tree/shared';
 import type { System, SystemContext, SystemResult } from './system.js';
-import { deepCopy } from '../deep-copy.js';
 import { getBusinessTypeById } from '@capitalist-tree/content';
 import { operateBusiness } from '../business/production.js';
 import { checkBankruptcy } from '../business/accounting.js';
@@ -96,7 +95,18 @@ import {
 export const businessSystem: System = {
   id: 'BusinessSystem',
   execute(state: GameState, ctx: SystemContext): SystemResult {
-    let next: GameState = deepCopy(state);
+    // Targeted clone (R-P10-6 perf — avoids a full structuredClone of the
+    // entire GameState per tick). BusinessSystem never mutates state in place:
+    // clearMarkets / operateBusiness / accrueDebtInterest / checkBankruptcy /
+    // recomputeValuation / applyInflationPressure / applyShareholderExpectations
+    // / applyCompetitionPressure are all pure (they read the state and return a
+    // new state via spreads + .map()), and execute() only reassigns `next` to
+    // those new states. So the input can be referenced directly — the helpers
+    // clone the slices they modify (businesses / economy / inventory /
+    // world.environment). Pure: the frozen input is never touched (the first
+    // reassignment — `next = cleared.state` — produces a fresh top-level
+    // object before any write).
+    let next: GameState = state;
     const events: SimulationEvent[] = [];
 
     // P8c: clearMarkets FIRST (before business operations) so businesses see

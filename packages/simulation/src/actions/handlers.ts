@@ -75,6 +75,14 @@ import {
   prestigeResetHandler,
   recordHistoricalEventHandler,
 } from '../progression/actions.js';
+import {
+  scheduleEventHandler,
+  cancelEventHandler,
+  triggerEventHandler,
+  resolveEventHandler,
+  setGovernmentPolicyHandler,
+  setMonetaryPolicyHandler,
+} from '../events/actions.js';
 
 export type ActionListener<A extends GameAction = GameAction> = (
   state: GameState,
@@ -426,6 +434,13 @@ export const actionHandlers: Record<string, ActionListener> = {
   'deactivate-trait': deactivateTraitHandler as ActionListener,
   'prestige-reset': prestigeResetHandler as ActionListener,
   'record-historical-event': recordHistoricalEventHandler as ActionListener,
+  // P10b: EventSystem actions (TDD §6.4, GDD §10 / §148-152 / §404-408).
+  'schedule-event': scheduleEventHandler as ActionListener,
+  'cancel-event': cancelEventHandler as ActionListener,
+  'trigger-event': triggerEventHandler as ActionListener,
+  'resolve-event': resolveEventHandler as ActionListener,
+  'set-government-policy': setGovernmentPolicyHandler as ActionListener,
+  'set-monetary-policy': setMonetaryPolicyHandler as ActionListener,
 };
 
 /** Dispatch a GameAction to its handler. Raises UnknownActionError for unknown types. */

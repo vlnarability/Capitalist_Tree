@@ -73,7 +73,6 @@
 import type { GameState, SimulationEvent } from '@capitalist-tree/shared';
 import { BATTERY } from '@capitalist-tree/content';
 import type { System, SystemContext, SystemResult } from './system.js';
-import { deepCopy } from '../deep-copy.js';
 import {
   stepAtmosphere,
   deriveClimateForcing,
@@ -237,7 +236,21 @@ function pushEnvironmentNotifications(
 export const environmentSystem: System = {
   id: 'EnvironmentSystem',
   execute(state: GameState, ctx: SystemContext): SystemResult {
-    const next = deepCopy(state);
+    // Targeted clone (R-P10-6 perf — avoids a full structuredClone of the
+    // entire GameState per tick). EnvironmentSystem mutates many nested fields
+    // of `state.world.environment` in place (forestCoverage, atmosphere,
+    // climateForcing, globalTemperature, seaLevelRise, freshwater, soil,
+    // biodiversity, ecosystemResilience, energy) via reassignment onto the env
+    // object. Only that slice is deep-cloned; the rest is shared by reference
+    // (originalTree, world.weather, automation are read-only here). Pure: the
+    // frozen input is never touched.
+    const next: GameState = {
+      ...state,
+      world: {
+        ...state.world,
+        environment: structuredClone(state.world.environment),
+      },
+    };
     const events: SimulationEvent[] = [];
     const env = next.world.environment;
     // stepSeconds is the per-tick sim seconds; the helpers take seconds and

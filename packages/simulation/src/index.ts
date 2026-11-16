@@ -102,3 +102,16 @@ export * from './business/index.js';
 // assert the research-unlock / achievement-evaluation / prestige-computation
 // invariants (TDD §18.1, §18.4, GDD §11.2 / §11.3 / §12).
 export * from './progression/index.js';
+
+// EventSystem module (P10b — TDD §6.4 Event Scheduling, TDD line 200
+// EventSystem; GDD §10 Environment and Climate, §148-152 influence over
+// regional/global markets/governments/regulations, §404-408 monetary
+// authority; TDD Milestone 9: Regional environments, Governments, Monetary
+// policy, Global markets, Climate feedback, Global objectives). Pure helpers
+// used by the EventSystem (registry slot #12 — the LAST system) and the six
+// event action handlers (schedule-event / cancel-event / trigger-event /
+// resolve-event / set-government-policy / set-monetary-policy). Tests import
+// these directly to assert the scheduler / regional-evolution /
+// global-aggregation / policy-reaction / effect-application invariants (TDD
+// §18.1, §18.4, GDD §10.1 / §10.2 / §10.3 / §148-152 / §404-408).
+export * from './events/index.js';
