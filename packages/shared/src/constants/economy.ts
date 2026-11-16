@@ -407,3 +407,19 @@ export const PROVISIONAL_WELL_BEING_HAPPINESS_WEIGHT_HEALTH = 0.3;
 // P6+ EnvironmentSystem + future social systems will replace this constant
 // with real derivations.
 export const PROVISIONAL_WELL_BEING_HAPPINESS_BASELINE = 0.2;
+
+// ---------------------------------------------------------------------------
+// P11 (W12 / RV5-F2): bounded array caps. Pre-fix, `economy.transactions`
+// and `economy.processedRequestIds` grew unboundedly — a 100-year run at
+// 60s/tick (~52.5M ticks) could accumulate millions of entries, bloating
+// saves and slowing load. The caps keep the most recent N entries (tail);
+// older entries are pruned when the cap is exceeded. The values are generous
+// enough for the UI (TransactionsPanel shows recent history) while keeping
+// save size bounded.
+// ---------------------------------------------------------------------------
+
+/** Max transaction records kept (most recent). @provisional — tunable. */
+export const PROVISIONAL_ECONOMY_MAX_TRANSACTIONS = 5000;
+
+/** Max processed-request-id entries kept (idempotency set, most recent). */
+export const PROVISIONAL_ECONOMY_MAX_PROCESSED_REQUEST_IDS = 10000;

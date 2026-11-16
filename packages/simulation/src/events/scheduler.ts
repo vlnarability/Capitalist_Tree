@@ -50,8 +50,10 @@ import type {
 import {
   PROVISIONAL_EVENT_CHECK_INTERVAL_TICKS,
   PROVISIONAL_SIMULATION_STEP_SECONDS,
+  PROVISIONAL_EVENT_MAX_HISTORY,
 } from '@capitalist-tree/shared';
 import { getEventDefinitionById } from '@capitalist-tree/content';
+import { capTail } from '../deep-copy.js';
 import { applyEventEffects } from './global.js';
 import { UnknownEventDefinitionError, UnknownActiveEventError } from './errors.js';
 
@@ -431,7 +433,11 @@ export function resolveActiveEvent(
       scheduler: {
         ...scheduler,
         active: scheduler.active.filter((e) => e.id !== id),
-        history: [...scheduler.history, historyEntry],
+        // P11 (W12 / RV5-F2): cap history to bound save size on long runs.
+        history: capTail(
+          [...scheduler.history, historyEntry],
+          PROVISIONAL_EVENT_MAX_HISTORY,
+        ),
       },
     },
   };
@@ -611,7 +617,11 @@ export function processScheduledEvents(
         ...scheduler,
         scheduled: remainingScheduled,
         active: activeList,
-        history: [...scheduler.history, ...newHistory],
+        // P11 (W12 / RV5-F2): cap history to bound save size on long runs.
+        history: capTail(
+          [...scheduler.history, ...newHistory],
+          PROVISIONAL_EVENT_MAX_HISTORY,
+        ),
       },
     },
   };

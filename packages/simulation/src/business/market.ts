@@ -68,6 +68,7 @@ import {
   PROVISIONAL_ECONOMY_AUTHORITY_ACCOUNT_ID,
   PROVISIONAL_BUSINESS_MARKET_PRICE_VOLATILITY,
   PROVISIONAL_BUSINESS_MARKET_DEMAND_INJECTION_ENABLED,
+  PROVISIONAL_BUSINESS_MARKET_DEMAND_INJECTION_MAX_PER_CALL_MINOR,
   PROVISIONAL_MARKET_PRICE_EQUIPMENT,
   PROVISIONAL_MARKET_PRICE_LABOR,
   PROVISIONAL_MARKET_PRICE_LAND,
@@ -392,8 +393,8 @@ export function executeMarketTransaction(
   }
 
   const unitPrice = parseAmount(price, 'price');
-  const qty = BigInt(Math.floor(quantity));
-  const total = unitPrice * qty;
+  let qty = BigInt(Math.floor(quantity));
+  let total = unitPrice * qty;
 
   // No-op for zero total (fractional quantity floored to 0, or zero price).
   if (total <= 0n) {
@@ -411,27 +412,63 @@ export function executeMarketTransaction(
 
   // 1. Demand injection: if the buyer is the market account and has
   //    insufficient balance, the authority injects just enough to cover.
+  //    P11 (W13 / RV3-4): the injection is CAPPED at
+  //    PROVISIONAL_BUSINESS_MARKET_DEMAND_INJECTION_MAX_PER_CALL_MINOR per
+  //    call. If the cap is hit, the effective quantity sold is reduced to
+  //    what the buyer can afford after the capped injection (partial sale —
+  //    scarcity is enforced, no InsufficientFundsError thrown). Pre-fix the
+  //    injection was uncapped → infinite external demand masked GDD §8.5.
   if (
     buyerIsMarket &&
     PROVISIONAL_BUSINESS_MARKET_DEMAND_INJECTION_ENABLED
   ) {
     const buyerBalance = getBalance(state, buyer);
     if (buyerBalance < total) {
-      injectedAmount = total - buyerBalance;
-      const injectionRequestId = params.requestId
-        ? `${params.requestId}:demand-injection`
-        : undefined;
-      next = transfer(next, {
-        sourceAccount: PROVISIONAL_ECONOMY_AUTHORITY_ACCOUNT_ID,
-        destinationAccount: buyer,
-        amount: injectedAmount.toString(10),
-        category: CATEGORY_BUSINESS_MARKET_DEMAND,
-        description: `External market demand injection for ${buyer} (sale of ${market.commodityId})`,
-        timestamp,
-        ...(injectionRequestId !== undefined ? { requestId: injectionRequestId } : {}),
-      });
-      txns.push(next.economy.transactions[next.economy.transactions.length - 1]!);
-      demandInjected = true;
+      const needed = total - buyerBalance;
+      // Cap the injection — enforce scarcity.
+      injectedAmount =
+        needed > PROVISIONAL_BUSINESS_MARKET_DEMAND_INJECTION_MAX_PER_CALL_MINOR
+          ? PROVISIONAL_BUSINESS_MARKET_DEMAND_INJECTION_MAX_PER_CALL_MINOR
+          : needed;
+      if (injectedAmount > 0n) {
+        const injectionRequestId = params.requestId
+          ? `${params.requestId}:demand-injection`
+          : undefined;
+        next = transfer(next, {
+          sourceAccount: PROVISIONAL_ECONOMY_AUTHORITY_ACCOUNT_ID,
+          destinationAccount: buyer,
+          amount: injectedAmount.toString(10),
+          category: CATEGORY_BUSINESS_MARKET_DEMAND,
+          description: `External market demand injection for ${buyer} (sale of ${market.commodityId})`,
+          timestamp,
+          ...(injectionRequestId !== undefined ? { requestId: injectionRequestId } : {}),
+        });
+        txns.push(next.economy.transactions[next.economy.transactions.length - 1]!);
+        demandInjected = true;
+      }
+      // If the injection was capped, reduce the effective quantity to what
+      // the buyer can now afford. This enforces scarcity without throwing.
+      const effectiveBalance = buyerBalance + injectedAmount;
+      if (effectiveBalance < total) {
+        const affordableQty = unitPrice > 0n ? effectiveBalance / unitPrice : 0n;
+        if (affordableQty < qty) {
+          // Reduce quantity + recompute total for the reduced sale.
+          // The supply/demand adjustment below uses the reduced qty.
+          qty = affordableQty;
+          total = unitPrice * qty;
+          if (total <= 0n) {
+            // Buyer can't afford even 1 unit after the capped injection —
+            // no sale occurs (full scarcity). Still record the injection txn.
+            return {
+              state: next,
+              transactions: txns,
+              total: '0',
+              demandInjected,
+              injectedAmount: injectedAmount.toString(10),
+            };
+          }
+        }
+      }
     }
   }
 

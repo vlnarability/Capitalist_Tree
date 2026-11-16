@@ -177,6 +177,16 @@ export const PROVISIONAL_MARKET_PRICE_LAND = '100000';
 // in operateBusiness). Production code leaves this `true`.
 export const PROVISIONAL_BUSINESS_MARKET_DEMAND_INJECTION_ENABLED = true;
 
+// P11 (W13 / RV3-4): Per-call cap on the demand-injection backstop. Pre-fix,
+// the injection was uncapped — a single market sale could trigger an
+// arbitrarily large authority issuance (infinite external demand), masking
+// GDD §8.5 scarcity. The cap limits each injection; if the buyer still
+// can't afford the full sale after the capped injection, the quantity sold
+// is reduced to what the buyer can cover (partial sale — scarcity enforced,
+// no InsufficientFundsError thrown). @provisional — tunable; 100000 minor
+// units = $1000 per injection at the default 2-decimal currency.
+export const PROVISIONAL_BUSINESS_MARKET_DEMAND_INJECTION_MAX_PER_CALL_MINOR = 100000n;
+
 // ---------------------------------------------------------------------------
 // GROWTH PRESSURE (P8c — GDD §8.4 Growth Pressure)
 // ---------------------------------------------------------------------------

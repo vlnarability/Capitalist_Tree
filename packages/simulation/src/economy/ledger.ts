@@ -43,7 +43,12 @@ import type {
   GameState,
   TransactionRecord,
 } from '@capitalist-tree/shared';
-import { PROVISIONAL_ECONOMY_AUTHORITY_ACCOUNT_ID } from '@capitalist-tree/shared';
+import {
+  PROVISIONAL_ECONOMY_AUTHORITY_ACCOUNT_ID,
+  PROVISIONAL_ECONOMY_MAX_TRANSACTIONS,
+  PROVISIONAL_ECONOMY_MAX_PROCESSED_REQUEST_IDS,
+} from '@capitalist-tree/shared';
+import { capTail } from '../deep-copy.js';
 import {
   InsufficientFundsError,
   InvalidAmountError,
@@ -176,7 +181,11 @@ export function markRequestProcessed(
     ...state,
     economy: {
       ...state.economy,
-      processedRequestIds: [...state.economy.processedRequestIds, requestId],
+      // P11 (W12 / RV5-F2): cap the idempotency set to bound save size.
+      processedRequestIds: capTail(
+        [...state.economy.processedRequestIds, requestId],
+        PROVISIONAL_ECONOMY_MAX_PROCESSED_REQUEST_IDS,
+      ),
     },
   };
 }
@@ -352,7 +361,12 @@ export function transfer(state: GameState, params: TransferParams): GameState {
     economy: {
       ...state.economy,
       accounts: newAccounts,
-      transactions: [...state.economy.transactions, record],
+      // P11 (W12 / RV5-F2): cap transactions to the most recent N to bound
+      // save size on long runs (100-year run → millions of entries pre-cap).
+      transactions: capTail(
+        [...state.economy.transactions, record],
+        PROVISIONAL_ECONOMY_MAX_TRANSACTIONS,
+      ),
       monetarySupply: newSupply.toString(10),
       totalIssued: newTotalIssued.toString(10),
       totalSinks: newTotalSinks.toString(10),
@@ -379,7 +393,11 @@ export function recordTransaction(
     ...state,
     economy: {
       ...state.economy,
-      transactions: [...state.economy.transactions, record],
+      // P11 (W12 / RV5-F2): cap transactions to bound save size.
+      transactions: capTail(
+        [...state.economy.transactions, record],
+        PROVISIONAL_ECONOMY_MAX_TRANSACTIONS,
+      ),
     },
   };
 }

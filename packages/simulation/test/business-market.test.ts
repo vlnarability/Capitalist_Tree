@@ -358,6 +358,48 @@ describe('executeMarketTransaction — buyer → seller at the clearing price', 
     expect(conservationDiscrepancy(result.state, INITIAL_SUPPLY)).toBe(0n);
   });
 
+  // --------------------------------------------------------------------------
+  // P11 (W13 / RV3-4): demand-injection backstop is capped. Pre-fix, the
+  // injection was uncapped — a single sale could trigger an arbitrarily
+  // large authority issuance (infinite external demand), masking GDD §8.5
+  // scarcity. The cap limits each injection; if the buyer still can't afford
+  // the full sale after the capped injection, the quantity is reduced.
+  // --------------------------------------------------------------------------
+  it('caps the demand injection at PROVISIONAL_BUSINESS_MARKET_DEMAND_INJECTION_MAX_PER_CALL_MINOR', () => {
+    // Sell 20000 water @ 10 = 200000 to the market (balance 0). The needed
+    // injection is 200000, but the cap is 100000. The injection is capped at
+    // 100000, and the quantity is reduced to 100000/10 = 10000 (partial sale).
+    let state = freshState();
+    const sellerId = 'business:seller:0';
+    state = registerAccount(state, {
+      id: sellerId,
+      type: 'business',
+      label: 'Seller',
+      balance: '0',
+    });
+    const result = executeMarketTransaction(state, {
+      marketId: 'market:water',
+      buyer: 'market:water',
+      seller: sellerId,
+      quantity: 20000,
+      price: '10',
+      timestamp: 100,
+      category: 'business-market-sale',
+      description: 'Seller sells 20000 water to market (over cap)',
+    });
+    expect(result.demandInjected).toBe(true);
+    // Injection capped at 100000, not 200000.
+    expect(result.injectedAmount).toBe('100000');
+    // The sale total is reduced to 100000 (10000 units × 10).
+    expect(result.total).toBe('100000');
+    // Seller credited the reduced total (100000), not the full 200000.
+    expect(getBalance(result.state, sellerId)).toBe(100000n);
+    // Market account back to 0 (injected 100000, paid 100000 to seller).
+    expect(getBalance(result.state, 'market:water')).toBe(0n);
+    // Conservation still holds (injection is an issuance; sale is a transfer).
+    expect(conservationDiscrepancy(result.state, INITIAL_SUPPLY)).toBe(0n);
+  });
+
   it('is a no-op for zero quantity (no transactions, no state change)', () => {
     const state = freshState();
     const result = executeMarketTransaction(state, {

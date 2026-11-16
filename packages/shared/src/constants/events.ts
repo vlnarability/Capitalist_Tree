@@ -114,3 +114,14 @@ export const PROVISIONAL_REGIONAL_AGGREGATION_WEIGHTS = 'population' as 'populat
 // ecosystem's collapse is self-reinforcing. PROVISIONAL — final threshold
 // depends on playtesting.
 export const PROVISIONAL_SPECIES_EXTINCTION_THRESHOLD = 0.2;
+
+// ---------------------------------------------------------------------------
+// P11 (W12 / RV5-F2): bounded event history. Pre-fix,
+// `eventState.scheduler.history` grew unboundedly — every concluded event
+// was appended permanently. A long run with frequent stochastic events
+// could accumulate thousands of entries, bloating saves. The cap keeps the
+// most recent N entries (tail); older entries are pruned when exceeded.
+// ---------------------------------------------------------------------------
+
+/** Max concluded-event history entries kept (most recent). @provisional. */
+export const PROVISIONAL_EVENT_MAX_HISTORY = 1000;
