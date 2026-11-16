@@ -25,6 +25,27 @@ import {
 } from '@capitalist-tree/shared';
 import type { BiologyContext } from './types.js';
 import type { EnergyAllocation } from './energy-allocation.js';
+import type { BiologyParameters } from '../progression/trait-effects.js';
+
+/**
+ * The neutral biology parameter set (every multiplier 1.0). Used as the
+ * default when no trait-adjusted parameters are supplied — keeps the
+ * pre-P9c callers' behavior unchanged.
+ */
+const NEUTRAL_PARAMS: BiologyParameters = {
+  growthRateMultiplier: 1,
+  earlyGrowthMultiplier: 1,
+  structuralGrowthMultiplier: 1,
+  maxGrowthMultiplier: 1,
+  productionCapacityMultiplier: 1,
+  energyProductionMultiplier: 1,
+  waterDemandMultiplier: 1,
+  droughtResistanceMultiplier: 1,
+  reservesCapacityMultiplier: 1,
+  pestVulnerabilityMultiplier: 1,
+  frostSurvivalMultiplier: 1,
+  warmClimatePerformanceMultiplier: 1,
+};
 
 /**
  * Asymptotic growth factor in [0, 1] for a single dimension.
@@ -62,14 +83,20 @@ export function growDimension(
   eu: number,
   speciesGrowthRate: number,
   ctx: BiologyContext,
+  /** P11 (W9/RV4-F-M7): trait-adjusted growth multiplier. Defaults to neutral. */
+  params: BiologyParameters = NEUTRAL_PARAMS,
 ): number {
   if (maximum <= 0 || eu <= 0) return current;
   const frac = current / maximum;
   const factor = growthFactor(frac);
+  // P11 (W9): apply the trait-adjusted growthRateMultiplier (e.g. rapid-growth
+  // raises it, pest-resistance lowers it). The multiplier composes onto the
+  // species' baseline growthRate multiplicatively (see trait-effects stacking).
   const delta =
     eu *
     PROVISIONAL_BIOLOGY_GROWTH_CONVERSION_MULTIPLIER *
     speciesGrowthRate *
+    params.growthRateMultiplier *
     factor *
     ctx.stepDays;
   // delta is in metres (height/trunk) or dimensionless (branch/root) per step.
@@ -107,6 +134,8 @@ export function applyGrowth(
   alloc: EnergyAllocation,
   /** Maximum leaves the tree can support this step (from seasons.maxSupportedLeaves). */
   maxLeaves: number,
+  /** P11 (W9/RV4-F-M7): trait-adjusted biology parameters. Defaults to neutral. */
+  params: BiologyParameters = NEUTRAL_PARAMS,
 ): GrowthResult {
   const sp = ctx.species;
   const height = growDimension(
@@ -115,6 +144,7 @@ export function applyGrowth(
     alloc.trunkGrowth,
     sp.growthRate,
     ctx,
+    params,
   );
   const trunkDiameter = growDimension(
     tree.structure.trunkDiameter,
@@ -122,6 +152,7 @@ export function applyGrowth(
     alloc.trunkGrowth,
     sp.growthRate,
     ctx,
+    params,
   );
   const branchDevelopment = growDimension(
     tree.structure.branchDevelopment,
@@ -129,8 +160,9 @@ export function applyGrowth(
     alloc.branchGrowth,
     sp.growthRate,
     ctx,
+    params,
   );
-  const rootDevelopment = tree.roots.development + alloc.rootGrowth * sp.rootDevelopmentRate * ctx.stepDays;
+  const rootDevelopment = tree.roots.development + alloc.rootGrowth * sp.rootDevelopmentRate * params.growthRateMultiplier * ctx.stepDays;
 
   // Leaf growth with accumulator: each step adds the fractional leaf-equivalent
   // of `alloc.leafGrowth` to the existing progress. When progress crosses 1.0,

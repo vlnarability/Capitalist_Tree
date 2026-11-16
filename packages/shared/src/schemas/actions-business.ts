@@ -117,8 +117,17 @@ export const operateBusinessActionSchema = z.object({
   payload: z.object({
     /** Id of the business to operate (must exist in `state.businesses`). */
     businessId: z.string().min(1),
-    /** Simulation second at which the operate step runs. */
-    tick: z.number().int().nonnegative(),
+    /**
+     * Simulation second at which the operate step runs.
+     *
+     * @deprecated P11 (RV3-2): the handler now uses `state.clock.elapsedSeconds`
+     * as the authoritative `now` — a player-supplied `tick` is IGNORED. This
+     * closes the infinite-money exploit where a forward-dated `tick` replayed
+     * at the same engine `now` re-triggered demand-injection. The field is kept
+     * optional for backward compatibility with existing dispatches/tests but
+     * has no effect. Remove in a future schema bump once callers stop sending it.
+     */
+    tick: z.number().int().nonnegative().optional(),
   }),
 });
 export type OperateBusinessAction = z.infer<typeof operateBusinessActionSchema>;
@@ -151,8 +160,14 @@ export const sellBusinessActionSchema = z.object({
   payload: z.object({
     /** Id of the business to liquidate. */
     businessId: z.string().min(1),
-    /** Simulation second at which the sale runs (deterministic event `at`). */
-    tick: z.number().int().nonnegative(),
+    /**
+     * Simulation second at which the sale runs (deterministic event `at`).
+     *
+     * @deprecated P11 (RV3-2/RV3-6): the handler now uses
+     * `state.clock.elapsedSeconds` for the event timestamp. A player-supplied
+     * `tick` is IGNORED. Kept optional for backward compatibility.
+     */
+    tick: z.number().int().nonnegative().optional(),
   }),
 });
 export type SellBusinessAction = z.infer<typeof sellBusinessActionSchema>;
@@ -214,8 +229,14 @@ export const repayLoanActionSchema = z.object({
     liabilityId: z.string().min(1),
     /** Amount to repay (bigint minor units as string, > 0). */
     amount: z.string().min(1),
-    /** Simulation second at which the repayment runs (deterministic event `at`). */
-    tick: z.number().int().nonnegative(),
+    /**
+     * Simulation second at which the repayment runs (deterministic event `at`).
+     *
+     * @deprecated P11 (RV3-2/RV3-6): the handler now uses
+     * `state.clock.elapsedSeconds` for the event timestamp. A player-supplied
+     * `tick` is IGNORED. Kept optional for backward compatibility.
+     */
+    tick: z.number().int().nonnegative().optional(),
   }),
 });
 export type RepayLoanAction = z.infer<typeof repayLoanActionSchema>;

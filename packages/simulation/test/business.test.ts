@@ -782,6 +782,75 @@ describe('actions — operate-business', () => {
       }),
     ).toThrow(UnknownBusinessError);
   });
+
+  // --------------------------------------------------------------------------
+  // P11 — RV3-2 regression: the infinite-money exploit. Before the fix, the
+  // handler used `payload.tick` as `now`, so a player could dispatch
+  // `operate-business` with a forward-dated tick (e.g. STEP) and then
+  // `advance(STEP)` — the BusinessSystem would re-run production at the SAME
+  // `now`, double-injecting demand/revenue. The fix: the handler ignores
+  // `payload.tick` and uses `state.clock.elapsedSeconds` as the authoritative
+  // `now`, so the action and the system never collide on the same timestamp.
+  // --------------------------------------------------------------------------
+  it('ignores a player-supplied forward-dated tick (RV3-2 exploit closed)', () => {
+    let state = freshState();
+    state = engine.executeAction(state, {
+      type: 'purchase-business',
+      payload: { businessTypeId: WATER_EXTRACTION_PLANT.id },
+    }).state;
+    const businessId = state.businesses[0]!.id;
+
+    // Exploit attempt: dispatch operate-business with tick = STEP (forward-
+    // dated), then advance the engine by STEP. Pre-fix, both ran at now=STEP
+    // → double demand-injection. Post-fix, the action runs at now=0 (the
+    // engine's clock) and the advance runs the system at now=STEP — no
+    // collision, no duplicate revenue.
+    const actionResult = engine.executeAction(state, {
+      type: 'operate-business',
+      // Send a forward-dated tick — the handler must IGNORE it.
+      payload: { businessId, tick: STEP * 1000 },
+    });
+    const actionEvents = operatedEvent(actionResult.events);
+
+    // Then advance the engine by one STEP. The BusinessSystem runs once at
+    // now=STEP. Pre-fix this would re-run at the same now=STEP the action
+    // used (because the action used payload.tick=STEP), double-counting.
+    const advanceResult = engine.advance(actionResult.state, STEP);
+    const advanceEvents = advanceResult.events.filter(
+      (e) => e.type === 'business-operated',
+    );
+
+    // The action produced exactly one business-operated event (manual op).
+    expect(actionEvents).toBeDefined();
+    // The advance produced AT MOST one business-operated event for this
+    // business (the system's per-tick run). If the exploit were live, the
+    // action's revenue would have been booked at now=STEP and the system
+    // would book it AGAIN at now=STEP — we'd see duplicate revenue. Assert
+    // conservation still holds (no money created from nothing).
+    expect(
+      conservationDiscrepancy(advanceResult.state, INITIAL_SUPPLY),
+    ).toBe(0n);
+    // Sanity: the advance produced 0 or 1 operated events for this business.
+    const forThisBusiness = advanceEvents.filter(
+      (e) => e.payload?.businessId === businessId,
+    );
+    expect(forThisBusiness.length).toBeLessThanOrEqual(1);
+  });
+
+  it('operates without a tick field at all (payload.tick now optional)', () => {
+    let state = freshState();
+    state = engine.executeAction(state, {
+      type: 'purchase-business',
+      payload: { businessTypeId: WATER_EXTRACTION_PLANT.id },
+    }).state;
+    const businessId = state.businesses[0]!.id;
+    // No tick field — schema accepts it (optional), handler uses engine clock.
+    const result = engine.executeAction(state, {
+      type: 'operate-business',
+      payload: { businessId },
+    });
+    expect(operatedEvent(result.events)).toBeDefined();
+  });
 });
 
 describe('actions — sell-business', () => {

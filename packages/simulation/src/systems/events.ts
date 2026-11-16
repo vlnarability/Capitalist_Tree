@@ -187,8 +187,10 @@ export const eventSystem: System = {
     //    consequences: deforestation → erosion → soilHealth; soil degradation
     //    → reduced productivity; water scarcity → higher resource prices;
     //    biodiversity loss → reduced resilience; species extinction
-    //    irreversible below threshold.
-    const envFeedbackResult = applyEnvironmentalFeedback(next);
+    //    irreversible below threshold. P11 (RV4-F-H2): pass `ctx.stepSeconds`
+    //    so the per-day rates scale by the tick's day-fraction (was unscaled
+    //    → 1440× too fast at a 60s step).
+    const envFeedbackResult = applyEnvironmentalFeedback(next, ctx.stepSeconds);
     next = envFeedbackResult.state;
     events.push(...envFeedbackResult.events);
 

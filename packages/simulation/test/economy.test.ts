@@ -206,6 +206,111 @@ describe('ledger — transfers (TDD §10.4)', () => {
     expect(next.economy.totalIssued).toBe(s.economy.totalIssued);
     expect(next.economy.totalSinks).toBe(s.economy.totalSinks);
   });
+
+  // --------------------------------------------------------------------------
+  // P11 — RV3-1 regression: transfer() idempotency. Pre-fix, `transfer()`
+  // marked the requestId as processed AFTER applying the transfer, with no
+  // pre-check. A replayed transfer with the same requestId re-moved the
+  // money AND re-recorded the transaction (double-spend). The fix adds a
+  // pre-check at the top: if the requestId is already processed, return the
+  // state unchanged.
+  // --------------------------------------------------------------------------
+  it('a replayed transfer with the same requestId is a no-op (RV3-1)', () => {
+    const s = freshState();
+    const playerBefore = getBalance(s, PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID);
+    const externalBefore = getBalance(s, PROVISIONAL_ECONOMY_EXTERNAL_ACCOUNT_ID);
+
+    // First transfer: moves 5000, records the requestId.
+    const first = transfer(s, {
+      sourceAccount: PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID,
+      destinationAccount: PROVISIONAL_ECONOMY_EXTERNAL_ACCOUNT_ID,
+      amount: '5000',
+      category: PROVISIONAL_ECONOMY_CATEGORY_TRANSFER,
+      description: 'first',
+      timestamp: 60,
+      requestId: 'req-replay-1',
+    });
+    expect(getBalance(first, PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID)).toBe(playerBefore - 5000n);
+    expect(getBalance(first, PROVISIONAL_ECONOMY_EXTERNAL_ACCOUNT_ID)).toBe(externalBefore + 5000n);
+    expect(first.economy.transactions).toHaveLength(s.economy.transactions.length + 1);
+    expect(isRequestProcessed(first, 'req-replay-1')).toBe(true);
+
+    // Replay: same requestId. MUST be a no-op — no money moves, no duplicate
+    // transaction, state returned unchanged.
+    const replay = transfer(first, {
+      sourceAccount: PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID,
+      destinationAccount: PROVISIONAL_ECONOMY_EXTERNAL_ACCOUNT_ID,
+      amount: '5000',
+      category: PROVISIONAL_ECONOMY_CATEGORY_TRANSFER,
+      description: 'replay',
+      timestamp: 120,
+      requestId: 'req-replay-1',
+    });
+    // Balances unchanged from `first` (the replay moved nothing).
+    expect(getBalance(replay, PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID)).toBe(playerBefore - 5000n);
+    expect(getBalance(replay, PROVISIONAL_ECONOMY_EXTERNAL_ACCOUNT_ID)).toBe(externalBefore + 5000n);
+    // No duplicate transaction record.
+    expect(replay.economy.transactions).toHaveLength(first.economy.transactions.length);
+    // Referentially identical (the no-op returns the same state object).
+    expect(replay).toBe(first);
+  });
+
+  it('a replayed issuance transfer with the same requestId does not double-issue (RV3-1)', () => {
+    const s = freshState();
+    const playerBefore = getBalance(s, PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID);
+    const supplyBefore = parseAmount(s.economy.monetarySupply);
+
+    const first = transfer(s, {
+      sourceAccount: PROVISIONAL_ECONOMY_AUTHORITY_ACCOUNT_ID,
+      destinationAccount: PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID,
+      amount: '1000',
+      category: PROVISIONAL_ECONOMY_CATEGORY_ISSUANCE,
+      description: 'issuance',
+      timestamp: 60,
+      requestId: 'req-issuance-replay',
+    });
+    expect(getBalance(first, PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID)).toBe(playerBefore + 1000n);
+    expect(parseAmount(first.economy.monetarySupply)).toBe(supplyBefore + 1000n);
+
+    // Replay the issuance — must NOT create another 1000.
+    const replay = transfer(first, {
+      sourceAccount: PROVISIONAL_ECONOMY_AUTHORITY_ACCOUNT_ID,
+      destinationAccount: PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID,
+      amount: '1000',
+      category: PROVISIONAL_ECONOMY_CATEGORY_ISSUANCE,
+      description: 'replay issuance',
+      timestamp: 120,
+      requestId: 'req-issuance-replay',
+    });
+    expect(getBalance(replay, PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID)).toBe(playerBefore + 1000n);
+    expect(parseAmount(replay.economy.monetarySupply)).toBe(supplyBefore + 1000n);
+    expect(replay).toBe(first);
+  });
+
+  it('transfers without a requestId are NOT deduplicated (no idempotency key)', () => {
+    const s = freshState();
+    // No requestId → both transfers apply. This is the documented contract:
+    // idempotency is opt-in via requestId.
+    const first = transfer(s, {
+      sourceAccount: PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID,
+      destinationAccount: PROVISIONAL_ECONOMY_EXTERNAL_ACCOUNT_ID,
+      amount: '5000',
+      category: PROVISIONAL_ECONOMY_CATEGORY_TRANSFER,
+      description: 'first',
+      timestamp: 60,
+    });
+    const second = transfer(first, {
+      sourceAccount: PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID,
+      destinationAccount: PROVISIONAL_ECONOMY_EXTERNAL_ACCOUNT_ID,
+      amount: '5000',
+      category: PROVISIONAL_ECONOMY_CATEGORY_TRANSFER,
+      description: 'second',
+      timestamp: 120,
+    });
+    const playerBefore = getBalance(s, PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID);
+    expect(getBalance(second, PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID)).toBe(playerBefore - 10000n);
+    expect(second.economy.transactions).toHaveLength(s.economy.transactions.length + 2);
+  });
 });
 
 describe('ledger — invalid transactions rejected (TDD §10.4)', () => {

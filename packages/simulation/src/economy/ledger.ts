@@ -266,12 +266,25 @@ function applyTransferToAccounts(
  * updates apply or neither (throws on validation failure, state untouched).
  *
  * If `params.requestId` is set, the transaction is tagged with it AND the
- * requestId is added to `processedRequestIds` (idempotency).
+ * requestId is added to `processedRequestIds` (idempotency). P11 (RV3-1): a
+ * replayed transfer with an already-processed requestId is a no-op — the
+ * state is returned unchanged, no money moves, no duplicate transaction is
+ * recorded. This makes `transfer()` symmetric with `requestIssuance`.
  *
  * Returns the new state. Throws on validation failure.
  */
 export function transfer(state: GameState, params: TransferParams): GameState {
   const amount = validateAmount(params.amount);
+
+  // P11 (RV3-1): idempotency pre-check. If a requestId is supplied AND it has
+  // already been processed, this is a replayed transfer — return the state
+  // unchanged. Pre-fix, `transfer()` only marked the requestId as processed
+  // AFTER applying the transfer, so a replay with the same requestId re-moved
+  // the money and re-recorded the transaction (double-spend). `requestIssuance`
+  // was already replay-safe; this makes `transfer()` symmetric.
+  if (params.requestId !== undefined && isRequestProcessed(state, params.requestId)) {
+    return state;
+  }
 
   if (params.sourceAccount === params.destinationAccount) {
     throw new SelfTransferError(params.sourceAccount);

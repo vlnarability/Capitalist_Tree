@@ -43,6 +43,10 @@ import {
   growthFactor,
   SEVERE_DEFOLIATION_FRACTION,
 } from '../src/biology/index.js';
+import {
+  applyTraitEffects,
+  defaultBiologyParameters,
+} from '../src/progression/trait-effects.js';
 import { Rng } from '../src/rng.js';
 import {
   testTree,
@@ -292,6 +296,101 @@ describe('growth (TDD §7.6) — asymptotic toward species ceiling', () => {
     const initial = SPECIES.initial.leafCapacity;
     expect(computeLeafCapacity(0, initial)).toBe(initial);
     expect(computeLeafCapacity(100, initial)).toBe(initial + 100 * 100);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P11 (W9 / RV4-F-M7): genetic trait effects wired into growth.
+//
+// Pre-P11, `applyTraitEffects` was defined + unit-tested but never called by
+// the BiologySystem — the genetics subsystem was non-functional despite
+// passing its own unit tests. The wiring passes trait-adjusted
+// BiologyParameters into `applyGrowth`, so activating `trait:rapid-growth`
+// (which raises `growthRateMultiplier` by +20% at magnitude 1.0) measurably
+// increases structural growth.
+// ---------------------------------------------------------------------------
+describe('growth — genetic trait effects (P11 W9 / RV4-F-M7)', () => {
+  it('rapid-growth trait measurably increases height growth vs neutral', () => {
+    const ctx = testContext();
+    // A sapling with room to grow (low fraction complete → high growth factor)
+    // so the trait multiplier has visible headroom to act on.
+    const tree = testTree({
+      structure: {
+        height: 0.5,
+        trunkDiameter: 0.05,
+        branchDevelopment: 1,
+        structuralIntegrity: 1,
+      },
+    });
+    const alloc = allocateEnergy(tree, 1000, ctx);
+    const maxLeaves = maxSupportedLeaves(tree);
+
+    // Neutral params (no traits) — the baseline.
+    const neutralGrowth = applyGrowth(tree, ctx, alloc, maxLeaves);
+
+    // rapid-growth at magnitude 1.0 → growthRateMultiplier = 1.2 (+20%).
+    const traitParams = applyTraitEffects(defaultBiologyParameters(), [
+      { traitId: 'trait:rapid-growth', active: true, generation: 1, magnitude: 1 },
+    ]);
+    const traitGrowth = applyGrowth(tree, ctx, alloc, maxLeaves, traitParams);
+
+    // Height grew in both cases (sanity — the test setup produces real growth).
+    expect(neutralGrowth.height).toBeGreaterThan(tree.structure.height);
+    // The trait grew MORE height than neutral — the +20% multiplier is live.
+    expect(traitGrowth.height).toBeGreaterThan(neutralGrowth.height);
+    // The delta is ~20% of the neutral delta (within a tolerance for the
+    // asymptotic cap clamping at the species maximum).
+    const neutralDelta = neutralGrowth.height - tree.structure.height;
+    const traitDelta = traitGrowth.height - tree.structure.height;
+    expect(traitDelta).toBeGreaterThan(neutralDelta * 1.15); // ≥ +15% (allow clamp slack)
+  });
+
+  it('a deactivated rapid-growth trait has NO effect (only expressed traits apply)', () => {
+    const ctx = testContext();
+    const tree = testTree({
+      structure: {
+        height: 0.5,
+        trunkDiameter: 0.05,
+        branchDevelopment: 1,
+        structuralIntegrity: 1,
+      },
+    });
+    const alloc = allocateEnergy(tree, 1000, ctx);
+    const maxLeaves = maxSupportedLeaves(tree);
+
+    const neutralGrowth = applyGrowth(tree, ctx, alloc, maxLeaves);
+    // Same trait, but active: false → applyTraitEffects skips it.
+    const inactiveParams = applyTraitEffects(defaultBiologyParameters(), [
+      { traitId: 'trait:rapid-growth', active: false, generation: 1, magnitude: 1 },
+    ]);
+    const inactiveGrowth = applyGrowth(tree, ctx, alloc, maxLeaves, inactiveParams);
+
+    // Identical to neutral — the deactivated trait contributes nothing.
+    expect(inactiveGrowth.height).toBe(neutralGrowth.height);
+    expect(inactiveGrowth.trunkDiameter).toBe(neutralGrowth.trunkDiameter);
+  });
+
+  it('default params (no traits) produce identical growth to the pre-P11 call', () => {
+    // Backward-compat: callers that omit the params arg get the neutral
+    // default, which must match passing defaultBiologyParameters() explicitly.
+    const ctx = testContext();
+    const tree = testTree({
+      structure: {
+        height: 0.5,
+        trunkDiameter: 0.05,
+        branchDevelopment: 1,
+        structuralIntegrity: 1,
+      },
+    });
+    const alloc = allocateEnergy(tree, 1000, ctx);
+    const maxLeaves = maxSupportedLeaves(tree);
+
+    const omitted = applyGrowth(tree, ctx, alloc, maxLeaves);
+    const explicit = applyGrowth(tree, ctx, alloc, maxLeaves, defaultBiologyParameters());
+
+    expect(omitted.height).toBe(explicit.height);
+    expect(omitted.trunkDiameter).toBe(explicit.trunkDiameter);
+    expect(omitted.branchDevelopment).toBe(explicit.branchDevelopment);
   });
 });
 

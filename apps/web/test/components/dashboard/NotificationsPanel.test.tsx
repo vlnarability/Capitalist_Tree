@@ -109,19 +109,54 @@ describe('NotificationsPanel (P5d) — actionable rendering', () => {
     expect(alerts.length + statuses.length).toBe(2);
   });
 
-  it('renders all six actionable codes when present', () => {
+  it('renders every actionable code when present', () => {
     useGameStore.getState().commitSimState(freshState(), []);
     const codes = Array.from(ACTIONABLE_NOTIFICATION_CODES);
     for (const code of codes) {
       pushNotif('warning', code, `Message for ${code}.`);
     }
     const { getByTestId } = render(<NotificationsPanel />);
-    expect(getByTestId('notifications-panel-count')).toHaveTextContent('6');
+    expect(getByTestId('notifications-panel-count')).toHaveTextContent(
+      String(codes.length),
+    );
     const list = getByTestId('notifications-panel-list');
     for (const code of codes) {
       // Each row's container carries the code as a data attribute.
       expect(list.querySelector(`[data-code="${code}"]`)).not.toBeNull();
     }
+  });
+
+  // --------------------------------------------------------------------------
+  // P11 (RV6-1) regression: the three safety-critical notification codes
+  // (`offline-clock-tampered`, `save-corrupt`, `original-tree-protected`)
+  // MUST render in the panel. Pre-fix, the ACTIONABLE_NOTIFICATION_CODES
+  // whitelist omitted them, so the dispatch wrapper pushed the notifications
+  // but the player never saw them — a silent failure on the most safety-
+  // critical paths (clock tampering, save corruption, original-tree guard).
+  // --------------------------------------------------------------------------
+  it('renders the three safety-critical codes (RV6-1)', () => {
+    useGameStore.getState().commitSimState(freshState(), []);
+    pushNotif('critical', 'offline-clock-tampered', 'Clock moved backward.');
+    pushNotif('critical', 'save-corrupt', 'Save file is corrupt.');
+    pushNotif('warning', 'original-tree-protected', 'Cannot sell the original tree.');
+
+    const { getByTestId } = render(<NotificationsPanel />);
+    expect(getByTestId('notifications-panel-count')).toHaveTextContent('3');
+    const panel = getByTestId('notifications-panel');
+    expect(panel).toHaveTextContent('Clock moved backward.');
+    expect(panel).toHaveTextContent('Save file is corrupt.');
+    expect(panel).toHaveTextContent('Cannot sell the original tree.');
+  });
+
+  it('safety-critical codes render with role="alert" (assertive live region)', () => {
+    useGameStore.getState().commitSimState(freshState(), []);
+    pushNotif('critical', 'save-corrupt', 'Save file is corrupt.');
+    pushNotif('critical', 'offline-clock-tampered', 'Clock moved backward.');
+
+    render(<NotificationsPanel />);
+    // Critical severity → role="alert" so screen readers announce immediately.
+    const alerts = document.querySelectorAll('[role="alert"]');
+    expect(alerts.length).toBe(2);
   });
 
   it('shows the notification message + the code label', () => {

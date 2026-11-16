@@ -69,6 +69,10 @@ import {
   type BiologyContext,
 } from '../biology/index.js';
 import {
+  applyTraitEffects,
+  defaultBiologyParameters,
+} from '../progression/trait-effects.js';
+import {
   PROVISIONAL_BIOLOGY_DEATH_DEFOLIATION_WINDOW_DAYS,
 } from '@capitalist-tree/shared';
 
@@ -154,8 +158,21 @@ export const biologySystem: System = {
     // grown since last tick). Used by budding and reserve update below.
     const capacity = computeReserveCapacity(tree, species);
 
+    // 9b. P11 (W9 / RV4-F-M7): apply genetic trait effects to the biology
+    // multipliers BEFORE growth. `applyTraitEffects` folds each active
+    // (expressed) trait's benefit + trade-off into the parameter set; the
+    // resulting `growthRateMultiplier` scales height/trunk/branch/root growth
+    // in `applyGrowth` below. Pre-P11 this helper was defined + unit-tested
+    // but never called — the genetics subsystem was non-functional despite
+    // passing its own unit tests. With this call, activating `trait:rapid-
+    // growth` measurably raises the growth rate.
+    const traitParams = applyTraitEffects(
+      defaultBiologyParameters(),
+      state.progression.genetics.activeTraits,
+    );
+
     // 10. Apply growth.
-    const growth = applyGrowth(tree, bioCtx, alloc, seasonalMax);
+    const growth = applyGrowth(tree, bioCtx, alloc, seasonalMax, traitParams);
     tree.structure.height = growth.height;
     tree.structure.trunkDiameter = growth.trunkDiameter;
     tree.structure.branchDevelopment = growth.branchDevelopment;
