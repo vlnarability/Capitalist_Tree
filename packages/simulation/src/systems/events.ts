@@ -128,8 +128,10 @@ import {
 export const eventSystem: System = {
   id: 'EventSystem',
   execute(state: GameState, ctx: SystemContext): SystemResult {
-    // Deep-copy on entry — never mutate the input (TDD §4.1, §18.4).
-    let next: GameState = deepCopy(state);
+    // R-P10-6: the event helpers are pure (targeted clones post-b7ab51c), so
+    // the upfront full-state deepCopy is redundant — each helper returns a new
+    // state. The frozen-input purity is preserved by the helpers' own clones.
+    let next: GameState = state;
     const events: SimulationEvent[] = [];
 
     // @provisional RNG fork DEFERRED — see R-P10-N in the file-level doc.
