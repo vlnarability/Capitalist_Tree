@@ -56,15 +56,23 @@
  *     mount / unmount the advanced Panels.
  */
 import { useCallback, useMemo, type ReactElement } from 'react';
-import { DEFAULT_GAME_CONFIG } from '@capitalist-tree/simulation';
+import {
+  DEFAULT_GAME_CONFIG,
+  estimateSustainableHarvest,
+  SECONDS_PER_DAY,
+  type BiologyContext,
+  type TreeSpecies,
+} from '@capitalist-tree/simulation';
 import {
   buildTreeRenderData,
   buildEnvironmentRenderData,
 } from '@capitalist-tree/rendering';
+import { findSpeciesById } from '@capitalist-tree/content';
 import type { GameConfig } from '@capitalist-tree/shared';
 import { useSimulationLoop } from '../hooks/useSimulationLoop';
 import { useGameStore } from '../stores/game-store';
 import { createBrowserStorage } from '../lib/persistence';
+import { harvest } from '../lib/actions';
 import { TreeView } from '../components/tree';
 import { Panel, Button } from '../components/common';
 import {
@@ -145,6 +153,42 @@ export default function HomePage(): ReactElement {
     if (!worldState || !clockState) return null;
     return buildEnvironmentRenderData(worldState, clockState);
   }, [worldState, clockState]);
+
+  // Click-to-harvest handler (GDD §5.4 Harvesting). The tree canvas is the
+  // focal point of the game (GDD §16 rule 13) — making it clickable lets the
+  // player harvest leaves directly from the tree instead of reaching for the
+  // HarvestControls input. A click dispatches the sustainable per-day harvest
+  // estimate (the same number HarvestControls shows as its recommendation);
+  // the engine caps the actual harvest by available foliage AND the species'
+  // `maximumHarvestFraction`, so a click on a defoliated or dead tree is a
+  // safe no-op rather than an over-harvest. Returns a no-op when the tree is
+  // not actionable (no sim state, dead tree, or estimate unavailable) so the
+  // click never throws; TreeView stays interactive because the handler is
+  // always defined once the page is past the loading gate.
+  const dispatch = useGameStore((s) => s.dispatch);
+  const onTreeClick = useCallback((): void => {
+    const tree = treeState;
+    const clock = clockState;
+    const world = worldState;
+    if (!tree || !clock || !world || !tree.alive) return;
+    const species: TreeSpecies | undefined = findSpeciesById(tree.speciesId);
+    if (!species) return;
+    const ctx: BiologyContext = {
+      now: clock.elapsedSeconds,
+      stepSeconds: SECONDS_PER_DAY,
+      stepDays: 1,
+      season: clock.season,
+      timeOfDay: clock.timeOfDay,
+      species,
+      environment: world.environment,
+    };
+    const estimate = estimateSustainableHarvest(tree, ctx);
+    // Always dispatch at least 1 leaf on a click so the player gets feedback
+    // even when the sustainable estimate rounds to 0 (young tree / winter).
+    // The engine still caps to actual foliage, so this can't over-harvest.
+    const requested = Math.max(1, estimate.leavesPerDay);
+    dispatch(harvest(tree.id, requested));
+  }, [treeState, clockState, worldState, dispatch]);
 
   // New-Game handler: wraps `loop.newGame` with a fresh `GameConfig` stamped
   // with the current wall-clock. (`Date.now()` here is the spec-allowed
@@ -256,6 +300,7 @@ export default function HomePage(): ReactElement {
                 tree={treeRenderData}
                 environment={environmentRenderData}
                 className="block w-full"
+                onHarvest={onTreeClick}
               />
             </div>
             <div className="mt-3">

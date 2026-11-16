@@ -22,7 +22,7 @@
 // @vitest-environment happy-dom
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { cleanup, render } from '@testing-library/react';
+import { cleanup, render, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { TreeView } from './TreeView';
 import type {
@@ -184,5 +184,93 @@ describe('TreeView (P4d React wrapper) — smoke', () => {
     } finally {
       errorSpy.mockRestore();
     }
+  });
+
+  // --------------------------------------------------------------------------
+  // Click-to-harvest (P11 — GDD §5.4 Harvesting). The tree canvas is the
+  // focal point of the game; making it clickable lets the player harvest
+  // leaves directly. These tests verify the wiring contract: when an
+  // `onHarvest` handler is provided, the canvas becomes an interactive
+  // button (pointer cursor, role=button, focusable, Enter/Space trigger);
+  // when no handler is provided, it stays a non-interactive image.
+  // --------------------------------------------------------------------------
+
+  it('calls onHarvest when the canvas is clicked', () => {
+    const onHarvest = vi.fn();
+    const { container } = render(
+      <TreeView
+        tree={TREE_FIXTURE}
+        environment={ENV_FIXTURE}
+        onHarvest={onHarvest}
+      />,
+    );
+    const canvas = container.querySelector('canvas');
+    expect(canvas).not.toBeNull();
+    fireEvent.click(canvas as HTMLElement);
+    expect(onHarvest).toHaveBeenCalledTimes(1);
+  });
+
+  it('becomes role="button" with a pointer cursor when onHarvest is wired', () => {
+    const onHarvest = vi.fn();
+    const { container } = render(
+      <TreeView
+        tree={TREE_FIXTURE}
+        environment={ENV_FIXTURE}
+        onHarvest={onHarvest}
+      />,
+    );
+    const canvas = container.querySelector('canvas');
+    expect(canvas).toHaveAttribute('role', 'button');
+    expect(canvas).toHaveAttribute(
+      'aria-label',
+      'Capitalist tree — click to harvest leaves',
+    );
+    expect(canvas).toHaveAttribute('tabindex', '0');
+    expect(canvas?.style.cursor).toBe('pointer');
+  });
+
+  it('stays role="img" (non-interactive) when no onHarvest is wired', () => {
+    const { container } = render(
+      <TreeView tree={TREE_FIXTURE} environment={ENV_FIXTURE} />,
+    );
+    const canvas = container.querySelector('canvas');
+    expect(canvas).toHaveAttribute('role', 'img');
+    expect(canvas).toHaveAttribute(
+      'aria-label',
+      'Procedural capitalist-tree visualization',
+    );
+    expect(canvas).not.toHaveAttribute('tabindex');
+    expect(canvas?.style.cursor).toBe('default');
+  });
+
+  it('triggers onHarvest on Enter and Space (keyboard accessibility)', () => {
+    const onHarvest = vi.fn();
+    const { container } = render(
+      <TreeView
+        tree={TREE_FIXTURE}
+        environment={ENV_FIXTURE}
+        onHarvest={onHarvest}
+      />,
+    );
+    const canvas = container.querySelector('canvas') as HTMLElement;
+    canvas.focus();
+    fireEvent.keyDown(canvas, { key: 'Enter' });
+    fireEvent.keyDown(canvas, { key: ' ' });
+    expect(onHarvest).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not trigger onHarvest on unrelated keys', () => {
+    const onHarvest = vi.fn();
+    const { container } = render(
+      <TreeView
+        tree={TREE_FIXTURE}
+        environment={ENV_FIXTURE}
+        onHarvest={onHarvest}
+      />,
+    );
+    const canvas = container.querySelector('canvas') as HTMLElement;
+    fireEvent.keyDown(canvas, { key: 'a' });
+    fireEvent.keyDown(canvas, { key: 'ArrowDown' });
+    expect(onHarvest).not.toHaveBeenCalled();
   });
 });
