@@ -72,7 +72,6 @@
 import type { GameState, SimulationEvent } from '@capitalist-tree/shared';
 import { PROVISIONAL_ACHIEVEMENT_CHECK_INTERVAL_TICKS } from '@capitalist-tree/shared';
 import type { System, SystemContext, SystemResult } from './system.js';
-import { deepCopy } from '../deep-copy.js';
 import { checkAchievements } from '../progression/achievements.js';
 
 /**
@@ -90,8 +89,6 @@ function shouldCheckAchievementsTick(ctx: SystemContext): boolean {
 export const progressionSystem: System = {
   id: 'ProgressionSystem',
   execute(state: GameState, ctx: SystemContext): SystemResult {
-    // Deep-copy on entry — never mutate the input (TDD §4.1, §18.4).
-    let next: GameState = deepCopy(state);
     const events: SimulationEvent[] = [];
 
     // @provisional RNG fork DEFERRED — see R-P9-1 in the file-level doc. The
@@ -114,18 +111,23 @@ export const progressionSystem: System = {
     // check runs regardless so achievements seed + evaluate promptly; on
     // later ticks it runs every PROVISIONAL_ACHIEVEMENT_CHECK_INTERVAL_TICKS.
     const trackedEmpty =
-      next.progression.achievements.tracked.length === 0;
+      state.progression.achievements.tracked.length === 0;
     const shouldCheck = trackedEmpty || shouldCheckAchievementsTick(ctx);
     if (!shouldCheck) {
-      return { state: next, events };
+      // No-op: nothing is mutated this tick, so the input is returned
+      // unchanged (R-P10-6 perf — was a full structuredClone per tick even on
+      // throttled-off ticks). Pure: the frozen input is never touched.
+      return { state, events };
     }
 
     // ctx.now is the new clock time for this step (the TimeSystem already
     // advanced it). Achievements stamp `unlockedAt` against this tick.
-    const result = checkAchievements(next, ctx.now);
-    next = result.state;
+    // checkAchievements is pure: it clones the progression slice internally
+    // (via seedTrackedAchievements) and only reads the rest of the state, so
+    // no full-state deepCopy is needed on entry (R-P10-6 perf).
+    const result = checkAchievements(state, ctx.now);
     events.push(...result.events);
 
-    return { state: next, events };
+    return { state: result.state, events };
   },
 };

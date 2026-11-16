@@ -50,7 +50,6 @@ import {
 } from '@capitalist-tree/shared';
 import { WEATHER_EVENT_MAP } from '@capitalist-tree/content';
 import type { System, SystemContext, SystemResult } from './system.js';
-import { deepCopy } from '../deep-copy.js';
 import {
   computeNutrientBalance,
   applyNutrientBalance,
@@ -72,7 +71,22 @@ const SECONDS_PER_DAY = 24 * 60 * 60;
 export const resourceSystem: System = {
   id: 'ResourceSystem',
   execute(state: GameState, ctx: SystemContext): SystemResult {
-    const next = deepCopy(state);
+    // Targeted clone (R-P10-6 perf — avoids a full structuredClone of the
+    // entire GameState per tick). ResourceSystem mutates two slices in place
+    // (via the applyWaterBalance / applyNutrientBalance helpers + direct
+    // writes): `state.world.environment` (env.soil.{soilWater,nutrients,
+    // organicMatter,health}, env.freshwater.{groundwater,availability}) and
+    // `state.originalTree` (tree.water.stored, tree.nutrients). Those two
+    // slices are deep-cloned; the rest is shared by reference. Pure: the frozen
+    // input is never touched.
+    const next: GameState = {
+      ...state,
+      world: {
+        ...state.world,
+        environment: structuredClone(state.world.environment),
+      },
+      originalTree: structuredClone(state.originalTree),
+    };
     const events: SimulationEvent[] = [];
     const env = next.world.environment;
     const weather = next.world.weather;

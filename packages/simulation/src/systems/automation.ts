@@ -43,14 +43,25 @@
 import type { GameState, SimulationEvent } from '@capitalist-tree/shared';
 import { SOLAR_PANEL } from '@capitalist-tree/content';
 import type { System, SystemContext, SystemResult } from './system.js';
-import { deepCopy } from '../deep-copy.js';
 import { evaluatePolicy, executeAutomation } from '../automation/index.js';
 import { generateSolarEnergy } from '../environment/index.js';
 
 export const automationSystem: System = {
   id: 'AutomationSystem',
   execute(state: GameState, ctx: SystemContext): SystemResult {
-    let next = deepCopy(state);
+    // Targeted clone (R-P10-6 perf — avoids a full structuredClone of the
+    // entire GameState per tick). AutomationSystem never mutates state in
+    // place: the solar pre-pass builds a fresh state via spreads, and
+    // executeAutomation (slot #9 fire path) is pure — it dispatches the
+    // automation's action through the normal action pipeline (each handler
+    // clones the slice it modifies) and rebuilds state via spreads for the
+    // pillar-4 trade-offs (resource consumption, energy debit, environmental
+    // impact, maintenance transfer, lastRunAt). So the input can be referenced
+    // directly. Pure: the frozen input is never touched (the first
+    // reassignment that writes — the solar pre-pass spread — produces a fresh
+    // top-level object; on the no-automation path nothing is mutated and the
+    // input is returned unchanged).
+    let next = state;
     const events: SimulationEvent[] = [];
 
     // No automations — fast path.

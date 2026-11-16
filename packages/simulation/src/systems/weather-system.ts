@@ -46,7 +46,6 @@ import {
   WEATHER_EVENT_MAP,
 } from '@capitalist-tree/content';
 import type { System, SystemContext, SystemResult } from './system.js';
-import { deepCopy } from '../deep-copy.js';
 import { Rng } from '../rng.js';
 import { pickNextCondition } from '../weather/markov.js';
 import {
@@ -58,7 +57,17 @@ import {
 export const weatherSystem: System = {
   id: 'WeatherSystem',
   execute(state: GameState, ctx: SystemContext): SystemResult {
-    const next = deepCopy(state);
+    // Targeted clone (R-P10-6 perf — avoids a full structuredClone of the
+    // entire GameState per tick). WeatherSystem writes only
+    // `state.world.weather` (reassigned wholesale) and `state.rngStreams`
+    // (reassigned wholesale). Only `world` is shallow-cloned so the weather
+    // reassignment lands on a fresh object; `rngStreams` is reassigned on the
+    // fresh top-level object. Everything else is shared by reference. Pure:
+    // the frozen input is never touched.
+    const next: GameState = {
+      ...state,
+      world: { ...state.world },
+    };
     const events: SimulationEvent[] = [];
 
     // 1. Restore or initialize the weather RNG sub-stream.
