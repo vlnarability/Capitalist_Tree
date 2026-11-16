@@ -324,6 +324,14 @@ export function initializeState(config: GameConfig): GameState {
       // P3a: cumulative currency removed from circulation via explicit
       // monetary operations (taxes, fees, central-bank interventions).
       totalSinks: '0',
+      // P11 (W14 / RV3-3): the starting money supply, persisted so
+      // `conservationDiscrepancy()` is computable on a loaded save (without
+      // the original config) and non-default starts compute correct
+      // monetary-conditions. Equals `config.startingPersonalCash` at init —
+      // the conservation invariant treats the starting cash as `initialSupply`,
+      // NOT as `totalIssued` (the player's starting money is pre-existing, not
+      // authority-issued).
+      initialSupply: config.startingPersonalCash,
     },
     // P8a (v10): businesses starts empty — the BusinessSystem + purchase-business
     // action handler land in P8b. When a business entry IS instantiated (P8b's

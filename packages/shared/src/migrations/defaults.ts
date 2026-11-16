@@ -1212,3 +1212,69 @@ const v12ToV13: Migration = (state: GameState): GameState => {
 };
 
 migrations.register(12, v12ToV13);
+
+// P11 (W14 / RV3-3): v13 -> v14 migration. Adds `economy.initialSupply` —
+// the starting money supply, persisted so `conservationDiscrepancy()` is
+// computable on a LOADED save (the caller no longer needs the original
+// config) and so non-default starts compute correct monetary-conditions
+// (the market `monetaryConditionsFactor` divides
+// `monetarySupply / initialSupply`).
+//
+// Backfill strategy: derive `initialSupply` from the conservation invariant
+//   `sum(accounts.balance) + totalSinks - totalIssued === initialSupply`
+// Rearranged: `initialSupply = sum(accounts.balance) + totalSinks - totalIssued`.
+// This is EXACT for any conservation-correct save (the invariant holds by
+// construction in the ledger). For a save with a conservation discrepancy it
+// gives the best estimate. When the accounts ledger is absent/empty (a
+// pre-P3a save that never migrated the accounts, or a hand-built state), it
+// falls back to `'50000'` — the default `startingPersonalCash`.
+//
+// Idempotent: a v14 save with `initialSupply` already present keeps its value
+// (hand-patched values are preserved, never overwritten). Pure: does NOT
+// touch `originalTree.id` / `originalTree.isOriginal` (GDD §16.1/16.2).
+const v13ToV14: Migration = (state: GameState): GameState => {
+  const out: GameState = { ...state };
+  const economy = out.economy as {
+    accounts?: { balance?: string }[];
+    totalSinks?: string;
+    totalIssued?: string;
+    initialSupply?: string;
+  };
+
+  // Already present (idempotent) — keep the hand-patched value.
+  if (economy.initialSupply !== undefined) {
+    return out;
+  }
+
+  const accounts = Array.isArray(economy.accounts) ? economy.accounts : [];
+  const sinks = BigInt(economy.totalSinks ?? '0');
+  const issued = BigInt(economy.totalIssued ?? '0');
+
+  // Sum account balances (defensive: skip malformed entries).
+  let sumBalances = 0n;
+  for (const a of accounts) {
+    const bal = a?.balance;
+    if (typeof bal === 'string' && /^\d+$/.test(bal)) {
+      sumBalances += BigInt(bal);
+    }
+  }
+
+  // initialSupply = sum(balances) + totalSinks - totalIssued (conservation).
+  // Fall back to the default starting cash when the ledger is empty/absent
+  // (a pre-P3a save or a hand-built state with no accounts).
+  let initialSupply: string;
+  if (accounts.length === 0) {
+    initialSupply = '50000';
+  } else {
+    const derived = sumBalances + sinks - issued;
+    // If the save has a conservation discrepancy that drives the derived
+    // value negative (shouldn't happen for a real save, but be defensive),
+    // fall back to the default rather than persisting a negative supply.
+    initialSupply = derived >= 0n ? derived.toString(10) : '50000';
+  }
+
+  (out.economy as { initialSupply: string }).initialSupply = initialSupply;
+  return out;
+};
+
+migrations.register(13, v13ToV14);

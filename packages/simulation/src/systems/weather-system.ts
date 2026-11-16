@@ -152,15 +152,45 @@ export const weatherSystem: System = {
     //    + R-P7-2, and the updated R-P2-1 in docs/resources-weather.md.
 
     // 8. Emit weather-damage if applicable.
-    if (shouldEmitDamage(eventDef, intensity)) {
+    //    P11 (W4 / RV2-1): APPLY the damage to the tree, not just emit an event.
+    //    Pre-fix, the `weather-damage` event was emitted but no consumer
+    //    applied it to `tree.damage` — weather damage was dead code (GDD §5.6
+    //    "Extreme environmental conditions" + "Physical destruction" death
+    //    causes were unreachable). The BiologySystem (slot #3, runs AFTER this
+    //    system) reads `tree.damage` for stress/health/death, so writing the
+    //    damage entry here makes frost/storm/heat-wave actually wound the tree.
+    //
+    //    Gated on `conditionChanged` so damage fires once per weather EPISODE
+    //    (when the weather transitions INTO a damage-capable condition), not
+    //    every tick the condition persists. This matches the GDD §5.6 semantics
+    //    (a frost EVENT damages the tree) and bounds the damage array — without
+    //    this gate, a multi-day frost would append one entry per tick (O(n²)
+    //    array growth over long runs). The severity captures the episode's
+    //    damage magnitude; the BiologySystem's age-based prune (slot #3) cleans
+    //    up entries older than the defoliation window.
+    if (conditionChanged && shouldEmitDamage(eventDef, intensity)) {
       const severity = computeDamageSeverity(eventDef, intensity);
+      // Targeted clone of originalTree + its damage array (the rest of state
+      // is already shared by reference from the line-67 shallow clone).
+      const damageType = eventDef.damageType!;
+      next.originalTree = {
+        ...next.originalTree,
+        damage: [
+          ...next.originalTree.damage,
+          {
+            type: `weather:${damageType}`,
+            severity,
+            appliedAt: ctx.now,
+          },
+        ],
+      };
       events.push({
         type: 'weather-damage',
         at: ctx.now,
         payload: {
           condition: nextCondition,
           intensity,
-          damageType: eventDef.damageType!,
+          damageType,
           severity,
           treeIds: [next.originalTree.id],
         },

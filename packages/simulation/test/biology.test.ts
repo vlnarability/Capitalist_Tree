@@ -135,6 +135,66 @@ describe('photosynthesis — Liebig limiting factors (TDD §7.2)', () => {
     expect(cold).toBeGreaterThan(0);
     expect(cold).toBeLessThan(warm);
   });
+
+  // --------------------------------------------------------------------------
+  // P11 (W4 / RV2-2): photosynthesis reads the current WEATHER temperature
+  // (which fluctuates with frost/heat-wave conditions), not the slowly-
+  // evolving climate baseline (`environment.globalTemperature`). Pre-fix, a
+  // frost event dropped `weather.temperature` below the species' minimum but
+  // photosynthesis kept reading the ~18 °C climate average — frost never
+  // reduced photosynthesis and GDD §5.6 "extreme environmental conditions"
+  // was unreachable.
+  // --------------------------------------------------------------------------
+  it('reads weather.temperature for the Liebig factor (frost reduces production)', () => {
+    const tree = testTree({ water: { stored: 50, capacity: 50 } });
+    // Climate average = 18 °C (the neutralEnvironment default). Weather is a
+    // mild frost at 9.5 °C — above the species minimum (5 °C) but well below
+    // the optimum (22 °C). The temperature factor at 9.5 °C is ~0.26 vs ~0.76
+    // at 18 °C, so production should drop substantially.
+    const ctxNoWeather = testContext(); // no weather → falls back to globalTemp
+    const ctxFrost = {
+      ...testContext(),
+      weather: {
+        condition: 'frost' as const,
+        temperature: 9.5,
+        intensity: 0.8,
+        prevCondition: null,
+        daysInCondition: 0,
+      },
+    };
+    const baselineProduction = photosynthesisForStep(tree, ctxNoWeather);
+    const frostProduction = photosynthesisForStep(tree, ctxFrost);
+    expect(frostProduction).toBeGreaterThan(0); // still above 0 (9.5 > minimum 5)
+    expect(frostProduction).toBeLessThan(baselineProduction); // reduced vs climate avg
+  });
+
+  it('weather temperature at/below species minimum → zero photosynthesis', () => {
+    const tree = testTree({ water: { stored: 50, capacity: 50 } });
+    // 4 °C — below White Oak's minimum (5 °C). temperatureFactor = 0.
+    const ctxBelowMinimum = {
+      ...testContext(),
+      weather: {
+        condition: 'frost' as const,
+        temperature: 4,
+        intensity: 0.9,
+        prevCondition: null,
+        daysInCondition: 0,
+      },
+    };
+    const production = photosynthesisForStep(tree, ctxBelowMinimum);
+    expect(production).toBe(0);
+  });
+
+  it('falls back to environment.globalTemperature when weather is absent (backward compat)', () => {
+    const tree = testTree({ water: { stored: 50, capacity: 50 } });
+    // No weather field on the context → uses environment.globalTemperature.
+    // This preserves the pre-P11 behavior for callers that build a context
+    // without weather (e.g. unit tests, hand-built states).
+    const ctx = testContext(); // no weather
+    const production = photosynthesisForStep(tree, ctx);
+    // At globalTemp=18 °C (in range, above minimum), production > 0.
+    expect(production).toBeGreaterThan(0);
+  });
 });
 
 describe('temperature factor', () => {

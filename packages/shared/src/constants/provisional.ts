@@ -394,7 +394,15 @@ export const PROVISIONAL_INITIAL_INTEREST_RATE = 0;
 // speciesExtinctionRate 0) so a migrated save starts consistent. The
 // migration is pure and does NOT touch `originalTree.id` or
 // `originalTree.isOriginal` (GDD §16.1/16.2).
-export const CURRENT_SCHEMA_VERSION = 13;
+//
+// v13 -> v14 (P11 / W14): adds `economy.initialSupply` — the starting money
+// supply persisted so `conservationDiscrepancy()` is computable on a loaded
+// save and non-default starts compute correct monetary-conditions. The
+// migration backfills it from the conservation invariant
+// `sum(accounts.balance) + totalSinks - totalIssued` (exact for any
+// conservation-correct save), falling back to `'50000'` (the default
+// `startingPersonalCash`) when the ledger is absent/empty.
+export const CURRENT_SCHEMA_VERSION = 14;
 
 // Used by migration tests to exercise the v0 -> v1 path. Real saves are
 // always written at CURRENT_SCHEMA_VERSION.

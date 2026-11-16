@@ -210,9 +210,18 @@ export function photosynthesisForStep(tree: TreeState, ctx: BiologyContext): num
   if (ctx.species.deciduous && ctx.season === 'winter') return 0;
 
   const dailyWater = dailyWaterNeed(tree, ctx.species);
+  // P11 (W4 / RV2-2): use the current WEATHER temperature (which fluctuates
+  // with frost/heat-wave conditions) for the temperature Liebig factor, not
+  // the slowly-evolving climate baseline (`environment.globalTemperature`).
+  // Pre-fix, a frost event dropped `weather.temperature` below the species'
+  // minimum but photosynthesis kept reading the ~14 °C climate average — so
+  // frost never reduced photosynthesis and GDD §5.6 "extreme environmental
+  // conditions" was unreachable. Fall back to the climate value when weather
+  // is absent (backward compat for callers that build a context without it).
+  const temperatureC = ctx.weather?.temperature ?? ctx.environment.globalTemperature;
   const liebig = Math.min(
     lightFactor(ctx.timeOfDay),
-    temperatureFactor(ctx.environment.globalTemperature, ctx.species.temperatureRange),
+    temperatureFactor(temperatureC, ctx.species.temperatureRange),
     waterFactor(tree, dailyWater),
     co2Factor(ctx.environment.atmosphere.co2Concentration),
     nutrientFactor(tree.nutrients, ctx.species.nutrientRequirement),

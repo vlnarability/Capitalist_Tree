@@ -1164,6 +1164,91 @@ describe('MigrationRegistry', () => {
     expect(out).toEqual(v13State);
   });
 
+  // --------------------------------------------------------------------------
+  // P11 (W14 / RV3-3): v13 -> v14 migration backfills `economy.initialSupply`.
+  // --------------------------------------------------------------------------
+  it('v13 -> v14 migration backfills economy.initialSupply from the conservation invariant', () => {
+    // A v13 save predates the initialSupply field. The migration derives it
+    // from `sum(accounts.balance) + totalSinks - totalIssued` — exact for any
+    // conservation-correct save.
+    const v13State = freshState();
+    const { initialSupply: _is, ...withoutInitialSupply } = v13State.economy;
+    void _is;
+    const v13Save = {
+      ...v13State,
+      economy: withoutInitialSupply,
+    } as unknown as GameState;
+    const out = migrations.migrate(v13Save, 13, CURRENT_SCHEMA_VERSION);
+    // The default fresh state has startingPersonalCash = '50000' in the player
+    // account, totalIssued = 0, totalSinks = 0 → derived initialSupply = 50000.
+    expect(out.economy.initialSupply).toBe('50000');
+  });
+
+  it('v13 -> v14 migration derives correct initialSupply after issuance + sinks', () => {
+    // A v13 save that has been played: the authority issued 30000 (totalIssued)
+    // and 10000 was sunk (totalSinks). The accounts now sum to
+    // 50000 + 30000 - 10000 = 70000. The conservation invariant says
+    // initialSupply = sum(balances) + totalSinks - totalIssued
+    //               = 70000 + 10000 - 30000 = 50000 (the original start).
+    const v13State = freshState();
+    // Hand-build a played economy state without initialSupply.
+    const playerAccount = v13State.economy.accounts.find(
+      (a) => a.id === 'account:player:personal',
+    )!;
+    const externalAccount = v13State.economy.accounts.find(
+      (a) => a.id === 'account:external:default',
+    )!;
+    const playedAccounts = [
+      { ...playerAccount, balance: '60000' }, // grew via issuance
+      { ...externalAccount, balance: '10000' }, // received some
+    ];
+    const { initialSupply: _is, ...econRest } = v13State.economy;
+    void _is;
+    const played = {
+      ...v13State,
+      economy: {
+        ...econRest,
+        accounts: playedAccounts,
+        monetarySupply: '70000',
+        totalIssued: '30000',
+        totalSinks: '10000',
+      },
+    } as unknown as GameState;
+    const out = migrations.migrate(played, 13, CURRENT_SCHEMA_VERSION);
+    // 60000 + 10000 + 10000 - 30000 = 50000 — the original starting supply.
+    expect(out.economy.initialSupply).toBe('50000');
+  });
+
+  it('v13 -> v14 migration is idempotent on a v14 save (hand-patched initialSupply preserved)', () => {
+    // A v14 save with a non-default initialSupply (e.g. a game started with
+    // 100000) must keep its value — the migration never overwrites.
+    const v14State = freshState();
+    const handPatched = {
+      ...v14State,
+      economy: { ...v14State.economy, initialSupply: '100000' },
+    } as unknown as GameState;
+    const out = migrations.migrate(handPatched, 13, CURRENT_SCHEMA_VERSION);
+    expect(out.economy.initialSupply).toBe('100000');
+  });
+
+  it('v13 -> v14 migration falls back to default when the accounts ledger is empty', () => {
+    // A malformed/pre-P3a save with no accounts ledger: the migration cannot
+    // derive initialSupply from the invariant, so it falls back to '50000'.
+    const v13State = freshState();
+    const { initialSupply: _is, ...econRest } = v13State.economy;
+    void _is;
+    const noAccounts = {
+      ...v13State,
+      economy: { ...econRest, accounts: [], totalIssued: '0', totalSinks: '0' },
+    } as unknown as GameState;
+    const out = migrations.migrate(noAccounts, 13, CURRENT_SCHEMA_VERSION);
+    expect(out.economy.initialSupply).toBe('50000');
+  });
+
+  it('v14 is the current schema version', () => {
+    expect(CURRENT_SCHEMA_VERSION).toBe(14);
+  });
+
   it('v12 -> v13 migration is a defensive no-op on the environment derivation when world.environment is missing', () => {
     // Defensive: a malformed save lacking world.environment (so the migration
     // cannot derive aggregatedIndicators from it) must not crash. The

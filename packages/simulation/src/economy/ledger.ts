@@ -148,7 +148,13 @@ export function conservationDiscrepancy(
   const balances = sumBalances(state);
   const sinks = parseAmount(state.economy.totalSinks, 'totalSinks');
   const issued = parseAmount(state.economy.totalIssued, 'totalIssued');
-  const initial = parseAmount(initialSupply, 'initialSupply');
+  // P11 (W14 / RV3-3): prefer the persisted `state.economy.initialSupply`
+  // (the authoritative starting supply, survived save/load). Fall back to the
+  // caller-supplied param for backward compatibility with pre-v14 saves /
+  // hand-built states that haven't migrated yet. This makes the function
+  // usable on a LOADED save without the original config.
+  const persistedInitial = state.economy.initialSupply ?? initialSupply;
+  const initial = parseAmount(persistedInitial, 'initialSupply');
   return balances + sinks - initial - issued;
 }
 
