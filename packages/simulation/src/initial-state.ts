@@ -433,6 +433,12 @@ export function initializeState(config: GameConfig): GameState {
         },
         globalMarketIndices: {},
       },
+      // P11 (W8 / RV4-F-H5): persisted objective completion. Starts empty —
+      // objectives are evaluated fresh each tick by the EventSystem; the
+      // first time an objective is achieved it's recorded here permanently.
+      objectives: {
+        completed: [],
+      },
     },
   };
 

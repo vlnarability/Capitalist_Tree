@@ -222,17 +222,42 @@ export const eventSystem: System = {
     // 11. evaluateObjectives (read-only) on the post-tick state + diff against
     //     the pre-tick map → emit `objective-achieved` notifications for
     //     objectives that flipped false → true this tick (GDD §12 endings).
+    //     P11 (W8 / RV4-F-H5): persist completed objectives in
+    //     `eventState.objectives.completed` so the notification does NOT
+    //     re-fire on threshold re-crossings or after save/load. Only objectives
+    //     NOT already in `completed` emit a notification; all newly-achieved
+    //     ids are appended to `completed` (permanent record).
     const objectivesAfter = evaluateObjectives(next);
-    for (const id of diffObjectives(objectivesBefore, objectivesAfter)) {
-      events.push({
-        type: 'notification',
-        at: ctx.now,
-        payload: {
-          severity: 'critical',
-          code: 'objective-achieved',
-          message: `Objective achieved: ${objectivesAfter[id].description}`,
+    const alreadyCompleted = new Set(next.eventState.objectives.completed);
+    const newlyAchieved = diffObjectives(objectivesBefore, objectivesAfter);
+    for (const id of newlyAchieved) {
+      // Only notify the FIRST time an objective is achieved (not on every
+      // threshold re-crossing after save/load).
+      if (!alreadyCompleted.has(id)) {
+        events.push({
+          type: 'notification',
+          at: ctx.now,
+          payload: {
+            severity: 'critical',
+            code: 'objective-achieved',
+            message: `Objective achieved: ${objectivesAfter[id].description}`,
+          },
+        });
+      }
+    }
+    // Persist: append any newly-achieved ids to the permanent completed set.
+    if (newlyAchieved.length > 0) {
+      const completedSet = new Set(next.eventState.objectives.completed);
+      for (const id of newlyAchieved) completedSet.add(id);
+      next = {
+        ...next,
+        eventState: {
+          ...next.eventState,
+          objectives: {
+            completed: [...completedSet],
+          },
         },
-      });
+      };
     }
 
     return { state: next, events };

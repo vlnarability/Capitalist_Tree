@@ -232,6 +232,10 @@ export function baseState(overrides: Partial<GameState> = {}): GameState {
         },
         globalMarketIndices: {},
       },
+      // P11 (W8): persisted objective completion (v15+).
+      objectives: {
+        completed: [],
+      },
     },
   };
   return { ...base, ...overrides };

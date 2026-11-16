@@ -1204,7 +1204,12 @@ const v12ToV13: Migration = (state: GameState): GameState => {
           globalMarketIndices: {},
         };
 
-    eventState = { scheduler, global };
+    // P11 (W8): spread `existing` to preserve forward-compatible fields the
+    // v12→v13 migration doesn't know about (e.g. `objectives` added in v15).
+    // Pre-fix this rebuilt eventState as `{ scheduler, global }` explicitly,
+    // which dropped any unknown fields — breaking idempotency for v15+ saves
+    // migrated through the v12→v13 hop.
+    eventState = { ...existing, scheduler, global };
   }
 
   (out as { eventState: unknown }).eventState = eventState;
@@ -1278,3 +1283,31 @@ const v13ToV14: Migration = (state: GameState): GameState => {
 };
 
 migrations.register(13, v13ToV14);
+
+// P11 (W8 / RV4-F-H5): v14 -> v15 migration. Adds
+// `eventState.objectives.completed` — persisted end-game objective completion.
+// Pre-v15, objectives were recomputed fresh each tick with no persistence, so
+// the `objective-achieved` notification could re-fire on threshold re-crossings
+// and after save/load. The fix records completed objectives permanently.
+//
+// Backfill: `{ completed: [] }`. Objectives re-evaluate on the first post-load
+// tick; any that are still achieved get recorded then. A save that already has
+// a hand-patched `objectives` block keeps its values (idempotent).
+//
+// Pure: does NOT touch `originalTree.id` / `originalTree.isOriginal`.
+const v14ToV15: Migration = (state: GameState): GameState => {
+  const out: GameState = { ...state };
+  const eventState = out.eventState as { objectives?: { completed?: string[] } };
+
+  // Already present (idempotent) — keep the hand-patched value.
+  if (eventState.objectives !== undefined) {
+    return out;
+  }
+
+  (out.eventState as { objectives: { completed: string[] } }).objectives = {
+    completed: [],
+  };
+  return out;
+};
+
+migrations.register(14, v14ToV15);

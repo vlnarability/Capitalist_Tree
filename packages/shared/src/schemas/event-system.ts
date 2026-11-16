@@ -496,6 +496,23 @@ export const eventStateSchema = z.object({
     },
     globalMarketIndices: {},
   })),
+  /**
+   * P11 (W8 / RV4-F-H5): persisted end-game objective completion. Once an
+   * objective is achieved it is recorded here permanently (even if the
+   * current state later drops below the threshold) so:
+   *   - the `objective-achieved` notification does NOT re-fire on every
+   *     threshold re-crossing (and does NOT re-fire after save/load);
+   *   - a future Objectives panel can show permanent achievement.
+   * Pre-v15 saves did not persist this; the v14→v15 migration backfills
+   * `{ completed: [] }` (objectives re-evaluate fresh on the first post-load
+   * tick, and any that are still achieved get recorded then).
+   */
+  objectives: z
+    .object({
+      /** Objective ids that have EVER been achieved (GDD §12 endings). */
+      completed: z.array(z.string()).default([]),
+    })
+    .default({ completed: [] }),
 });
 export type EventState = z.infer<typeof eventStateSchema>;
 

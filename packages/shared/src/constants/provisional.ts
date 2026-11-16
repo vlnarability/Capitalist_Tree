@@ -402,7 +402,13 @@ export const PROVISIONAL_INITIAL_INTEREST_RATE = 0;
 // `sum(accounts.balance) + totalSinks - totalIssued` (exact for any
 // conservation-correct save), falling back to `'50000'` (the default
 // `startingPersonalCash`) when the ledger is absent/empty.
-export const CURRENT_SCHEMA_VERSION = 14;
+//
+// v14 -> v15 (P11 / W8): adds `eventState.objectives.completed` — persisted
+// end-game objective completion so the `objective-achieved` notification does
+// not re-fire on threshold re-crossings or after save/load. The migration
+// backfills `{ completed: [] }` (objectives re-evaluate fresh on the first
+// post-load tick).
+export const CURRENT_SCHEMA_VERSION = 15;
 
 // Used by migration tests to exercise the v0 -> v1 path. Real saves are
 // always written at CURRENT_SCHEMA_VERSION.

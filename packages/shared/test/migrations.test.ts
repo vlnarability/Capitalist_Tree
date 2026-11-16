@@ -1245,8 +1245,8 @@ describe('MigrationRegistry', () => {
     expect(out.economy.initialSupply).toBe('50000');
   });
 
-  it('v14 is the current schema version', () => {
-    expect(CURRENT_SCHEMA_VERSION).toBe(14);
+  it('v15 is the current schema version', () => {
+    expect(CURRENT_SCHEMA_VERSION).toBe(15);
   });
 
   it('v12 -> v13 migration is a defensive no-op on the environment derivation when world.environment is missing', () => {
