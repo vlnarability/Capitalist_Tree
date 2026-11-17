@@ -94,6 +94,8 @@ import {
   CurrencyCosmeticPicker,
 } from '../components/economy';
 import { AutomationPanel } from '../components/automation';
+import { BusinessesPanel } from '../components/business';
+import { ProgressionPanel } from '../components/progression';
 import { OfflineModal, CatchUpProgressBar } from '../components/offline';
 
 // ----------------------------------------------------------------------------
@@ -371,6 +373,17 @@ export default function HomePage(): ReactElement {
               (the AutomationSystem owns evaluation + execution). */}
           <Panel title="Automation" icon="🤖" hint="GDD §9 / TDD §12">
             <AutomationPanel />
+          </Panel>
+          {/* P11-E (Phase 3 game-loop gap): bridges the previously-unreachable
+              purchase-business / operate-business / sell-business GameActions
+              to the UI. Pre-P11-E Phase 3 "Expansion" was entirely unwired. */}
+          <Panel title="Businesses" icon="🏭" hint="GDD §8 / Phase 3">
+            <BusinessesPanel />
+          </Panel>
+          {/* P11-E (Phase 5 game-loop gap): bridges unlock-research /
+              activate-trait / deactivate-trait / prestige-reset to the UI. */}
+          <Panel title="Progression" icon="🧬" hint="GDD §11 / Phase 5">
+            <ProgressionPanel />
           </Panel>
         </div>
       ) : null}

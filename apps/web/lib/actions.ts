@@ -36,15 +36,22 @@ import type {
   ApplyFertilizerAction,
   ApplyWaterAction,
   AutomationPolicy,
+  ActivateTraitAction,
+  DeactivateTraitAction,
   DisableAutomationAction,
   EnableAutomationAction,
   HarvestLeavesAction,
   LivingExpenseCategory,
+  OperateBusinessAction,
   PayExpenseAction,
+  PrestigeResetAction,
   PurchaseAction,
+  PurchaseBusinessAction,
   PurchaseEquipmentAction,
+  SellBusinessAction,
   SetAutomationPolicyAction,
   SetSpeedAction,
+  UnlockResearchAction,
 } from '@capitalist-tree/shared';
 import { PROVISIONAL_SPEED_MULTIPLIERS, PROVISIONAL_SPEED_PAUSED } from '@capitalist-tree/shared';
 import { PROVISIONAL_UI_DEFAULT_SPEED } from './constants';
@@ -315,4 +322,110 @@ export function setAutomationPolicy(
     throw new Error('setAutomationPolicy: automationId must be a non-empty string.');
   }
   return { type: 'set-automation-policy', payload: { automationId, policy } };
+}
+
+// ----------------------------------------------------------------------------
+// P11-E (W6 game-loop gap): business action factories (Phase 3 — Expansion).
+// Bridges the previously-unreachable purchase-business / operate-business /
+// sell-business GameActions to the UI. Pre-P11-E these actions had handlers
+// but zero UI dispatchers (Phase 3 was entirely unwired).
+// ----------------------------------------------------------------------------
+
+/**
+ * Build a `purchase-business` action (P8b — GDD §8.1/§8.2). Debits
+ * `definition.baseCost` from `player:personal`, registers the business
+ * account, + appends a `BusinessState` (with the definition's
+ * `baseEnvironmentalImpact`). `businessTypeId` MUST match a content
+ * definition in `packages/content/src/businesses/`.
+ */
+export function purchaseBusiness(businessTypeId: string): PurchaseBusinessAction {
+  if (!businessTypeId) {
+    throw new Error('purchaseBusiness: businessTypeId must be a non-empty string.');
+  }
+  return { type: 'purchase-business', payload: { businessTypeId } };
+}
+
+/**
+ * Build an `operate-business` action (P8b — GDD §8.2/§8.4). Runs one
+ * production cycle for the business. P11 (RV3-2): the handler ignores any
+ * player-supplied tick + uses `state.clock.elapsedSeconds`. P11 (W6): the
+ * handler also bridges the business's environmentalImpact to the home region.
+ */
+export function operateBusiness(businessId: string): OperateBusinessAction {
+  if (!businessId) {
+    throw new Error('operateBusiness: businessId must be a non-empty string.');
+  }
+  return { type: 'operate-business', payload: { businessId } };
+}
+
+/**
+ * Build a `sell-business` action (P8b — TDD §11 valuation). Liquidates the
+ * business: settles liabilities from the business's cash + the valuation
+ * proceeds (valuation × (1 − HAIRCUT)), credits the residue to `player:personal`,
+ * removes the business + its account.
+ */
+export function sellBusiness(businessId: string): SellBusinessAction {
+  if (!businessId) {
+    throw new Error('sellBusiness: businessId must be a non-empty string.');
+  }
+  return { type: 'sell-business', payload: { businessId } };
+}
+
+// ----------------------------------------------------------------------------
+// P11-E (Phase 5 game-loop gap): progression action factories (Generational).
+// Bridges the previously-unreachable unlock-research / activate-trait /
+// deactivate-trait / prestige-reset GameActions to the UI. Pre-P11-E Phase 5
+// "Generational Progression" was entirely unwired.
+// ----------------------------------------------------------------------------
+
+/**
+ * Build an `unlock-research` action (P9a — GDD §11.2). Spends the
+ * genetic-legacy cost + marks the research node as unlocked. `tick` is the
+ * sim second (the caller passes `state.clock.elapsedSeconds`).
+ */
+export function unlockResearch(researchNodeId: string, tick: number): UnlockResearchAction {
+  if (!researchNodeId) {
+    throw new Error('unlockResearch: researchNodeId must be a non-empty string.');
+  }
+  return { type: 'unlock-research', payload: { researchNodeId, tick } };
+}
+
+/**
+ * Build an `activate-trait` action (P9a — GDD §11.4). Activates an acquired
+ * trait (expresses its effects in the BiologySystem via `applyTraitEffects`).
+ * `magnitude` in [0, 1] controls expression strength.
+ */
+export function activateTrait(traitId: string, magnitude?: number): ActivateTraitAction {
+  if (!traitId) {
+    throw new Error('activateTrait: traitId must be a non-empty string.');
+  }
+  return {
+    type: 'activate-trait',
+    payload: magnitude !== undefined ? { traitId, magnitude } : { traitId },
+  };
+}
+
+/**
+ * Build a `deactivate-trait` action (P9a — GDD §11.4). Deactivates an
+ * active trait (stops expressing its effects).
+ */
+export function deactivateTrait(traitId: string): DeactivateTraitAction {
+  if (!traitId) {
+    throw new Error('deactivateTrait: traitId must be a non-empty string.');
+  }
+  return { type: 'deactivate-trait', payload: { traitId } };
+}
+
+/**
+ * Build a `prestige-reset` action (P9a — GDD §11.1/§11.3). Starts a new
+ * generation: converts progress into genetic-legacy points, resets the tree
+ * to a sapling of the new species, + carries acquired traits forward.
+ * `newTreeSpeciesId` MUST match a registered species. `tick` is the sim
+ * second.
+ */
+export function prestigeReset(newTreeSpeciesId: string, tick: number): PrestigeResetAction {
+  if (!newTreeSpeciesId) {
+    throw new Error('prestigeReset: newTreeSpeciesId must be a non-empty string.');
+  }
+  return { type: 'prestige-reset', payload: { newTreeSpeciesId, tick } };
 }
