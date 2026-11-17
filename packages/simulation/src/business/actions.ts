@@ -76,6 +76,7 @@ import {
 } from '../economy/ledger.js';
 import { operateBusiness } from './production.js';
 import { sumLiabilities, parseBusinessAmount } from './accounting.js';
+import { applyPlayerEnvironmentalImpact } from '../environment/player-impact.js';
 import {
   UnknownBusinessError,
   UnknownBusinessTypeError,
@@ -352,7 +353,19 @@ export const operateBusinessHandler: ActionListener<OperateBusinessAction> = (
     now,
     dtSeconds: PROVISIONAL_SIMULATION_STEP_SECONDS,
   });
-  return { state: result.state, events: result.events };
+  // P11 (W6 / RV4-F-H3): bridge the business's environmental impact to the
+  // player's home region. Pre-fix, BusinessState.environmentalImpact was dead
+  // data (captured at purchase but never applied). Now each operation nudges
+  // the home region's industrialActivity/pollution/forestCoverage/
+  // biodiversity, which evolveRegions propagates + aggregateGlobalIndicators
+  // rolls into the global averages. This makes player extraction visibly move
+  // regional indicators (W6) and makes the last-tree objective reachable
+  // (W5 — aggregateActivity can now rise ≥ 0.6 without stochastic events).
+  const withImpact = applyPlayerEnvironmentalImpact(
+    result.state,
+    business.environmentalImpact,
+  );
+  return { state: withImpact, events: result.events };
 };
 
 /**

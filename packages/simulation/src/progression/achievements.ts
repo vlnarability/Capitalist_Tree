@@ -217,6 +217,15 @@ export function evaluateAchievementProgress(
 ): number {
   const clamp = (v: number): number => Math.max(0, Math.min(1, v));
   const env = state.world.environment;
+  // P11 (W7 / RV4-F-H4): read the SAME P10 aggregatedIndicators slice the
+  // objectives read, so achievements + objectives for "great-restoration" /
+  // "last-tree" / "natural-balance" measure identical state. Pre-fix,
+  // achievements read P7 `env.biodiversity.index` (tree-stress-driven) while
+  // objectives read P10 `aggregatedIndicators.avgBiodiversity`
+  // (regional-industry-driven) — they could disagree completely. With W6
+  // making regional indicators respond to player actions, the P10 slice is
+  // now the authoritative player-driven measure.
+  const indicators = state.eventState.global.aggregatedIndicators;
   const prestige = state.progression.prestige;
   const genetics = state.progression.genetics;
 
@@ -238,11 +247,12 @@ export function evaluateAchievementProgress(
     }
 
     case 'achievement:great-restoration': {
-      const bio = clamp(env.biodiversity.index / PROVISIONAL_ACHIEVEMENT_RESTORATION_THRESHOLD);
-      const forest = clamp(env.forestCoverage / PROVISIONAL_ACHIEVEMENT_RESTORATION_THRESHOLD);
-      const soil = clamp(env.soil.health / PROVISIONAL_ACHIEVEMENT_RESTORATION_THRESHOLD);
+      // P11 (W7): read P10 aggregatedIndicators (same slice as the objective).
+      const bio = clamp(indicators.avgBiodiversity / PROVISIONAL_ACHIEVEMENT_RESTORATION_THRESHOLD);
+      const forest = clamp(indicators.avgForestCoverage / PROVISIONAL_ACHIEVEMENT_RESTORATION_THRESHOLD);
+      const soil = clamp(indicators.avgSoilHealth / PROVISIONAL_ACHIEVEMENT_RESTORATION_THRESHOLD);
       const resilience = clamp(
-        env.ecosystemResilience / PROVISIONAL_ACHIEVEMENT_RESTORATION_THRESHOLD,
+        indicators.ecosystemResilience / PROVISIONAL_ACHIEVEMENT_RESTORATION_THRESHOLD,
       );
       return clamp(Math.min(bio, forest, soil, resilience));
     }
@@ -250,20 +260,25 @@ export function evaluateAchievementProgress(
     case 'achievement:last-tree': {
       // Destruction: low biodiversity + low forest + high degradation + high
       // extraction. Each sub-fraction inverts so "worse env = higher progress".
+      // P11 (W7): biodiversity + forest read P10 aggregatedIndicators (same
+      // slice as the objective). landUse.degraded + totalSinks stay P7/P3
+      // (no P10 equivalent yet — @provisional).
+      const bioIndex = indicators.avgBiodiversity;
       const bioFrac =
-        env.biodiversity.index <= PROVISIONAL_ACHIEVEMENT_DESTRUCTION_BIODIVERSITY_MAX
+        bioIndex <= PROVISIONAL_ACHIEVEMENT_DESTRUCTION_BIODIVERSITY_MAX
           ? 1
           : clamp(
               1 -
-                (env.biodiversity.index - PROVISIONAL_ACHIEVEMENT_DESTRUCTION_BIODIVERSITY_MAX) /
+                (bioIndex - PROVISIONAL_ACHIEVEMENT_DESTRUCTION_BIODIVERSITY_MAX) /
                   (1 - PROVISIONAL_ACHIEVEMENT_DESTRUCTION_BIODIVERSITY_MAX),
             );
+      const forestIndex = indicators.avgForestCoverage;
       const forestFrac =
-        env.forestCoverage <= PROVISIONAL_ACHIEVEMENT_DESTRUCTION_FOREST_MAX
+        forestIndex <= PROVISIONAL_ACHIEVEMENT_DESTRUCTION_FOREST_MAX
           ? 1
           : clamp(
               1 -
-                (env.forestCoverage - PROVISIONAL_ACHIEVEMENT_DESTRUCTION_FOREST_MAX) /
+                (forestIndex - PROVISIONAL_ACHIEVEMENT_DESTRUCTION_FOREST_MAX) /
                   (1 - PROVISIONAL_ACHIEVEMENT_DESTRUCTION_FOREST_MAX),
             );
       const degradedFrac = clamp(
@@ -287,8 +302,10 @@ export function evaluateAchievementProgress(
       );
       // P9b proxies "ecosystem self-sustaining" by ecosystemResilience (a real
       // year-over-year stability check is deferred — R-P9-6, @provisional).
+      // P11 (W7): read P10 aggregatedIndicators.ecosystemResilience (same slice
+      // as the objective).
       const sustainFrac = clamp(
-        env.ecosystemResilience / PROVISIONAL_ACHIEVEMENT_RESTORATION_THRESHOLD,
+        indicators.ecosystemResilience / PROVISIONAL_ACHIEVEMENT_RESTORATION_THRESHOLD,
       );
       return clamp(Math.min(aliveFrac, securityFrac, sustainFrac));
     }

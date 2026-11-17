@@ -125,3 +125,17 @@ export const PROVISIONAL_SPECIES_EXTINCTION_THRESHOLD = 0.2;
 
 /** Max concluded-event history entries kept (most recent). @provisional. */
 export const PROVISIONAL_EVENT_MAX_HISTORY = 1000;
+
+// ---------------------------------------------------------------------------
+// P11 (W6 / RV4-F-H3): player→regional bridge. The player's land is modeled
+// via P7 `world.environment` (single-block), but the P10 regional model
+// (`eventState.global.regions`) has no player region reference. W6 designates
+// the first seeded region (the most populous) as the player's "home region"
+// — player extraction/restoration/emissions actions write environmental
+// deltas there, which `evolveRegions` then propagates to pollution/soil/
+// water/forest/biodiversity and `aggregateGlobalIndicators` rolls into the
+// global averages. No schema migration needed (convention by id).
+// ---------------------------------------------------------------------------
+
+/** The region player actions affect (extraction/restoration/emissions). */
+export const PLAYER_HOME_REGION_ID = 'region:temperate-lowlands';

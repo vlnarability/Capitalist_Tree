@@ -61,6 +61,7 @@ import {
   GenerationTooEarlyError,
 } from '../src/index.js';
 import type { SystemContext } from '../src/systems/system.js';
+import { evaluateObjectives } from '../src/events/objectives.js';
 import { Rng } from '../src/rng.js';
 import { DEFAULT_GAME_CONFIG } from '../src/initial-state.js';
 import {
@@ -389,14 +390,17 @@ describe('achievements — evaluateAchievementProgress', () => {
     const def = getAchievementById('achievement:great-restoration')!;
     const restored: GameState = {
       ...state,
-      world: {
-        ...state.world,
-        environment: {
-          ...state.world.environment,
-          biodiversity: { ...state.world.environment.biodiversity, index: 0.9 },
-          forestCoverage: 0.9,
-          soil: { ...state.world.environment.soil, health: 0.9 },
-          ecosystemResilience: 0.9,
+      eventState: {
+        ...state.eventState,
+        global: {
+          ...state.eventState.global,
+          aggregatedIndicators: {
+            ...state.eventState.global.aggregatedIndicators,
+            avgBiodiversity: 0.9,
+            avgForestCoverage: 0.9,
+            avgSoilHealth: 0.9,
+            ecosystemResilience: 0.9,
+          },
         },
       },
     };
@@ -404,6 +408,46 @@ describe('achievements — evaluateAchievementProgress', () => {
     // At baseline (0.8 / 0.3 / 1 / 0.8) progress is partial (forest 0.3/0.8).
     const baselineProgress = evaluateAchievementProgress(def, state);
     expect(baselineProgress).toBeLessThan(1);
+  });
+
+  // --------------------------------------------------------------------------
+  // P11 (W7 / RV4-F-H4): achievements + objectives read the SAME P10
+  // aggregatedIndicators slice. Pre-fix, achievements read P7
+  // `env.biodiversity.index` (tree-stress-driven) while objectives read P10
+  // `aggregatedIndicators.avgBiodiversity` (regional-industry-driven) — they
+  // could disagree completely. Now both read the P10 slice.
+  // --------------------------------------------------------------------------
+  it('W7: great-restoration achievement + objective read the same biodiversity slice', () => {
+    const state = freshState();
+    const achDef = getAchievementById('achievement:great-restoration')!;
+    // Patch ONLY the P10 aggregatedIndicators (not P7 env). Both the achievement
+    // and the objective should respond to this slice.
+    const restored: GameState = {
+      ...state,
+      eventState: {
+        ...state.eventState,
+        global: {
+          ...state.eventState.global,
+          aggregatedIndicators: {
+            ...state.eventState.global.aggregatedIndicators,
+            avgBiodiversity: 0.9,
+            avgForestCoverage: 0.9,
+            avgSoilHealth: 0.9,
+            ecosystemResilience: 0.9,
+          },
+        },
+      },
+    };
+    const achProgress = evaluateAchievementProgress(achDef, restored);
+    const objMap = evaluateObjectives(restored);
+    // Both read avgBiodiversity=0.9 (above the 0.8 restoration threshold).
+    // The achievement progress is 1 (all four sub-fractions = 0.9/0.8 > 1).
+    expect(achProgress).toBe(1);
+    // The objective's great-restoration progress should also be high (it reads
+    // the same avgBiodiversity + per-region guard). The objective additionally
+    // requires every region's biodiversity ≥ 0.8, which the seeded defaults
+    // don't meet — but the progress should be > 0 (the indicator gate passes).
+    expect(objMap['great-restoration'].progress).toBeGreaterThan(0);
   });
 
   it('industrial achievement progress rises with distinct supply-chain levels owned', () => {

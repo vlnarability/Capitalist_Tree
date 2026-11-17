@@ -212,11 +212,21 @@ function evaluateLastTree(state: GameState): ObjectiveResult {
   const globalBiodiversity = indicators.avgBiodiversity;
   const globalForest = indicators.avgForestCoverage;
   // High extraction = aggregate industrialActivity above 0.6. @provisional.
+  // P11 (W5/W7): use the POPULATION-WEIGHTED aggregate (matching the markets
+  // system's `aggregateIndustrialActivity` + GDD §10.2 regional aggregation),
+  // not the unweighted average. Pre-fix the unweighted average meant raising
+  // one region to 1.0 only gave 0.475 — the last-tree objective was
+  // unreachable even with W6's player→regional bridge. Population-weighted,
+  // the home region (50% weight) at 1.0 gives 0.655 ≥ 0.6.
   const regions = state.eventState.global.regions;
-  const aggregateActivity =
-    regions.length > 0
-      ? regions.reduce((a, r) => a + r.industrialActivity, 0) / regions.length
-      : 0;
+  let weightSum = 0;
+  let activityAcc = 0;
+  for (const r of regions) {
+    const w = Math.max(1, r.population);
+    activityAcc += r.industrialActivity * w;
+    weightSum += w;
+  }
+  const aggregateActivity = weightSum > 0 ? activityAcc / weightSum : 0;
   const highExtraction = aggregateActivity >= 0.6;
   const achieved =
     globalBiodiversity <= PROVISIONAL_DESTRUCTION_THRESHOLD &&

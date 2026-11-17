@@ -68,6 +68,7 @@ import {
   layOffEmployeesHandler,
   setBusinessStatusHandler,
 } from '../business/actions.js';
+import { applyPlayerEnvironmentalImpact } from '../environment/player-impact.js';
 import {
   unlockResearchHandler,
   activateTraitHandler,
@@ -253,7 +254,22 @@ const harvestLeavesHandler: ActionListener<HarvestLeavesAction> = (state, action
   // per-leaf tuning — the actual stress computation lives in harvestLeaves).
   void PROVISIONAL_BIOLOGY_HARVEST_STRESS_PER_LEAF_FRACTION;
 
-  return { state: next, events };
+  // P11 (W6 / RV4-F-H3): harvesting leaves is a light extraction — it nudges
+  // the home region's industrialActivity (the player is harvesting the tree's
+  // production) and slightly reduces forestCoverage (canopy thinning). The
+  // impact is small per-leaf so casual harvesting is sustainable, but
+  // aggressive harvesting contributes to regional deforestation pressure.
+  const leavesHarvested = action.payload.requestedLeaves ?? 1;
+  const withRegionalImpact = applyPlayerEnvironmentalImpact(next, {
+    carbonEmissions: 0,
+    waterConsumption: 0,
+    soilDegradation: 0,
+    pollution: 0.002 * leavesHarvested,
+    landDisturbance: 0.003 * leavesHarvested,
+    biodiversityImpact: 0.001 * leavesHarvested,
+  });
+
+  return { state: withRegionalImpact, events };
 };
 
 /**
