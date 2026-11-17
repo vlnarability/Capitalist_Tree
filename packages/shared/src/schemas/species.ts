@@ -74,6 +74,22 @@ export const treeSpeciesSchema = z.object({
   maximumHeight: z.number().positive(),
   /** Maximum trunk diameter (m). */
   maximumTrunkDiameter: z.number().positive(),
+  /**
+   * DR-4: fraction of the structural (trunkGrowth) energy bucket allocated to
+   * HEIGHT growth; the remainder (1 − split) goes to trunk DIAMETER growth.
+   * Range [0, 1]. Defaults to 0.5 (equal split). Species-specific: girth-heavy
+   * species (oaks) set < 0.5; tall/fast species set > 0.5. This decouples
+   * height from diameter (RV2-3: they were driven by the same bucket).
+   */
+  heightDiameterSplit: z.number().min(0).max(1).default(0.5),
+  /**
+   * DR-4 allometric constraint: the maximum sustainable height/diameter
+   * (slenderness) ratio. A tree cannot grow taller than
+   * `trunkDiameter × maxSlendernessRatio` — height growth is clamped when the
+   * ratio is exceeded, so the tree must add girth before adding height.
+   * Defaults to 50 (a generous bound; real trees range ~20–80 by species).
+   */
+  maxSlendernessRatio: z.number().positive().default(50),
   /** Maximum branch development score (dimensionless). */
   maximumBranchDevelopment: z.number().positive(),
   /** Root development rate multiplier. */

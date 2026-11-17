@@ -77,14 +77,14 @@ export function growthFactor(fractionComplete: number): number {
  *
  * Returns the new value, clamped at `maximum` (NEVER exceeds the ceiling).
  *
- * P11 (W27 / RV2-3): height growth is COUPLED to the other dimensions via the
- * shared asymptotic `growthFactor` (1 − frac)^EXPONENT. Biologically, height
- * has a distinct S-curve (fast juvenile extension, then plateau) that differs
- * from trunk-diameter/branch/root growth. A dedicated `heightGrowth` bucket
- * with its own curve + species parameter is DEFERRED to a later phase
- * (@provisional) — for now the shared factor is a reasonable approximation
- * (both height and trunk slow near their ceilings). Documented here so the
- * coupling is explicit, not accidental.
+ * DR-4 (was P11 W27 / RV2-3): height + diameter now grow from INDEPENDENT
+ * energy buckets (`alloc.heightGrowth` vs `alloc.trunkGrowth`), split per the
+ * species' `heightDiameterSplit`. The shared asymptotic `growthFactor`
+ * (1 − frac)^EXPONENT still governs each dimension's curve (both height + trunk
+ * slow near their ceilings) — a dedicated height-specific S-curve (fast juvenile
+ * extension, then plateau) remains @provisional for a later phase. The coupling
+ * RV2-3 flagged (both driven by one bucket) is resolved; the shared growth-factor
+ * approximation is documented as a separate, intentional simplification.
  */
 export function growDimension(
   current: number,
@@ -147,10 +147,15 @@ export function applyGrowth(
   params: BiologyParameters = NEUTRAL_PARAMS,
 ): GrowthResult {
   const sp = ctx.species;
-  const height = growDimension(
+  // DR-4: height + diameter grow from INDEPENDENT energy buckets. Height uses
+  // alloc.heightGrowth; diameter uses alloc.trunkGrowth (diameter-only now).
+  // This decouples them (RV2-3: both used alloc.trunkGrowth) — a tree can now
+  // grow taller while adding relatively little girth, or vice versa, per the
+  // species' heightDiameterSplit.
+  const heightGrown = growDimension(
     tree.structure.height,
     sp.maximumHeight,
-    alloc.trunkGrowth,
+    alloc.heightGrowth,
     sp.growthRate,
     ctx,
     params,
@@ -162,6 +167,21 @@ export function applyGrowth(
     sp.growthRate,
     ctx,
     params,
+  );
+  // DR-4 allometric constraint: a tree cannot grow taller than
+  // `trunkDiameter × maxSlendernessRatio`. If height growth would push the
+  // ratio above the species' sustainable bound, cap height growth at the bound
+  // — the tree must add girth before it can add height (a spindly tree is
+  // structurally unstable). The cap never SHRINKS the tree: if the current
+  // height already exceeds the cap (an already-slender tree), height growth is
+  // simply halted (max with current height) until diameter catches up.
+  // Guarded against zero diameter (a sapling with no measured girth yet is
+  // exempt until it has some).
+  const slendernessCap =
+    trunkDiameter > 0 ? trunkDiameter * sp.maxSlendernessRatio : Infinity;
+  const height = Math.max(
+    tree.structure.height,
+    Math.min(heightGrown, slendernessCap),
   );
   const branchDevelopment = growDimension(
     tree.structure.branchDevelopment,

@@ -145,8 +145,34 @@ the height/diameter independence refactor is now a prerequisite (P12-A-pre),
 + the 2nd species follows only after the schema is corrected. The current
 coupled height/diameter model (RV2-3: no `heightGrowth` bucket) is the blocker.
 
-**Status:** Adopted — final. Closes GDD §17 "Initial tree species" (schema
-must be corrected first) + resolves the RV2-3 height-growth-bucket finding.
+**Status:** Adopted — implemented. Height + diameter now grow from
+INDEPENDENT energy buckets (`EnergyAllocation.heightGrowth` vs `trunkGrowth`,
+split per the species' `heightDiameterSplit`), resolving the RV2-3 coupling
+(both were driven by `alloc.trunkGrowth`). An allometric constraint
+(`species.maxSlendernessRatio`) caps height growth at
+`trunkDiameter × maxSlendernessRatio` — a tree must add girth before it can
+add height beyond the sustainable bound (the cap never shrinks an
+already-slender tree; it halts further height growth until diameter catches
+up). The total structural eu is unchanged from pre-DR-4, so the energy balance
+(growth vs reserve) is preserved; only the height/diameter distribution is now
+species-specific + independently controllable.
+
+White Oak config: `heightDiameterSplit: 0.4` (girth-heavy — diameter gets 60%),
+`maxSlendernessRatio: 40` (at the maxima 25m / 1.5m the ratio is ~16.7, so the
+clamp only bites for unrealistic sapling shapes). Schema fields default to
+0.5 / 50 for future species. No save migration: `EnergyAllocation` is a runtime
+computation (not persisted) + the species config is code-only (looked up by id,
+not stored in saves); `TreeState.structure` (height/trunkDiameter) is unchanged.
+
+Verified: `biology.test.ts` 64/64 (incl. 5 new DR-4 tests — bucket split,
+height-favoring vs diameter-favoring growth, allometric clamp halts an
+already-slender tree without shrinking, well-proportioned sapling unaffected,
+tree at the cap grows height only as diameter permits); full-repo typecheck
+0 errors; 95 related-suite tests pass (energy-pool, business-growth-pressure,
+economy-integration, progression-trait-effects, progression-genetics).
+`biology-system.test.ts` hangs in this sandbox but the hang is pre-existing
+(reproduces on the pre-DR-4 commit dba5b33) + unrelated to DR-4; a single
+biology-system test runs + passes. P12-A (2nd species) is unblocked.
 
 ---
 

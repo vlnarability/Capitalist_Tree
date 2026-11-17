@@ -140,7 +140,17 @@ export interface EnergyAllocation {
   reserveDraw: number;
   /** Energy allocated to root growth (eu). */
   rootGrowth: number;
-  /** Energy allocated to trunk growth (eu). */
+  /**
+   * Energy allocated to HEIGHT growth (eu). DR-4: height + diameter are driven
+   * by SEPARATE buckets (was: both driven by trunkGrowth). The split is
+   * species-specific (species.heightDiameterSplit).
+   */
+  heightGrowth: number;
+  /**
+   * Energy allocated to trunk DIAMETER growth (eu). DR-4: diameter-only (was:
+   * also drove height). The complement of heightGrowth within the structural
+   * bucket.
+   */
   trunkGrowth: number;
   /** Energy allocated to branch growth (eu). */
   branchGrowth: number;
@@ -195,11 +205,19 @@ export function allocateEnergy(
   // Structural growth is scaled by maturity; leaf growth is not (mature trees
   // still replace senesced leaves at full rate).
   const rootEu = availableForGrowth * w.rootGrowth * matureMult;
-  const trunkEu = availableForGrowth * w.trunkGrowth * matureMult;
+  // DR-4: split the structural bucket into independent HEIGHT + DIAMETER
+  // sub-buckets (species.heightDiameterSplit). The total structural eu is
+  // unchanged from the pre-DR-4 single-bucket behavior, so the energy balance
+  // (growth vs reserve) is preserved; only the height/diameter distribution
+  // becomes species-specific + independently controllable.
+  const structuralEu = availableForGrowth * w.trunkGrowth * matureMult;
+  const heightEu = structuralEu * ctx.species.heightDiameterSplit;
+  const trunkDiameterEu = structuralEu * (1 - ctx.species.heightDiameterSplit);
   const branchEu = availableForGrowth * w.branchGrowth * matureMult;
   const leafEu = isWinterDormant ? 0 : availableForGrowth * w.leafGrowth;
   const reproductionEu = availableForGrowth * w.reproduction;
-  const usedForGrowth = rootEu + trunkEu + branchEu + leafEu + reproductionEu;
+  const usedForGrowth =
+    rootEu + heightEu + trunkDiameterEu + branchEu + leafEu + reproductionEu;
   const reserveStorage = Math.max(0, availableForGrowth - usedForGrowth);
 
   return {
@@ -207,7 +225,8 @@ export function allocateEnergy(
     surplus: availableForGrowth,
     reserveDraw,
     rootGrowth: rootEu,
-    trunkGrowth: trunkEu,
+    heightGrowth: heightEu,
+    trunkGrowth: trunkDiameterEu,
     branchGrowth: branchEu,
     leafGrowth: leafEu,
     reproduction: reproductionEu,

@@ -294,7 +294,8 @@ describe('energy allocation (TDD §7.3) — survival-first', () => {
     const alloc = allocateEnergy(tree, production, ctx);
     expect(alloc.maintenance).toBeGreaterThan(0);
     expect(alloc.surplus).toBeGreaterThan(0);
-    expect(alloc.rootGrowth + alloc.trunkGrowth + alloc.branchGrowth + alloc.leafGrowth + alloc.reserveStorage)
+    // DR-4: heightGrowth is now a separate bucket (was part of trunkGrowth).
+    expect(alloc.rootGrowth + alloc.heightGrowth + alloc.trunkGrowth + alloc.branchGrowth + alloc.leafGrowth + alloc.reserveStorage)
       .toBeCloseTo(alloc.surplus, 5);
     // Reproduction is a stub.
     expect(alloc.reproduction).toBe(0);
@@ -492,6 +493,91 @@ describe('reserves (TDD §7.4)', () => {
     expect(biomassScore(sapling, SPECIES)).toBeGreaterThanOrEqual(0);
     expect(biomassScore(sapling, SPECIES)).toBeLessThan(0.5);
     expect(biomassScore(mature, SPECIES)).toBeCloseTo(4, 1);
+  });
+});
+
+/**
+ * DR-4 (docs/reviews/DECISIONS.md): height + diameter grow from INDEPENDENT
+ * energy buckets, decoupling them (RV2-3: both driven by alloc.trunkGrowth).
+ * The split is species-specific (heightDiameterSplit). An allometric constraint
+ * (maxSlendernessRatio) prevents unrealistic slenderness — a tree must add
+ * girth before it can add height beyond the sustainable bound.
+ */
+describe('DR-4 — independent height + diameter growth (RV2-3 decoupled)', () => {
+  // Helper: a White Oak variant with a custom height/diameter split.
+  const speciesWithSplit = (split: number) => ({ ...SPECIES, heightDiameterSplit: split });
+
+  it('allocateEnergy splits the structural bucket into height + diameter by heightDiameterSplit', () => {
+    const ctx = testContext({ species: speciesWithSplit(0.4) });
+    const tree = testTree({
+      foliage: { currentLeaves: 1000, leafCapacity: 2000 },
+      energy: { reserves: 100, production: 0, consumption: 0 },
+    });
+    const alloc = allocateEnergy(tree, 1000, ctx);
+    // heightGrowth + trunkGrowth = the structural bucket (both > 0).
+    const structural = alloc.heightGrowth + alloc.trunkGrowth;
+    expect(structural).toBeGreaterThan(0);
+    // The split: height gets 40%, diameter gets 60%.
+    expect(alloc.heightGrowth / structural).toBeCloseTo(0.4, 5);
+    expect(alloc.trunkGrowth / structural).toBeCloseTo(0.6, 5);
+  });
+
+  it('a height-favoring split grows height more than a diameter-favoring split (and vice versa)', () => {
+    const base = testTree({
+      structure: { height: 1, trunkDiameter: 0.2, branchDevelopment: 1, structuralIntegrity: 1 },
+    });
+    // Height-favoring split (0.8) → more height growth.
+    const tallCtx = testContext({ species: speciesWithSplit(0.8) });
+    const tallGrowth = applyGrowth(base, tallCtx, allocateEnergy(base, 1000, tallCtx), maxSupportedLeaves(base));
+    // Diameter-favoring split (0.2) → more diameter growth.
+    const wideCtx = testContext({ species: speciesWithSplit(0.2) });
+    const wideGrowth = applyGrowth(base, wideCtx, allocateEnergy(base, 1000, wideCtx), maxSupportedLeaves(base));
+
+    expect(tallGrowth.height).toBeGreaterThan(wideGrowth.height);
+    expect(wideGrowth.trunkDiameter).toBeGreaterThan(tallGrowth.trunkDiameter);
+  });
+
+  it('allometric clamp halts height growth for an already-slender tree (no shrink)', () => {
+    // height 20, diameter 0.2 → ratio 100, well over White Oak's maxSlendernessRatio (40).
+    // The cap is diameter × 40 = 8 < current height 20, so height growth is halted.
+    const thinTree = testTree({
+      structure: { height: 20, trunkDiameter: 0.2, branchDevelopment: 1, structuralIntegrity: 1 },
+    });
+    const ctx = testContext(); // White Oak: maxSlendernessRatio 40
+    const alloc = allocateEnergy(thinTree, 1000, ctx);
+    const growth = applyGrowth(thinTree, ctx, alloc, maxSupportedLeaves(thinTree));
+    // The clamp never shrinks the tree: height stays at 20 (no growth, no shrink).
+    expect(growth.height).toBe(20);
+    // Diameter still grows normally (the clamp only affects height).
+    expect(growth.trunkDiameter).toBeGreaterThan(0.2);
+  });
+
+  it('allometric clamp does NOT bite for a well-proportioned sapling', () => {
+    // height 1, diameter 0.2 → ratio 5, well under the bound (40).
+    const tree = testTree({
+      structure: { height: 1, trunkDiameter: 0.2, branchDevelopment: 1, structuralIntegrity: 1 },
+    });
+    const ctx = testContext();
+    const alloc = allocateEnergy(tree, 1000, ctx);
+    const growth = applyGrowth(tree, ctx, alloc, maxSupportedLeaves(tree));
+    // Height grows normally (not clamped) + stays within the slenderness bound.
+    expect(growth.height).toBeGreaterThan(1);
+    expect(growth.height).toBeLessThanOrEqual(growth.trunkDiameter * SPECIES.maxSlendernessRatio + 1e-9);
+  });
+
+  it('a tree at the slenderness cap grows height only as diameter permits', () => {
+    // height 8, diameter 0.2 → ratio 40 = exactly the cap. Height can grow only
+    // if diameter grows first (raising the cap). With a 0.4 split, diameter
+    // grows, raising the cap, so height can grow a little.
+    const tree = testTree({
+      structure: { height: 8, trunkDiameter: 0.2, branchDevelopment: 1, structuralIntegrity: 1 },
+    });
+    const ctx = testContext();
+    const alloc = allocateEnergy(tree, 1000, ctx);
+    const growth = applyGrowth(tree, ctx, alloc, maxSupportedLeaves(tree));
+    // Height grows, but never beyond the NEW cap (grown diameter × ratio).
+    expect(growth.height).toBeGreaterThan(8);
+    expect(growth.height).toBeLessThanOrEqual(growth.trunkDiameter * SPECIES.maxSlendernessRatio + 1e-9);
   });
 });
 
