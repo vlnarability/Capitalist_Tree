@@ -66,6 +66,7 @@ import {
   PROVISIONAL_UI_LOOP_FRAME_DT_MAX_MS,
 } from '../lib/constants';
 import { applyCatchUpOnLoadAsync } from '../lib/persistence/offline-catch-up-async';
+import { SaveQuotaExceededError } from '../lib/persistence/indexed-db-storage';
 
 // ----------------------------------------------------------------------------
 // Public types.
@@ -145,6 +146,34 @@ export function useSimulationLoop(
 
     async function boot(): Promise<void> {
       store.setEngineStatus('booting');
+      // P11 (W21 / RV5-F4): concurrent-tab protection. Acquire an exclusive
+      // Web Lock so two tabs don't both run the simulation + clobber each
+      // other's saves. If the lock is unavailable (another tab holds it),
+      // surface a notification but continue booting read-only-ish (the player
+      // can still see the state; saving will be the losing tab's problem).
+      if (typeof navigator !== 'undefined' && navigator.locks) {
+        try {
+          await navigator.locks.request(
+            'capitalist-tree-session',
+            { mode: 'exclusive', ifAvailable: true },
+            async (lock) => {
+              if (lock === null) {
+                useGameStore.getState().pushNotification({
+                  severity: 'warning',
+                  code: 'concurrent-tab-detected',
+                  message:
+                    'Another tab is already running this game. Progress here may be overwritten. Close the other tab to avoid conflicts.',
+                });
+              }
+              // Hold the lock for the session lifetime — the Promise stays
+              // pending until the tab closes / the effect tears down.
+              return new Promise<void>(() => {});
+            },
+          );
+        } catch {
+          // Lock API unavailable or blocked — non-fatal, continue.
+        }
+      }
       let state: GameState | null = null;
       const s = storageRef.current;
       if (s) {
@@ -311,8 +340,30 @@ export function useSimulationLoop(
       },
     };
     stateRef.current = stamped;
-    useGameStore.getState().commitSimState(stamped, []);
-    await s.save(stamped);
+    // P11 (W20 / RV5-F3): commit-after-save. Await the save BEFORE committing
+    // to the store so a failed save (quota exhaustion) doesn't leave the UI
+    // showing a state that isn't persisted. Catch QuotaExceededError →
+    // notification (the player keeps playing from the in-memory state, but
+    // knows the save didn't land).
+    try {
+      await s.save(stamped);
+      useGameStore.getState().commitSimState(stamped, []);
+    } catch (err) {
+      if (err instanceof SaveQuotaExceededError) {
+        useGameStore.getState().pushNotification({
+          severity: 'critical',
+          code: 'save-quota-exceeded',
+          message: err.message,
+        });
+      } else {
+        // Unknown save error — surface it so it isn't silently swallowed.
+        useGameStore.getState().pushNotification({
+          severity: 'critical',
+          code: 'save-failed',
+          message: `Save failed: ${(err as Error).message}`,
+        });
+      }
+    }
   }, []);
 
   const load = useCallback(async () => {

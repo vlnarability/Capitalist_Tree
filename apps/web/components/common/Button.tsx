@@ -12,7 +12,7 @@
  * no engine calls (rule 6: UI reads state, never writes — the click handler
  * in the caller is the path that routes through the store's dispatch).
  */
-import type { ButtonHTMLAttributes, ReactElement } from 'react';
+import { forwardRef, type ButtonHTMLAttributes, type ReactElement } from 'react';
 
 export type ButtonTone = 'default' | 'active' | 'warning';
 
@@ -37,23 +37,26 @@ const TONE_CLASSES: Readonly<Record<ButtonTone, string>> = Object.freeze({
  *   <Button tone="active" onClick={() => dispatch(setSpeed(1))}>1x</Button>
  *   <Button tone="warning" onClick={() => dispatch(pause())}>Pause</Button>
  */
-export function Button({ tone = 'default', icon, className, children, ...rest }: ButtonProps): ReactElement {
-  return (
-    <button
-      type="button"
-      className={[
-        'inline-flex items-center gap-1.5 rounded border px-3 py-1 text-sm font-medium transition-colors',
-        'focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50',
-        'disabled:cursor-not-allowed disabled:opacity-50',
-        TONE_CLASSES[tone],
-        className ?? '',
-      ]
-        .filter(Boolean)
-        .join(' ')}
-      {...rest}
-    >
-      {icon ? <span aria-hidden="true">{icon}</span> : null}
-      {children}
-    </button>
-  );
-}
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
+  function Button({ tone = 'default', icon, className, children, ...rest }, ref): ReactElement {
+    return (
+      <button
+        ref={ref}
+        type="button"
+        className={[
+          'inline-flex items-center gap-1.5 rounded border px-3 py-1 text-sm font-medium transition-colors',
+          'focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50',
+          'disabled:cursor-not-allowed disabled:opacity-50',
+          TONE_CLASSES[tone],
+          className ?? '',
+        ]
+          .filter(Boolean)
+          .join(' ')}
+        {...rest}
+      >
+        {icon ? <span aria-hidden="true">{icon}</span> : null}
+        {children}
+      </button>
+    );
+  },
+);

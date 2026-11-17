@@ -45,7 +45,7 @@
  */
 'use client';
 
-import { useCallback, type ReactElement } from 'react';
+import { useCallback, useEffect, useRef, type ReactElement } from 'react';
 import type { OfflineSummary, OfflineSummaryDelta } from '@capitalist-tree/shared';
 import { PROVISIONAL_DAYS_PER_YEAR } from '@capitalist-tree/shared';
 import { useGameStore } from '../../stores/game-store';
@@ -223,6 +223,40 @@ export function OfflineModal({ className }: OfflineModalProps = {}): ReactElemen
     clearPendingOfflineSummary();
   }, [clearPendingOfflineSummary]);
 
+  // P11 (W23 / RV6-3): accessibility — Escape to dismiss + focus trap +
+  // autofocus on the Continue button.
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const continueRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (summary === null) return;
+    // Autofocus the Continue button when the modal opens.
+    continueRef.current?.focus();
+    // Escape dismisses the modal.
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        clearPendingOfflineSummary();
+      } else if (e.key === 'Tab') {
+        // Focus trap: cycle Tab within the modal.
+        const focusable = dialogRef.current?.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+        );
+        if (!focusable || focusable.length === 0) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last?.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first?.focus();
+        }
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [summary, clearPendingOfflineSummary]);
+
   if (summary === null) return null;
 
   const bioRows = biologicalRows(summary);
@@ -251,6 +285,7 @@ export function OfflineModal({ className }: OfflineModalProps = {}): ReactElemen
       data-testid="offline-modal"
     >
       <div
+        ref={dialogRef}
         className={`max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-lg border border-slate-700 bg-slate-900 p-6 shadow-2xl ${className ?? ''}`}
       >
         {/* Header. */}
@@ -358,6 +393,7 @@ export function OfflineModal({ className }: OfflineModalProps = {}): ReactElemen
         {/* Dismiss. */}
         <footer className="flex justify-end">
           <Button
+            ref={continueRef}
             tone="active"
             onClick={onContinue}
             data-testid="offline-modal-continue"
