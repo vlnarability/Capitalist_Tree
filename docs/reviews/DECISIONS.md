@@ -251,16 +251,30 @@ deferred. The non-root-consuming v2 fork, the `Rng.forkVersion` field, the
 `GameState.rngVersion` schema field, the v16→v17 migration (legacy saves →
 v1), the CURRENT_SCHEMA_VERSION bump (16→17), + deterministic tests for both
 v1 + v2 are all in place. New sims still initialize at **v1** (the switchover
-to v2 is gated behind a separate step): v2 shifts the root RNG state at init
-(the weather fork becomes non-root-consuming) + changes per-tick fork
-sequences, which shifts mortality timing + other RNG-driven outcomes. A
-maximally starved tree that died within a day under v1's sequence survives
-~30 days under v2's sequence for the test seed — the v2 sequence needs
-deliberate behavioral assessment + test recalibration before new sims switch
-over. Legacy saves keep v1 (their sequence is preserved exactly). The v2
-mechanism is exercised directly by `packages/simulation/test/rng.test.ts`
+to v2 is gated behind a separate step).
+
+**Switchover blocker — systematic mortality regression under v2.** When the
+switchover was attempted (flip new sims to v2 + the per-tick root nonce so the
+root state varies across ticks), a maximally starved tree (health 0, stress 1,
+reserves 0, 2 severe defoliations) that dies within a day under v1's sequence
+**survived 10+ days under v2 across 7 different seeds (7/7)**. With a combined
+~67% expected death probability over 10 days, 7/7 surviving is p ≈ 0.0004 —
+strong evidence of a systematic issue, not variance. A draw-distribution probe
+(200 ticks) showed the v2 fork's first draw (the mortality roll) has a min of
+~0.006, roughly consistent with uniform draws — but the mortality prob
+(~0.00007/tick) is 85× smaller than the observed min, so the roll effectively
+never triggers under v2's sequence. Root cause TBD: the v2 fork seed derivation
+(no `parentDraw`, unlike v1) + the per-tick nonce may not decorrelate the
+mortality rolls enough to hit the very-low-probability tail, OR the mortality
+prob is simply too low for the v2 sequence's effective draw range. Either way,
+the v2 switchover is NOT safe to ship until this is resolved — starved trees
+must die reliably. Legacy saves keep v1 (their sequence is preserved exactly).
+The v2 mechanism stays exercised directly by `packages/simulation/test/rng.test.ts`
 (DR-6 fork-versioning describe block) so it stays regression-guarded while
-dormant in production.
+dormant in production. The switchover is a dedicated follow-up: (a) resolve the
+mortality-regression root cause, (b) recalibrate the 3 "does NOT perturb
+mortality" tests (events/progression/environment) for v2's sequence, (c) flip
+new sims to v2.
 
 ---
 

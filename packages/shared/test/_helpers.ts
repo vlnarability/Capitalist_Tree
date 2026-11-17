@@ -190,8 +190,8 @@ export function baseState(overrides: Partial<GameState> = {}): GameState {
     history: { snapshots: [], archive: [] },
     rngState: [0, 0, 0, 0],
     // DR-6: new sims + the fixture initialize at v1 (the v2 switchover is
-    // deferred — see DECISIONS.md DR-6 + initial-state.ts). The fixture
-    // mirrors the current GameState shape so idempotency tests see the field.
+    // deferred — see DECISIONS.md DR-6). The fixture mirrors the current
+    // GameState shape so idempotency tests see the rngVersion field.
     rngVersion: 1,
     rngStreams: { weather: [0, 0, 0, 0] },
     scheduler: { events: [] },
