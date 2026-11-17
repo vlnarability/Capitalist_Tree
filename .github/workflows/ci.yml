@@ -92,9 +92,12 @@ jobs:
 
       # Playwright needs its browser binaries downloaded once per runner.
       # `pnpm --filter web exec playwright install --with-deps` installs the
-      # chromium binary + system deps (libnss3, etc.) the browser needs.
-      - name: Install Playwright browser
-        run: pnpm --filter web exec playwright install --with-deps chromium
+      # browser binaries + system deps (libnss3, etc.) each engine needs.
+      # P13-C (GAP-37): all three engines — chromium, firefox, webkit — so the
+      # smoke suite runs cross-browser (one matrix entry per project in
+      # playwright.config.ts; a per-browser failure surfaces distinctly).
+      - name: Install Playwright browsers
+        run: pnpm --filter web exec playwright install --with-deps chromium firefox webkit
 
       - name: Run e2e smoke suite
         run: pnpm --filter web test:e2e
