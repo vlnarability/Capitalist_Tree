@@ -95,6 +95,7 @@ import {
 } from '../components/economy';
 import { AutomationPanel } from '../components/automation';
 import { BusinessesPanel } from '../components/business';
+import { ObjectivesPanel } from '../components/objectives';
 import { ProgressionPanel } from '../components/progression';
 import { EventsPanel } from '../components/events';
 import { PolicyPanel } from '../components/policy';
@@ -381,6 +382,12 @@ export default function HomePage(): ReactElement {
               to the UI. Pre-P11-E Phase 3 "Expansion" was entirely unwired. */}
           <Panel title="Businesses" icon="🏭" hint="GDD §8 / Phase 3">
             <BusinessesPanel />
+          </Panel>
+          {/* DR-8 (GDD §12 endings): the six long-term objectives were
+              evaluated + persisted (W8) but had no UI surface. This panel
+              shows each objective's progress + completion status. */}
+          <Panel title="Objectives" icon="🎯" hint="GDD §12 / Endings">
+            <ObjectivesPanel />
           </Panel>
           {/* P11-E (Phase 5 game-loop gap): bridges unlock-research /
               activate-trait / deactivate-trait / prestige-reset to the UI. */}

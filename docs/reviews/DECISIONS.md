@@ -18,7 +18,7 @@ environmental consequences.** Every decision below reinforces that shape.
 | DR-5 | Regional model | Player-driven outcomes + autonomous background processes | #5 | Adopted (final) |
 | DR-6 | RNG forks | Non-root-consuming forks, versioned for save compatibility | #6 | Adopted (migration-gated) |
 | DR-7 | Zod 4 | Upgrade now | #7 | Adopted (in flight) |
-| DR-8 | Objectives | Persist + Objectives panel (P11) | #8 | Adopted (in flight) |
+| DR-8 | Objectives | Persist + Objectives panel (P11) | #8 | Adopted (persistence + panel done; enrichments future) |
 | DR-9 | HIGH findings | Build regression tests; don't delay confirmed fixes | #9 | Adopted |
 
 Only **DR-1's numerical targets** remain explicitly provisional — they need
@@ -256,7 +256,7 @@ schemas + dependent code need migration.
 
 ---
 
-## DR-8: Objectives — persist + Objectives panel (in flight)
+## DR-8: Objectives — persist + Objectives panel (persistence + panel done)
 
 **Resolves §8 #8.** Objectives should persist like achievements. The current
 asymmetry (achievements persist, objectives don't) creates an inconsistent
@@ -283,8 +283,14 @@ in scope for P11 + directs verification against the requirements above
 (stable IDs, progress, completion status + timestamp, category, rewards,
 panel for active/completed/available).
 
-**Status:** Adopted — in flight (verify W8 + P11-E completeness against the
-requirements).
+**Status:** Adopted — persistence verified (W8: `eventState.objectives.completed`
+survives save/load, tested at `events-objectives.test.ts:209-247`) + the
+ObjectivesPanel built (`apps/web/components/objectives/ObjectivesPanel.tsx`,
+wired into `app/page.tsx`, shows all six GDD §12 objectives with live progress
++ Completed/In-Progress/Available status). The richer fields DR-8 lists —
+per-objective completion timestamp, category, rewards/unlocks — remain future
+work (the current schema persists `completed: ObjectiveId[]`; progress is
+derived at runtime via `evaluateObjectives`, so it does not need persistence).
 
 ---
 
