@@ -152,17 +152,29 @@ export const PROVISIONAL_RESOURCE_ORGANIC_MATTER_REPLENISH_PER_DAY = 0.001;
 // Weights sum to 1.0. Stubbed factors contribute their full weight so the
 // derived health stays in a sensible range until P6+ extends them.
 export const PROVISIONAL_RESOURCE_SOIL_HEALTH_WEIGHTS = Object.freeze({
-  organicMatter: 0.25,
-  nutrients: 0.30,
-  moisture: 0.20,
-  contamination: 0.15,
-  // Extension-point stubs (TDD §8.3 "Potential variables" — pH, compaction,
-  // microbial activity). They contribute full weight (1.0) until P6+.
+  organicMatter: 0.22,
+  nutrients: 0.26,
+  moisture: 0.17,
+  contamination: 0.13,
+  // P12-D (GAP-20): pH, compaction, + microbial activity are now MODELED
+  // (resources/soil.ts phFraction / compactionFraction / microbialFraction)
+  // — no longer stubs. Weights redistributed from the P2 majors to give each
+  // a meaningful contribution (a fully compacted or microbe-dead soil loses
+  // ~0.06 health). All weights are @provisional (GDD §17) — P12-C's
+  // design-promise bot re-tunes them against the 5/25/100yr balance targets.
   ph: 0.10,
-  compaction: 0.0, // reserved — schema field exists, weight is 0 until modeled
-  microbial: 0.0, // reserved — schema field exists, weight is 0 until modeled
+  compaction: 0.06,
+  microbial: 0.06,
 });
 export type SoilHealthWeights = typeof PROVISIONAL_RESOURCE_SOIL_HEALTH_WEIGHTS;
+
+// P12-D (GAP-20): pH dynamics for the soil-health derivation. Most nutrients
+// are maximally available near pH 6.5 (slightly acidic); strongly acidic
+// (< ~5) or alkaline (> ~8) soils lock up N/P/K + reduce microbial function.
+// phFraction is a symmetric tent around the ideal: 1.0 at PH_IDEAL, declining
+// linearly to 0 at PH_IDEAL ± PH_TOLERANCE. @provisional (GDD §17).
+export const PROVISIONAL_RESOURCE_SOIL_PH_IDEAL = 6.5;
+export const PROVISIONAL_RESOURCE_SOIL_PH_TOLERANCE = 2.0;
 
 // PROVISIONAL (GDD §17: detailed resource simulation equations)
 //

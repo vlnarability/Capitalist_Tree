@@ -33,6 +33,9 @@ import {
   nutrientFraction,
   moistureFraction,
   contaminationFraction,
+  phFraction,
+  compactionFraction,
+  microbialFraction,
 } from '../src/resources/soil.js';
 import {
   PROVISIONAL_RESOURCE_CONTAMINATION_FULL_DEGRADE,
@@ -41,6 +44,8 @@ import {
   PROVISIONAL_RESOURCE_SOIL_NUTRIENT_CAPACITY,
   PROVISIONAL_RESOURCE_SOIL_WATER_CAPACITY,
   PROVISIONAL_RESOURCE_IDEAL_SOIL_WATER_FRACTION,
+  PROVISIONAL_RESOURCE_SOIL_PH_IDEAL,
+  PROVISIONAL_RESOURCE_SOIL_PH_TOLERANCE,
 } from '@capitalist-tree/shared';
 import { WEATHER_EVENT_MAP, BALANCED_10_10_10, UREA_46_0_0, COMPOST, WHITE_OAK } from '@capitalist-tree/content';
 import type { EnvironmentState, TreeState, NutrientState } from '@capitalist-tree/shared';
@@ -631,10 +636,11 @@ describe('soil health derivation (TDD §8.3, GDD §10.1)', () => {
     });
     expect(computeSoilHealth(fullEnv)).toBeCloseTo(1, 5);
 
-    // Fully degraded soil (in non-stub factors). The pH extension-point stub
-    // contributes its full weight (0.10) by design — the stubs always return
-    // 1.0 until P6+ models real pH/compaction/microbial dynamics. So the
-    // floor of soil health in P2 is `w.ph * 1.0 = 0.10`.
+    // Fully degraded soil (ALL seven factors bad). P12-D (GAP-20) promoted the
+    // pH, compaction, + microbial stubs into modeled dynamics, so a truly
+    // degraded soil — bad pH (far from the 6.5 ideal), full compaction, no
+    // microbial activity, no organic matter, no nutrients, no water, full
+    // contamination — collapses to health 0 (every fraction is 0).
     const degraded = neutralEnv({
       soil: {
         health: 1, // ignored — recomputed
@@ -642,13 +648,13 @@ describe('soil health derivation (TDD §8.3, GDD §10.1)', () => {
         contamination: PROVISIONAL_RESOURCE_CONTAMINATION_FULL_DEGRADE,
         nutrients: { nitrogen: 0, phosphorus: 0, potassium: 0 },
         soilWater: 0,
-        ph: 6.5,
-        compaction: 0,
-        microbialActivity: 1.0,
+        ph: 3.0, // far below ideal ± tolerance → phFrac 0
+        compaction: 1.0, // fully compacted → compactionFrac 0
+        microbialActivity: 0, // microbe-dead → microbialFrac 0
       },
     });
-    // The non-stub factors contribute 0; the ph stub contributes its 0.10 weight.
-    expect(computeSoilHealth(degraded)).toBeCloseTo(0.10, 5);
+    // Every factor contributes 0 → health 0.
+    expect(computeSoilHealth(degraded)).toBeCloseTo(0, 5);
   });
 
   it('soil health is in [0, 1] for arbitrary inputs', () => {
@@ -675,5 +681,69 @@ describe('soil health derivation (TDD §8.3, GDD §10.1)', () => {
     const clean = neutralEnv({ soil: { soilWater: 100, organicMatter: 50, contamination: 0, nutrients: { nitrogen: 50, phosphorus: 50, potassium: 50 }, health: 1, ph: 6.5, compaction: 0, microbialActivity: 1.0 } });
     const contaminated = neutralEnv({ soil: { soilWater: 100, organicMatter: 50, contamination: 50, nutrients: { nitrogen: 50, phosphorus: 50, potassium: 50 }, health: 1, ph: 6.5, compaction: 0, microbialActivity: 1.0 } });
     expect(computeSoilHealth(contaminated)).toBeLessThan(computeSoilHealth(clean));
+  });
+
+  // P12-D (GAP-20): pH / compaction / microbial factor unit + integration tests.
+
+  describe('phFraction (P12-D)', () => {
+    it('is 1.0 at the ideal pH', () => {
+      expect(phFraction(PROVISIONAL_RESOURCE_SOIL_PH_IDEAL)).toBeCloseTo(1, 5);
+    });
+    it('is 0 at the ideal ± tolerance (boundary)', () => {
+      expect(phFraction(PROVISIONAL_RESOURCE_SOIL_PH_IDEAL - PROVISIONAL_RESOURCE_SOIL_PH_TOLERANCE)).toBeCloseTo(0, 5);
+      expect(phFraction(PROVISIONAL_RESOURCE_SOIL_PH_IDEAL + PROVISIONAL_RESOURCE_SOIL_PH_TOLERANCE)).toBeCloseTo(0, 5);
+    });
+    it('is 0.5 at the midpoint between ideal + boundary', () => {
+      expect(phFraction(PROVISIONAL_RESOURCE_SOIL_PH_IDEAL - PROVISIONAL_RESOURCE_SOIL_PH_TOLERANCE / 2)).toBeCloseTo(0.5, 5);
+      expect(phFraction(PROVISIONAL_RESOURCE_SOIL_PH_IDEAL + PROVISIONAL_RESOURCE_SOIL_PH_TOLERANCE / 2)).toBeCloseTo(0.5, 5);
+    });
+    it('clamps to 0 far outside the tent (strongly acidic or alkaline)', () => {
+      expect(phFraction(3.0)).toBe(0);
+      expect(phFraction(10.0)).toBe(0);
+    });
+  });
+
+  describe('compactionFraction (P12-D)', () => {
+    it('is 1.0 at zero compaction (loose soil)', () => {
+      expect(compactionFraction(0)).toBeCloseTo(1, 5);
+    });
+    it('is 0 at full compaction', () => {
+      expect(compactionFraction(1)).toBeCloseTo(0, 5);
+    });
+    it('is 0.5 at half compaction (linear)', () => {
+      expect(compactionFraction(0.5)).toBeCloseTo(0.5, 5);
+    });
+  });
+
+  describe('microbialFraction (P12-D)', () => {
+    it('is 1.0 at thriving microbial activity', () => {
+      expect(microbialFraction(1)).toBeCloseTo(1, 5);
+    });
+    it('is 0 at microbe-dead soil', () => {
+      expect(microbialFraction(0)).toBeCloseTo(0, 5);
+    });
+    it('is 0.5 at half activity (direct)', () => {
+      expect(microbialFraction(0.5)).toBeCloseTo(0.5, 5);
+    });
+  });
+
+  it('bad pH reduces soil health (P12-D integration)', () => {
+    // Baseline: all factors good, pH at the ideal.
+    const good = neutralEnv({ soil: { soilWater: 100, organicMatter: 50, contamination: 0, nutrients: { nitrogen: 50, phosphorus: 50, potassium: 50 }, health: 1, ph: 6.5, compaction: 0, microbialActivity: 1.0 } });
+    // Same soil but strongly acidic (pH 4.0 — well outside the ideal ± tolerance).
+    const acidic = neutralEnv({ soil: { soilWater: 100, organicMatter: 50, contamination: 0, nutrients: { nitrogen: 50, phosphorus: 50, potassium: 50 }, health: 1, ph: 4.0, compaction: 0, microbialActivity: 1.0 } });
+    expect(computeSoilHealth(acidic)).toBeLessThan(computeSoilHealth(good));
+  });
+
+  it('high compaction reduces soil health (P12-D integration)', () => {
+    const good = neutralEnv({ soil: { soilWater: 100, organicMatter: 50, contamination: 0, nutrients: { nitrogen: 50, phosphorus: 50, potassium: 50 }, health: 1, ph: 6.5, compaction: 0, microbialActivity: 1.0 } });
+    const compacted = neutralEnv({ soil: { soilWater: 100, organicMatter: 50, contamination: 0, nutrients: { nitrogen: 50, phosphorus: 50, potassium: 50 }, health: 1, ph: 6.5, compaction: 0.8, microbialActivity: 1.0 } });
+    expect(computeSoilHealth(compacted)).toBeLessThan(computeSoilHealth(good));
+  });
+
+  it('low microbial activity reduces soil health (P12-D integration)', () => {
+    const good = neutralEnv({ soil: { soilWater: 100, organicMatter: 50, contamination: 0, nutrients: { nitrogen: 50, phosphorus: 50, potassium: 50 }, health: 1, ph: 6.5, compaction: 0, microbialActivity: 1.0 } });
+    const microbeDead = neutralEnv({ soil: { soilWater: 100, organicMatter: 50, contamination: 0, nutrients: { nitrogen: 50, phosphorus: 50, potassium: 50 }, health: 1, ph: 6.5, compaction: 0, microbialActivity: 0.1 } });
+    expect(computeSoilHealth(microbeDead)).toBeLessThan(computeSoilHealth(good));
   });
 });

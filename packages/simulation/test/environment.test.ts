@@ -812,13 +812,14 @@ describe('EnvironmentSystem integration (engine.advance, slot #10)', () => {
   it('emits notification events when soil health drops below the warning threshold', () => {
     // Construct a state where the DERIVED soil health is low. ResourceSystem
     // (slot #4) recomputes `soil.health` each tick from the underlying factors,
-    // so setting `health` directly is overwritten — we have to make the factors
-    // bad: high contamination (contaminationFrac → 0), no organic matter, no
-    // nutrients, no soil water. With the soil-health weights (organicMatter
-    // 0.25, nutrients 0.30, moisture 0.20, contamination 0.15, ph 0.10), the
-    // derived health collapses to ~0.10 (only the pH stub contributes) — below
-    // the SOIL_HEALTH_CRITICAL threshold (0.15), so the EnvironmentSystem
-    // emits an environment-soil-health-low notification.
+    // so setting `health` directly is overwritten — we have to make ALL seven
+    // factors bad: high contamination, no organic matter, no nutrients, no soil
+    // water, bad pH (far from the 6.5 ideal), full compaction, no microbial
+    // activity. With the P12-D soil-health weights (organicMatter 0.22,
+    // nutrients 0.26, moisture 0.17, contamination 0.13, ph 0.10, compaction
+    // 0.06, microbial 0.06), every fraction is 0 → derived health collapses to
+    // ~0 — below the SOIL_HEALTH_CRITICAL threshold (0.15), so the
+    // EnvironmentSystem emits an environment-soil-health-low notification.
     const initial = engine.initialize(cfg(42));
     const stressed: GameState = {
       ...initial,
@@ -833,6 +834,14 @@ describe('EnvironmentSystem integration (engine.advance, slot #10)', () => {
             contamination: PROVISIONAL_RESOURCE_CONTAMINATION_FULL_DEGRADE * 5,
             nutrients: { nitrogen: 0, phosphorus: 0, potassium: 0 },
             soilWater: 0,
+            // P12-D (GAP-20): degrade the promoted stubs too, so the derived
+            // health collapses to ~0 (every fraction is 0). Without these the
+            // good-default pH/compaction/microbial would contribute ~0.23
+            // (w.ph + w.compaction + w.microbial at full factor) + the band
+            // would be 'warn', not 'critical'.
+            ph: 3.0, // far below the 6.5 ideal → phFrac 0
+            compaction: 1.0, // fully compacted → compactionFrac 0
+            microbialActivity: 0, // microbe-dead → microbialFrac 0
           },
         },
       },
