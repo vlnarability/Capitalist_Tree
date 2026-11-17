@@ -926,21 +926,37 @@ The following principles should remain consistent throughout development:
 
 ## 17. Unresolved Design Decisions
 
+> **2026-11-17 update:** Nine of the open questions below are now resolved +
+> recorded formally in `docs/reviews/DECISIONS.md` (DR-1 through DR-9). Items
+> marked **[RESOLVED]** below are no longer open; see the decision record for
+> the decision, rationale, + implications. Only the numerical balance tuning
+> in DR-1 remains explicitly provisional (pending simulation data).
+
 The following items require balancing or further design work:
 
-- Exact real-time-to-simulation-time relationship.
-- Initial tree species.
-- Starting currency and initial living expenses.
-- Initial leaf denomination and production rules.
-- Detailed photosynthesis and energy allocation equations.
-- Maximum harvesting rates.
-- Currency issuance mechanics and monetary policy.
-- Exact inflation model.
-- Environmental recovery timescales.
-- Regional simulation granularity.
-- Genetic Legacy calculation.
-- Business valuation model.
-- Multiplayer or single-player scope.
-- Final monetization model.
+- Exact real-time-to-simulation-time relationship. **[RESOLVED — DR-1]**
+  Provisional real-time targets adopted (1:1 clock; financial independence
+  30–60d, neglect death 6–12mo, collapse 2–4yr, recovery 1–5+yr).
+- Initial tree species. **[RESOLVED — DR-4]** One fully implemented White Oak
+  for initial release; height/diameter independence must be modeled before a
+  2nd species is added.
+- Starting currency and initial living expenses. [provisional — tuning]
+- Initial leaf denomination and production rules. [provisional — tuning]
+- Detailed photosynthesis and energy allocation equations. **[RESOLVED — DR-1]**
+  @provisional constants tuned against the real-time targets via the P12-C
+  design-promise bot.
+- Maximum harvesting rates. **[RESOLVED — DR-1]** Tuned against the three
+  mortality scenarios (neglect / aggressive harvesting / repeated overharvesting).
+- Currency issuance mechanics and monetary policy. [provisional — tuning]
+- Exact inflation model. [provisional — tuning]
+- Environmental recovery timescales. **[RESOLVED — DR-1]** Recovery 1–5+yr,
+  differentiated from regional degradation (which can precede global collapse).
+- Regional simulation granularity. **[RESOLVED — DR-5]** Player-driven outcomes
+  + autonomous background processes (two layers).
+- Genetic Legacy calculation. [provisional — tuning]
+- Business valuation model. [provisional — tuning]
+- Multiplayer or single-player scope. **[RESOLVED — DR-2]** Single-player only.
+- Final monetization model. **[RESOLVED — DR-3]** Cosmetic-only; no
+  gameplay-affecting purchases, no time-skip sales.
 
 These should be resolved through simulation prototypes and playtesting rather than arbitrary initial assumptions.
