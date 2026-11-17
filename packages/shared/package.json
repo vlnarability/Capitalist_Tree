@@ -29,6 +29,6 @@
     "test": "vitest run --root ../../"
   },
   "dependencies": {
-    "zod": "^3.23.8"
+    "zod": "^4.6.7"
   }
 }

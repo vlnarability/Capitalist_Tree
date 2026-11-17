@@ -55,10 +55,11 @@ import {
  * pure — never mutate input state. Reject unknown action types with
  * `UnknownActionError` (handled centrally by `executeAction`).
  */
-const speedMultiplierSchema = z.number().refine(
-  (n) => (PROVISIONAL_SPEED_MULTIPLIERS as readonly number[]).includes(n),
-  (n) => ({ message: `Invalid speed multiplier ${n}` }),
-);
+const speedMultiplierSchema = z
+  .number()
+  .refine((n) => (PROVISIONAL_SPEED_MULTIPLIERS as readonly number[]).includes(n), {
+    message: 'Invalid speed multiplier',
+  });
 
 export const noOpActionSchema = z.object({
   type: z.literal('no-op'),

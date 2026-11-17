@@ -110,6 +110,13 @@ export const gameStateSchema = z
         },
         globalMarketIndices: {},
       },
+      // P11 (Zod 4 / DR-7): Zod 4 requires the parent .default() value to
+      // include every field the schema declares, even those with their own
+      // inner .default() (Zod 3 was lenient + filled them in). objectives +
+      // environment both have inner defaults in eventStateSchema; mirror them
+      // here so the default value matches the full EventState shape.
+      objectives: { completed: [] },
+      environment: { lastSoilHealthBand: 0 },
     })),
   })
   .superRefine((s, ctx) => {
