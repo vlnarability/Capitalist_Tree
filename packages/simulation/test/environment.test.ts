@@ -795,19 +795,21 @@ describe('EnvironmentSystem integration (engine.advance, slot #10)', () => {
     );
   });
 
-  // P11 follow-up (W15 design flaw): skipped. The W15 crossing-throttle
-  // (environment.ts pushEnvironmentNotifications) compares beforeEnv vs
-  // afterEnv WITHIN the EnvironmentSystem's execute. But `soil.health` is
-  // recomputed by the ResourceSystem (slot #4) BEFORE the EnvironmentSystem
-  // (slot #10) runs — so the EnvironmentSystem's beforeEnv.soil.health is
-  // ALREADY the post-ResourceSystem value, + its own stepSoil nudge rarely
-  // pushes it across a full band boundary. A sustained-low soil.health
-  // therefore emits NO notification (no crossing detected). The test as
-  // written (soil.health = 0.1, already critical) can never observe a
-  // crossing. Proper fix: emit soil-health notifications on VALUE-below-
-  // threshold with a persisted "last-notified" dedup field (schemas frozen
-  // by P7a — needs a schema bump). Tracked as a W15 follow-up.
-  it.skip('emits notification events when soil health drops below the warning threshold', () => {
+  // P11 follow-up (W15 design flaw — FIXED): the W15 crossing-throttle
+  // originally compared beforeEnv vs afterEnv WITHIN the EnvironmentSystem's
+  // execute, but soil.health is recomputed by the ResourceSystem (slot #4)
+  // BEFORE the EnvironmentSystem (slot #10) runs — so beforeEnv.soil.health
+  // was already this-tick's value, + a sustained-low soil.health emitted NO
+  // notification (no within-step crossing). The fix (schema v15→v16): persist
+  // the previous tick's soil-health band in
+  // `eventState.environment.lastSoilHealthBand`, + compare this-tick's band
+  // against it (escalation → emit, then update the persisted band). This
+  // survives save/load (no re-fire after the first post-load notification of
+  // a sustained-critical state). The test constructs a stressed state
+  // (soil.health = 0.1, band 2) from an initial state (band 0); the
+  // persisted last-band defaults to 0, so the 0 → 2 escalation fires the
+  // critical notification.
+  it('emits notification events when soil health drops below the warning threshold', () => {
     // Construct a state where the DERIVED soil health is low. ResourceSystem
     // (slot #4) recomputes `soil.health` each tick from the underlying factors,
     // so setting `health` directly is overwritten — we have to make the factors

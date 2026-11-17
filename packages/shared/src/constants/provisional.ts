@@ -407,8 +407,9 @@ export const PROVISIONAL_INITIAL_INTEREST_RATE = 0;
 // end-game objective completion so the `objective-achieved` notification does
 // not re-fire on threshold re-crossings or after save/load. The migration
 // backfills `{ completed: [] }` (objectives re-evaluate fresh on the first
-// post-load tick).
-export const CURRENT_SCHEMA_VERSION = 15;
+// post-load tick). Bumped to 16 in the W15 follow-up (persisted
+// eventState.environment.lastSoilHealthBand for soil-health crossing-throttle).
+export const CURRENT_SCHEMA_VERSION = 16;
 
 // Used by migration tests to exercise the v0 -> v1 path. Real saves are
 // always written at CURRENT_SCHEMA_VERSION.

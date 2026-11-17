@@ -513,6 +513,34 @@ export const eventStateSchema = z.object({
       completed: z.array(z.string()).default([]),
     })
     .default({ completed: [] }),
+  /**
+   * P11 (W15 follow-up / RV4-F-M8): persisted last-emitted severity band for
+   * cross-system environment notifications. The W15 crossing-throttle compares
+   * beforeEnv vs afterEnv WITHIN the EnvironmentSystem's execute — which works
+   * for fields the EnvironmentSystem itself evolves (globalTemperature via the
+   * climate model, biodiversity via stepBiodiversity) but NOT for `soil.health`,
+   * which is recomputed by the ResourceSystem (slot #4) BEFORE the
+   * EnvironmentSystem (slot #10) runs. So the EnvironmentSystem's
+   * beforeEnv.soil.health is already this-tick's value, + a sustained-low
+   * soil.health emits no notification (no crossing detected within the step).
+   *
+   * The fix: persist the previous tick's soil-health band here, + compare it
+   * against this-tick's band (escalation → emit, then update). This survives
+   * save/load (no re-fire on reload of a sustained-critical state after the
+   * first post-load notification). Pre-v16 saves didn't persist this; the
+   * v15→v16 migration backfills `{ lastSoilHealthBand: 0 }` (band 0 = healthy
+   * — so a loaded save with already-critical soil emits ONE notification on
+   * the first post-load tick, then dedups).
+   */
+  environment: z
+    .object({
+      /** Last soil-health severity band the EnvironmentSystem observed
+       *  (0 = healthy, 1 = warn, 2 = critical). Persisted so the W15
+       *  crossing-throttle can detect previous-tick → this-tick escalations
+       *  for soil.health (a cross-system field set by ResourceSystem). */
+      lastSoilHealthBand: z.number().int().min(0).max(2).default(0),
+    })
+    .default({ lastSoilHealthBand: 0 }),
 });
 export type EventState = z.infer<typeof eventStateSchema>;
 

@@ -439,6 +439,16 @@ export function initializeState(config: GameConfig): GameState {
       objectives: {
         completed: [],
       },
+      // P11 (W15 follow-up / RV4-F-M8): persisted last soil-health band. Starts
+      // at 0 (healthy) — the EnvironmentSystem updates it each tick so the
+      // crossing-throttle can detect previous-tick → this-tick escalations
+      // for soil.health (a cross-system field set by ResourceSystem before
+      // the EnvironmentSystem runs). Populated explicitly here so the
+      // serialize → deserialize round-trip holds (otherwise Zod's .default()
+      // would re-add it on deserialize + the round-trip would not be equal).
+      environment: {
+        lastSoilHealthBand: 0,
+      },
     },
   };
 

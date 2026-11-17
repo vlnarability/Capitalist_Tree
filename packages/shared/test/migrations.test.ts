@@ -1245,8 +1245,41 @@ describe('MigrationRegistry', () => {
     expect(out.economy.initialSupply).toBe('50000');
   });
 
-  it('v15 is the current schema version', () => {
-    expect(CURRENT_SCHEMA_VERSION).toBe(15);
+  it('v15 -> v16 migration backfills eventState.environment.lastSoilHealthBand (W15 follow-up)', () => {
+    // Construct a v15 state WITHOUT eventState.environment (the field the
+    // v15→v16 migration adds). freshState() + manual override.
+    const v15State = freshState();
+    // Strip any environment block on eventState (simulate a pre-v16 save).
+    const { environment: _stripped, ...eventStateWithoutEnv } = v15State.eventState as {
+      environment?: unknown;
+    };
+    const state = {
+      ...v15State,
+      eventState: eventStateWithoutEnv,
+    } as unknown as GameState;
+
+    const out = migrations.migrate(state, 15, CURRENT_SCHEMA_VERSION);
+    expect(out.eventState.environment).toBeDefined();
+    expect(out.eventState.environment.lastSoilHealthBand).toBe(0);
+  });
+
+  it('v15 -> v16 migration is idempotent on a v16 save (preserves hand-patched band)', () => {
+    // A save that already has eventState.environment keeps its value.
+    const v15State = freshState();
+    const state = {
+      ...v15State,
+      eventState: {
+        ...v15State.eventState,
+        environment: { lastSoilHealthBand: 2 },
+      },
+    } as unknown as GameState;
+
+    const out = migrations.migrate(state, 15, CURRENT_SCHEMA_VERSION);
+    expect(out.eventState.environment.lastSoilHealthBand).toBe(2);
+  });
+
+  it('v16 is the current schema version', () => {
+    expect(CURRENT_SCHEMA_VERSION).toBe(16);
   });
 
   it('v12 -> v13 migration is a defensive no-op on the environment derivation when world.environment is missing', () => {

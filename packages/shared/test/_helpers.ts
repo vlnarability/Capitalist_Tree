@@ -236,6 +236,14 @@ export function baseState(overrides: Partial<GameState> = {}): GameState {
       objectives: {
         completed: [],
       },
+      // P11 (W15 follow-up): persisted last soil-health band (v16+). Populated
+      // explicitly so the deep-equal round-trip holds (same pattern as the
+      // other eventState fields) — otherwise the v15→v16 migration would add
+      // it on a migrated save + the idempotency tests (migrate vN→CURRENT,
+      // expect no field changes) would fail.
+      environment: {
+        lastSoilHealthBand: 0,
+      },
     },
   };
   return { ...base, ...overrides };

@@ -1311,3 +1311,38 @@ const v14ToV15: Migration = (state: GameState): GameState => {
 };
 
 migrations.register(14, v14ToV15);
+
+// P11 (W15 follow-up / RV4-F-M8): v15 -> v16 migration. Adds
+// `eventState.environment.lastSoilHealthBand` — persisted previous-tick soil-
+// health severity band so the W15 crossing-throttle can detect
+// previous-tick → this-tick escalations for soil.health (a cross-system field
+// set by ResourceSystem before EnvironmentSystem runs; without this, a
+// sustained-low soil.health emits no notification because the EnvironmentSystem's
+// beforeEnv.soil.health is already this-tick's value).
+//
+// Backfill: `{ lastSoilHealthBand: 0 }` (band 0 = healthy). A loaded save with
+// already-critical soil therefore emits ONE environment-soil-health-low
+// notification on the first post-load tick (0 -> 2 escalation), then dedups.
+// A save that already has a hand-patched `environment` block keeps its values
+// (idempotent).
+//
+// Pure: does NOT touch `originalTree.id` / `originalTree.isOriginal` / the
+// `objectives` block added in v14 -> v15.
+const v15ToV16: Migration = (state: GameState): GameState => {
+  const out: GameState = { ...state };
+  const eventState = out.eventState as {
+    environment?: { lastSoilHealthBand?: number };
+  };
+
+  // Already present (idempotent) — keep the hand-patched value.
+  if (eventState.environment !== undefined) {
+    return out;
+  }
+
+  (out.eventState as { environment: { lastSoilHealthBand: number } }).environment = {
+    lastSoilHealthBand: 0,
+  };
+  return out;
+};
+
+migrations.register(15, v15ToV16);

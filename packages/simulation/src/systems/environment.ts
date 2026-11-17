@@ -201,6 +201,12 @@ function bandHigher(value: number, warn: number, critical: number): SeverityBand
 function pushEnvironmentNotifications(
   beforeEnv: GameState['world']['environment'],
   afterEnv: GameState['world']['environment'],
+  /** The output GameState being built (`next`). Read `next.eventState.
+   *  environment.lastSoilHealthBand` (the previous tick's persisted band —
+   *  `next.eventState` is shared by reference from the input state, so it
+   *  holds the prior tick's value) + write this-tick's band back via a new
+   *  eventState object (immutably, to preserve purity). */
+  next: GameState,
   now: number,
   events: SimulationEvent[],
 ): void {
@@ -239,10 +245,18 @@ function pushEnvironmentNotifications(
     });
   }
 
-  // Soil health (lower-is-worse).
-  const soilBeforeBand = bandLower(beforeEnv.soil.health, SOIL_HEALTH_WARN, SOIL_HEALTH_CRITICAL);
+  // Soil health (lower-is-worse). W15 follow-up (RV4-F-M8): soil.health is
+  // recomputed by the ResourceSystem (slot #4) BEFORE the EnvironmentSystem
+  // (slot #10) runs, so beforeEnv.soil.health is already this-tick's value —
+  // a within-step before/after comparison cannot detect a previous-tick →
+  // this-tick escalation (a sustained-low soil.health emitted nothing).
+  // Instead compare this-tick's band against the PERSISTED last band from
+  // eventState.environment.lastSoilHealthBand (survives save/load → no re-fire
+  // after the first post-load notification of a sustained-critical state).
+  const prevEnvState = next.eventState as { environment?: { lastSoilHealthBand?: number } };
+  const prevSoilBand = prevEnvState.environment?.lastSoilHealthBand ?? 0;
   const soilAfterBand = bandLower(afterEnv.soil.health, SOIL_HEALTH_WARN, SOIL_HEALTH_CRITICAL);
-  if (soilAfterBand > soilBeforeBand) {
+  if (soilAfterBand > prevSoilBand) {
     events.push({
       type: 'notification',
       at: now,
@@ -253,6 +267,13 @@ function pushEnvironmentNotifications(
       },
     });
   }
+  // Persist this-tick's band for next tick's crossing comparison. Create a
+  // NEW eventState object — next.eventState is shared by reference from the
+  // input state, so mutating it in place would break purity (Rule 4).
+  next.eventState = {
+    ...next.eventState,
+    environment: { lastSoilHealthBand: soilAfterBand },
+  };
 }
 
 export const environmentSystem: System = {
@@ -356,8 +377,12 @@ export const environmentSystem: System = {
 
     // 11. Threshold notifications (GDD §10.3 environmental feedback).
     // P11 (W15): pass before + after so notifications fire only on threshold
-    // crossings / severity escalations, not every tick.
-    pushEnvironmentNotifications(state.world.environment, env, ctx.now, events);
+    // crossings / severity escalations, not every tick. W15 follow-up: pass
+    // `next` so the soil.health check can read + persist the previous-tick
+    // band from eventState.environment.lastSoilHealthBand (soil.health is set
+    // by ResourceSystem before this system runs, so a within-step before/after
+    // comparison can't detect a previous-tick → this-tick escalation).
+    pushEnvironmentNotifications(state.world.environment, env, next, ctx.now, events);
 
     return { state: next, events };
   },
