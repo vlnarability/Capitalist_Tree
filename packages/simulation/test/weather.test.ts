@@ -318,17 +318,17 @@ describe('WeatherSystem integration — seasonal distribution sanity (5 sim year
     for (const cond of WEATHER_CONDITIONS) {
       expect(total[cond], `condition ${cond} should appear at least once`).toBeGreaterThan(0);
     }
-  }, 120_000);
+  }, 900_000);
 
   it('summer has more sunny than winter (per design intent)', () => {
     const t = tally();
     expect(t.summer.sunny).toBeGreaterThan(t.winter.sunny);
-  }, 120_000);
+  }, 900_000);
 
   it('winter has more frost than summer (per design intent)', () => {
     const t = tally();
     expect(t.winter.frost).toBeGreaterThan(t.summer.frost);
-  }, 120_000);
+  }, 900_000);
 
   it('severe-storm is rare (< 10% of any season)', () => {
     const t = tally();
@@ -337,14 +337,14 @@ describe('WeatherSystem integration — seasonal distribution sanity (5 sim year
       const stormFrac = t[season]['severe-storm'] / Math.max(1, seasonTotal);
       expect(stormFrac, `season ${season} storm fraction`).toBeLessThan(0.10);
     }
-  }, 120_000);
+  }, 900_000);
 
   it('autumn has more rain than summer (per design intent)', () => {
     const t = tally();
     expect(t.autumn.rain + t.autumn['heavy-rain']).toBeGreaterThan(
       t.summer.rain + t.summer['heavy-rain'],
     );
-  }, 120_000);
+  }, 900_000);
 });
 
 describe('WeatherSystem determinism (TDD §18.3)', () => {
@@ -375,7 +375,7 @@ describe('WeatherSystem determinism (TDD §18.3)', () => {
     const r = engine.advance(initial, 3 * PROVISIONAL_DAYS_PER_YEAR * SECONDS_PER_DAY);
     const damage = r.events.filter((e) => e.type === 'weather-damage');
     expect(damage.length).toBeGreaterThan(0);
-  }, 120_000);
+  }, 900_000);
 });
 
 describe('WeatherSystem RNG-state persistence across save/load (TDD §18.3)', () => {

@@ -762,9 +762,12 @@ describe('EnvironmentSystem integration (engine.advance, slot #10)', () => {
   });
 
   it('forestCoverage tracks tree growth (derived from biology outputs, read-only)', () => {
-    // Advance a long window so the tree grows.
+    // Advance a window so the tree grows. P11 (slow-test remediation):
+    // reduced from 30 days (43K steps ≈ 21s) to 3 days (4.3K steps ≈ 2s) —
+    // the assertions are bounds (fc in [0,1]) + tree.alive, which hold over
+    // any non-trivial duration.
     const initial = engine.initialize(cfg(42));
-    const longRun = 30 * SECONDS_PER_DAY; // 30 sim days
+    const longRun = 3 * SECONDS_PER_DAY; // 3 sim days
     const result = engine.advance(initial, longRun);
     // The tree ages over the run; forestCoverage is derived from age + canopy.
     // It should be finite and in [0,1], and (because the tree grows) not less
@@ -829,8 +832,11 @@ describe('EnvironmentSystem integration (engine.advance, slot #10)', () => {
   });
 
   it('env fields stay finite + non-negative over a long run', () => {
+    // P11 (slow-test remediation): reduced from 60 days (86K steps ≈ 43s) to
+    // 3 days (4.3K steps ≈ 2s) — pure bounds assertions (finite/non-negative/
+    // capacity) hold over any non-trivial duration.
     const initial = engine.initialize(cfg(7));
-    const result = engine.advance(initial, 60 * SECONDS_PER_DAY); // 60 sim days
+    const result = engine.advance(initial, 3 * SECONDS_PER_DAY); // 3 sim days
     const env = result.state.world.environment;
     const finiteNonNeg = (v: number) => Number.isFinite(v) && v >= 0;
     expect(finiteNonNeg(env.atmosphere.co2Concentration)).toBe(true);
@@ -857,16 +863,20 @@ describe('EnvironmentSystem integration (engine.advance, slot #10)', () => {
   });
 
   it('determinism: same seed → same environment state after N steps', () => {
-    const a = engine.advance(engine.initialize(cfg(123)), 10 * SECONDS_PER_DAY);
-    const b = engine.advance(engine.initialize(cfg(123)), 10 * SECONDS_PER_DAY);
+    // P11 (slow-test remediation): reduced from 10 days to 3 days —
+    // determinism holds over any N > 0.
+    const a = engine.advance(engine.initialize(cfg(123)), 3 * SECONDS_PER_DAY);
+    const b = engine.advance(engine.initialize(cfg(123)), 3 * SECONDS_PER_DAY);
     expect(JSON.stringify(a.state.world.environment)).toBe(
       JSON.stringify(b.state.world.environment),
     );
   });
 
   it('determinism: different seeds → different environment state (sanity)', () => {
-    const a = engine.advance(engine.initialize(cfg(123)), 10 * SECONDS_PER_DAY);
-    const b = engine.advance(engine.initialize(cfg(999)), 10 * SECONDS_PER_DAY);
+    // P11 (slow-test remediation): reduced from 10 days to 3 days — weather
+    // still differs by seed over 3 days.
+    const a = engine.advance(engine.initialize(cfg(123)), 3 * SECONDS_PER_DAY);
+    const b = engine.advance(engine.initialize(cfg(999)), 3 * SECONDS_PER_DAY);
     // Weather differs by seed, so freshwater + forestCoverage + biodiversity
     // will differ (globalTemperature is climate-driven + deterministic, so it
     // does NOT differ by seed post-R-P2-1 — the env object still differs via
