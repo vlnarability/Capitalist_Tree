@@ -63,7 +63,6 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
    * Intentionally NOT re-thrown.
    */
   override componentDidCatch(error: Error, info: ErrorInfo): void {
-    // eslint-disable-next-line no-console
     console.error('[ErrorBoundary] Uncaught render error:', error, info.componentStack);
   }
 
