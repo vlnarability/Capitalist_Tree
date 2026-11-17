@@ -24,6 +24,7 @@ import { useGameStore } from '../../stores/game-store';
 import { purchaseBusiness, operateBusiness, sellBusiness } from '../../lib/actions';
 import { formatMoneyFromStr } from '../../lib/format/money';
 import { Button } from '../common/Button';
+import { BusinessControls } from './BusinessControls';
 import type { BusinessState } from '@capitalist-tree/shared';
 
 export interface BusinessesPanelProps {
@@ -109,26 +110,30 @@ export function BusinessesPanel({ className }: BusinessesPanelProps = {}): React
             {owned.map((b: BusinessState) => (
               <li
                 key={b.id}
-                className="flex items-center justify-between gap-2 rounded border border-slate-700/60 bg-slate-800/40 px-3 py-1.5"
+                className="rounded border border-slate-700/60 bg-slate-800/40 px-3 py-1.5"
               >
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-baseline gap-2">
-                    <span className="truncate text-sm font-medium text-slate-200">{b.name}</span>
-                    <span className="shrink-0 text-[0.65rem] uppercase tracking-wide text-slate-500">{b.status}</span>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-baseline gap-2">
+                      <span className="truncate text-sm font-medium text-slate-200">{b.name}</span>
+                      <span className="shrink-0 text-[0.65rem] uppercase tracking-wide text-slate-500">{b.status}</span>
+                    </div>
+                    <span className="text-xs tabular-nums text-slate-400">
+                      Cash {formatMoneyFromStr(b.cash)} · Val {formatMoneyFromStr(b.valuation)}
+                      {b.employees > 0 && ` · ${b.employees} emp`}
+                    </span>
                   </div>
-                  <span className="text-xs tabular-nums text-slate-400">
-                    Cash {formatMoneyFromStr(b.cash)} · Val {formatMoneyFromStr(b.valuation)}
-                    {b.employees > 0 && ` · ${b.employees} emp`}
-                  </span>
+                  <div className="flex shrink-0 gap-1">
+                    <Button tone="active" onClick={() => onOperate(b.id)}>
+                      Operate
+                    </Button>
+                    <Button tone="warning" onClick={() => onSell(b.id)}>
+                      Sell
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex shrink-0 gap-1">
-                  <Button tone="active" onClick={() => onOperate(b.id)}>
-                    Operate
-                  </Button>
-                  <Button tone="warning" onClick={() => onSell(b.id)}>
-                    Sell
-                  </Button>
-                </div>
+                {/* P11-E: loan / employee / status management verbs. */}
+                <BusinessControls business={b} />
               </li>
             ))}
           </ul>

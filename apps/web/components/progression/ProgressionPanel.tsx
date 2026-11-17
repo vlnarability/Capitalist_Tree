@@ -20,7 +20,7 @@
  * Advanced-view only (Phase 5 is endgame). Reads `simState` + `dispatch` via
  * narrow Zustand selectors; never touches the simulation directly (rule 6).
  */
-import { type ReactElement } from 'react';
+import { useState, type ReactElement } from 'react';
 import { RESEARCH_NODES, GENETIC_TRAITS } from '@capitalist-tree/content';
 import { useGameStore } from '../../stores/game-store';
 import {
@@ -28,6 +28,7 @@ import {
   activateTrait,
   deactivateTrait,
   prestigeReset,
+  recordHistoricalEvent,
 } from '../../lib/actions';
 import { Button } from '../common/Button';
 
@@ -66,6 +67,23 @@ export function ProgressionPanel({ className }: ProgressionPanelProps = {}): Rea
     // Start a new generation with the same species (a future UI could let the
     // player pick a new species reward).
     dispatch(prestigeReset(simState.originalTree.speciesId, nowTick));
+  };
+
+  // P11-E: record-historical-event form state.
+  const [histTitle, setHistTitle] = useState('');
+  const [histDesc, setHistDesc] = useState('');
+  const onRecordHistorical = () => {
+    if (!histTitle.trim()) return;
+    dispatch(
+      recordHistoricalEvent(
+        `player-event:gen-${generation}-${nowTick}`,
+        histTitle.trim(),
+        histDesc.trim(),
+        nowTick,
+      ),
+    );
+    setHistTitle('');
+    setHistDesc('');
   };
 
   return (
@@ -169,6 +187,35 @@ export function ProgressionPanel({ className }: ProgressionPanelProps = {}): Rea
         <Button tone="warning" onClick={onPrestige}>
           Prestige (New Generation)
         </Button>
+      </div>
+
+      {/* P11-E: record-historical-event — annotate a milestone. */}
+      <div className="mt-4 border-t border-slate-700/60 pt-3">
+        <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">
+          Record Historical Event
+        </h3>
+        <p className="mb-2 text-xs text-slate-500">
+          Annotate a milestone or turning point against the lineage audit log.
+        </p>
+        <div className="flex flex-col gap-1.5">
+          <input
+            type="text"
+            placeholder="Title (e.g. 'First million earned')"
+            value={histTitle}
+            onChange={(e) => setHistTitle(e.target.value)}
+            className="rounded border border-slate-600 bg-slate-900 px-2 py-1 text-sm text-slate-200"
+          />
+          <textarea
+            placeholder="Description (optional)"
+            value={histDesc}
+            onChange={(e) => setHistDesc(e.target.value)}
+            rows={2}
+            className="rounded border border-slate-600 bg-slate-900 px-2 py-1 text-sm text-slate-200"
+          />
+          <Button onClick={onRecordHistorical} disabled={!histTitle.trim()}>
+            Record
+          </Button>
+        </div>
       </div>
     </section>
   );

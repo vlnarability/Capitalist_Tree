@@ -96,6 +96,8 @@ import {
 import { AutomationPanel } from '../components/automation';
 import { BusinessesPanel } from '../components/business';
 import { ProgressionPanel } from '../components/progression';
+import { EventsPanel } from '../components/events';
+import { PolicyPanel } from '../components/policy';
 import { OfflineModal, CatchUpProgressBar } from '../components/offline';
 
 // ----------------------------------------------------------------------------
@@ -384,6 +386,16 @@ export default function HomePage(): ReactElement {
               activate-trait / deactivate-trait / prestige-reset to the UI. */}
           <Panel title="Progression" icon="🧬" hint="GDD §11 / Phase 5">
             <ProgressionPanel />
+          </Panel>
+          {/* P11-E (Phase 6 game-loop gap): bridges schedule-event /
+              cancel-event / trigger-event / resolve-event to the UI. */}
+          <Panel title="Events" icon="🌦️" hint="GDD §10 / Phase 6">
+            <EventsPanel />
+          </Panel>
+          {/* P11-E (Phase 6 cont.): bridges set-government-policy /
+              set-monetary-policy to the UI. */}
+          <Panel title="Policy" icon="🏛️" hint="GDD §404 / Phase 6">
+            <PolicyPanel />
           </Panel>
         </div>
       ) : null}
