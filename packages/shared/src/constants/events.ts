@@ -126,6 +126,13 @@ export const PROVISIONAL_SPECIES_EXTINCTION_THRESHOLD = 0.2;
 /** Max concluded-event history entries kept (most recent). @provisional. */
 export const PROVISIONAL_EVENT_MAX_HISTORY = 1000;
 
+// P11 (W16 / RV4-F-M9): saturation cap for `speciesExtinctionRate`. Pre-fix,
+// the rate accumulated without bound in `evolveRegions` (every region below
+// the extinction threshold added EXTINCTION_RATE × days per tick). Over a
+// long run this could reach thousands, which is meaningless (extinction is
+// already total at 1.0) and bloats the indicator. Capped at 1.0.
+export const PROVISIONAL_EVENT_SPECIES_EXTINCTION_RATE_CAP = 1.0;
+
 // ---------------------------------------------------------------------------
 // P11 (W6 / RV4-F-H3): player→regional bridge. The player's land is modeled
 // via P7 `world.environment` (single-block), but the P10 regional model

@@ -48,6 +48,7 @@ import {
   PROVISIONAL_EVENT_RECOVERY_RATE,
   PROVISIONAL_REGIONAL_AGGREGATION_WEIGHTS,
   PROVISIONAL_SPECIES_EXTINCTION_THRESHOLD,
+  PROVISIONAL_EVENT_SPECIES_EXTINCTION_RATE_CAP,
 } from '@capitalist-tree/shared';
 
 const SECONDS_PER_DAY = 24 * 60 * 60;
@@ -342,7 +343,12 @@ export function evolveRegions(
       biodiversity = Math.max(0, region.biodiversity - pollutionStress * 0.4);
     }
     if (biodiversity < PROVISIONAL_SPECIES_EXTINCTION_THRESHOLD) {
-      speciesExtinctionRate += PROVISIONAL_EVENT_EXTINCTION_RATE * days;
+      // P11 (W16 / RV4-F-M9): cap at the saturation value — extinction is
+      // already total at 1.0; pre-fix this accumulated without bound.
+      speciesExtinctionRate = Math.min(
+        PROVISIONAL_EVENT_SPECIES_EXTINCTION_RATE_CAP,
+        speciesExtinctionRate + PROVISIONAL_EVENT_EXTINCTION_RATE * days,
+      );
     }
 
     const after: RegionState = {

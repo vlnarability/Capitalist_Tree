@@ -76,6 +76,15 @@ export function growthFactor(fractionComplete: number): number {
  * The growth factor slows growth near the ceiling.
  *
  * Returns the new value, clamped at `maximum` (NEVER exceeds the ceiling).
+ *
+ * P11 (W27 / RV2-3): height growth is COUPLED to the other dimensions via the
+ * shared asymptotic `growthFactor` (1 − frac)^EXPONENT. Biologically, height
+ * has a distinct S-curve (fast juvenile extension, then plateau) that differs
+ * from trunk-diameter/branch/root growth. A dedicated `heightGrowth` bucket
+ * with its own curve + species parameter is DEFERRED to a later phase
+ * (@provisional) — for now the shared factor is a reasonable approximation
+ * (both height and trunk slow near their ceilings). Documented here so the
+ * coupling is explicit, not accidental.
  */
 export function growDimension(
   current: number,

@@ -194,7 +194,12 @@ export function estimateSustainableHarvest(
 
   const productionPerDay =
     ctx.species.photosynthesisRate * tree.foliage.currentLeaves * cond * liebig;
-  const maintenancePerDay = maintenanceForStep(tree, ctx) / ctx.stepDays;
+  // P11 (W26 / RV2-4): guard against stepDays=0 (a zero-length step would
+  // divide by zero → Infinity/NaN). Default to 1 day so the per-day rate is
+  // well-defined. `maintenanceForStep` already scales by stepDays internally,
+  // so dividing by 1 (when stepDays is 0/missing) gives the per-day rate.
+  const stepDaysSafe = ctx.stepDays > 0 ? ctx.stepDays : 1;
+  const maintenancePerDay = maintenanceForStep(tree, ctx) / stepDaysSafe;
 
   const surplusPerDay = Math.max(0, productionPerDay - maintenancePerDay);
   const regrowablePerDay =
