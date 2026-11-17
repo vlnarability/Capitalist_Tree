@@ -11,6 +11,10 @@ export {
   engine,
   type SimulationEngine,
   type SimulationResult,
+  setProfilerEnabled,
+  isProfilerEnabled,
+  getProfilerLastStep,
+  type StepProfile,
 } from './simulation.js';
 export { initializeState, DEFAULT_GAME_CONFIG } from './initial-state.js';
 export {
