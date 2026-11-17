@@ -49,6 +49,7 @@ export function simulationEventToNotifications(
           severity: event.payload.severity,
           code: event.payload.code,
           message: event.payload.message,
+          at: event.at,
         },
       ];
     }
@@ -62,6 +63,7 @@ export function simulationEventToNotifications(
           severity: 'warning',
           code: 'weather-severe',
           message: `Weather shifted to ${to.replace(/^weather:/, '').replace(/-/g, ' ')}.`,
+          at: event.at,
         },
       ];
     }
@@ -72,6 +74,7 @@ export function simulationEventToNotifications(
           severity: 'info',
           code: 'season-changed',
           message: `Season changed from ${event.payload.from} to ${event.payload.to}.`,
+          at: event.at,
         },
       ];
     }
@@ -86,6 +89,7 @@ export function simulationEventToNotifications(
           severity: 'warning',
           code: 'scheduled-event-fired',
           message: `Scheduled event fired: ${kind.replace(/-/g, ' ')}.`,
+          at: event.at,
         },
       ];
     }
@@ -106,6 +110,7 @@ export function simulationEventToNotifications(
           severity: critical ? 'critical' : 'warning',
           code: `system-${systemId}`,
           message,
+          at: event.at,
         },
       ];
     }

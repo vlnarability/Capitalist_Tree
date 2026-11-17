@@ -172,7 +172,7 @@ export function ProgressionPanel({ className }: ProgressionPanelProps = {}): Rea
               </li>
             );
           })}
-          {GENETIC_TRAITS.every((def) => !availableTraits.includes(def.id) && !activeTraitIds.has(def.id)) && (
+          {GENETIC_TRAITS.every((def) => !availableTraits.includes(def.id) && !acquiredTraits.has(def.id)) && (
             <li className="text-xs text-slate-500">No traits acquired yet. Unlock research to acquire traits.</li>
           )}
         </ul>

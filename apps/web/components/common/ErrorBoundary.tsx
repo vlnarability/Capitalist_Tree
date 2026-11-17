@@ -62,7 +62,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
    * in dev tools + captured by any error-reporting integration added later.
    * Intentionally NOT re-thrown.
    */
-  componentDidCatch(error: Error, info: ErrorInfo): void {
+  override componentDidCatch(error: Error, info: ErrorInfo): void {
     // eslint-disable-next-line no-console
     console.error('[ErrorBoundary] Uncaught render error:', error, info.componentStack);
   }
@@ -74,7 +74,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     }
   };
 
-  render(): ReactNode {
+  override render(): ReactNode {
     if (!this.state.hasError) {
       return this.props.children;
     }

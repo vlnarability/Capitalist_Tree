@@ -79,9 +79,19 @@ export function catchUpOnLoadAsync(
         });
       } else if (msg.type === 'error') {
         cleanup();
-        // Reconstruct the error — OfflineClockTamperedError is the expected one.
+        // Reconstruct the error — OfflineClockTamperedError is the expected
+        // one. The worker sends the 3 numeric fields (lastSimulatedAt,
+        // nowMs, backwardsMs) needed to build a real instance; the trigger
+        // checks `instanceof OfflineClockTamperedError`, so a plain Error
+        // with a name wouldn't satisfy it.
         if (msg.name === 'OfflineClockTamperedError') {
-          reject(new OfflineClockTamperedError(msg.message));
+          reject(
+            new OfflineClockTamperedError(
+              msg.lastSimulatedAt ?? 0,
+              msg.nowMs ?? 0,
+              msg.backwardsMs ?? 0,
+            ),
+          );
         } else {
           reject(new Error(msg.message));
         }

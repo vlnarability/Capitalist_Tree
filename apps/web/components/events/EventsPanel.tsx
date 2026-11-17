@@ -151,7 +151,7 @@ export function EventsPanel({ className }: EventsPanelProps = {}): ReactElement 
                 className="flex items-center justify-between gap-2 rounded border border-slate-700/60 bg-slate-800/40 px-3 py-1.5"
               >
                 <div className="min-w-0 flex-1">
-                  <span className="block truncate text-sm text-slate-200">{eventName(ev.eventTypeId)}</span>
+                  <span className="block truncate text-sm text-slate-200">{eventName(ev.type)}</span>
                   <span className="text-xs tabular-nums text-slate-400">{ev.remaining}s remaining</span>
                 </div>
                 <Button tone="warning" onClick={() => onResolve(ev.id)}>
@@ -180,7 +180,7 @@ export function EventsPanel({ className }: EventsPanelProps = {}): ReactElement 
                   className="flex items-center justify-between gap-2 rounded border border-slate-700/60 bg-slate-800/40 px-3 py-1.5"
                 >
                   <div className="min-w-0 flex-1">
-                    <span className="block truncate text-sm text-slate-200">{eventName(ev.eventTypeId)}</span>
+                    <span className="block truncate text-sm text-slate-200">{eventName(ev.type)}</span>
                     <span className="text-xs tabular-nums text-slate-400">in {delayDays.toFixed(1)} sim days</span>
                   </div>
                   <Button tone="warning" onClick={() => onCancel(ev.id)}>

@@ -163,6 +163,7 @@ export function useSimulationLoop(
                   code: 'concurrent-tab-detected',
                   message:
                     'Another tab is already running this game. Progress here may be overwritten. Close the other tab to avoid conflicts.',
+                  at: 0,
                 });
               }
               // Hold the lock for the session lifetime — the Promise stays
@@ -354,6 +355,7 @@ export function useSimulationLoop(
           severity: 'critical',
           code: 'save-quota-exceeded',
           message: err.message,
+          at: stamped.clock.elapsedSeconds,
         });
       } else {
         // Unknown save error — surface it so it isn't silently swallowed.
@@ -361,6 +363,7 @@ export function useSimulationLoop(
           severity: 'critical',
           code: 'save-failed',
           message: `Save failed: ${(err as Error).message}`,
+          at: stamped.clock.elapsedSeconds,
         });
       }
     }

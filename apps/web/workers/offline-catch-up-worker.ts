@@ -21,7 +21,12 @@
  */
 
 import { runOfflineCatchUpChunked } from '@capitalist-tree/simulation';
-import type { GameState, OfflineSummary, SimulationEvent } from '@capitalist-tree/shared';
+import {
+  OfflineClockTamperedError,
+  type GameState,
+  type OfflineSummary,
+  type SimulationEvent,
+} from '@capitalist-tree/shared';
 
 interface RunMessage {
   type: 'run';
@@ -46,6 +51,13 @@ interface ErrorMessage {
   type: 'error';
   message: string;
   name: string;
+  /** Present only when name === 'OfflineClockTamperedError' — the 3 numeric
+   *  fields needed to reconstruct the error on the main thread (the trigger
+   *  checks `instanceof OfflineClockTamperedError`, so a plain Error with a
+   *  name wouldn't satisfy it). */
+  lastSimulatedAt?: number;
+  nowMs?: number;
+  backwardsMs?: number;
 }
 type OutMessage = ProgressMessage | DoneMessage | ErrorMessage;
 
@@ -71,11 +83,25 @@ function post(msg: OutMessage): void {
       });
     } catch (err) {
       const error = err as Error;
-      post({
-        type: 'error',
-        message: error.message,
-        name: error.name,
-      });
+      // If the error is an OfflineClockTamperedError, include the 3 numeric
+      // fields so the main thread can reconstruct a real instance (the
+      // trigger checks `instanceof` — a plain Error with a name won't match).
+      if (err instanceof OfflineClockTamperedError) {
+        post({
+          type: 'error',
+          message: error.message,
+          name: error.name,
+          lastSimulatedAt: err.lastSimulatedAt,
+          nowMs: err.nowMs,
+          backwardsMs: err.backwardsMs,
+        });
+      } else {
+        post({
+          type: 'error',
+          message: error.message,
+          name: error.name,
+        });
+      }
     }
   },
 );
