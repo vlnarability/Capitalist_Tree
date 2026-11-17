@@ -1278,8 +1278,37 @@ describe('MigrationRegistry', () => {
     expect(out.eventState.environment.lastSoilHealthBand).toBe(2);
   });
 
-  it('v16 is the current schema version', () => {
-    expect(CURRENT_SCHEMA_VERSION).toBe(16);
+  it('v16 -> v17 migration backfills rngVersion=1 (DR-6 — legacy saves keep v1 root-consuming fork)', () => {
+    // Construct a v16 state WITHOUT rngVersion (the field the v16→v17 migration
+    // adds). freshState() initializes at v2, so strip it to simulate a legacy
+    // save that predates the field.
+    const v16State = freshState();
+    const { rngVersion: _stripped, ...withoutRngVersion } = v16State as {
+      rngVersion?: number;
+    };
+    const state = withoutRngVersion as unknown as GameState;
+
+    const out = migrations.migrate(state, 16, CURRENT_SCHEMA_VERSION);
+    // Legacy saves MUST migrate to v1 so their RNG sequence is preserved
+    // (the whole point of DR-6 versioning — v2 only affects NEW simulations).
+    expect(out.rngVersion).toBe(1);
+  });
+
+  it('v16 -> v17 migration is idempotent on a save that already has rngVersion (preserves the value)', () => {
+    // A save that already has rngVersion keeps its value (hand-patched or a
+    // re-loaded v17 save routed through the migration path).
+    const v16State = freshState();
+    const state = {
+      ...v16State,
+      rngVersion: 2,
+    } as unknown as GameState;
+
+    const out = migrations.migrate(state, 16, CURRENT_SCHEMA_VERSION);
+    expect(out.rngVersion).toBe(2);
+  });
+
+  it('v17 is the current schema version', () => {
+    expect(CURRENT_SCHEMA_VERSION).toBe(17);
   });
 
   it('v12 -> v13 migration is a defensive no-op on the environment derivation when world.environment is missing', () => {

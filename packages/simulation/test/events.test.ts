@@ -110,7 +110,7 @@ function ctxAt(state: GameState, now: number): SystemContext {
     now,
     stepSeconds: STEP,
     dayOfYear: state.clock.day,
-    rng: Rng.fromState(state.rngState),
+    rng: Rng.fromState(state.rngState, state.rngVersion),
   };
 }
 
@@ -1019,7 +1019,7 @@ describe('determinism + purity', () => {
 describe('EventSystem — RNG fork deferred (R-P10-N: zero root draws)', () => {
   it('execute() consumes ZERO root RNG draws (rng state unchanged)', () => {
     const initial = freshState(42);
-    const rng = Rng.fromState(initial.rngState);
+    const rng = Rng.fromState(initial.rngState, initial.rngVersion);
     const before = rng.getState();
     const c: SystemContext = {
       now: initial.clock.elapsedSeconds + STEP,
@@ -1036,7 +1036,7 @@ describe('EventSystem — RNG fork deferred (R-P10-N: zero root draws)', () => {
 
   it('execute() consumes ZERO root RNG draws even on a check tick (first tick seeds regions + aggregates)', () => {
     const initial = freshState(42);
-    const rng = Rng.fromState(initial.rngState);
+    const rng = Rng.fromState(initial.rngState, initial.rngVersion);
     const before = rng.getState();
     const c: SystemContext = {
       now: initial.clock.elapsedSeconds + STEP,
@@ -1055,7 +1055,7 @@ describe('EventSystem — RNG fork deferred (R-P10-N: zero root draws)', () => {
     const full = engine.advance(initial, STEP);
     // Manually replay one step WITHOUT the EventSystem to isolate its
     // root-RNG contribution (mirrors runOneStep's RNG threading).
-    const rng = Rng.fromState(initial.rngState);
+    const rng = Rng.fromState(initial.rngState, initial.rngVersion);
     const c: SystemContext = {
       now: initial.clock.elapsedSeconds + STEP,
       stepSeconds: STEP,

@@ -409,7 +409,10 @@ export const PROVISIONAL_INITIAL_INTEREST_RATE = 0;
 // backfills `{ completed: [] }` (objectives re-evaluate fresh on the first
 // post-load tick). Bumped to 16 in the W15 follow-up (persisted
 // eventState.environment.lastSoilHealthBand for soil-health crossing-throttle).
-export const CURRENT_SCHEMA_VERSION = 16;
+// Bumped to 17 in DR-6 (persisted GameState.rngVersion — v1 legacy
+// root-consuming fork for existing saves, v2 non-root-consuming for new sims;
+// the v16→v17 migration stamps rngVersion=1 on legacy saves).
+export const CURRENT_SCHEMA_VERSION = 17;
 
 // Used by migration tests to exercise the v0 -> v1 path. Real saves are
 // always written at CURRENT_SCHEMA_VERSION.

@@ -220,8 +220,21 @@ save metadata field + a migration that stamps existing saves with the legacy
 RNG version). It must not regress the determinism test (TDD §21 #15: same seed
 → identical state).
 
-**Status:** Adopted — migration-gated. The non-root-consuming fork is the
-target; the legacy RNG is preserved for existing saves.
+**Status:** Adopted — mechanism implemented (steps 1–4); switchover (step 5)
+deferred. The non-root-consuming v2 fork, the `Rng.forkVersion` field, the
+`GameState.rngVersion` schema field, the v16→v17 migration (legacy saves →
+v1), the CURRENT_SCHEMA_VERSION bump (16→17), + deterministic tests for both
+v1 + v2 are all in place. New sims still initialize at **v1** (the switchover
+to v2 is gated behind a separate step): v2 shifts the root RNG state at init
+(the weather fork becomes non-root-consuming) + changes per-tick fork
+sequences, which shifts mortality timing + other RNG-driven outcomes. A
+maximally starved tree that died within a day under v1's sequence survives
+~30 days under v2's sequence for the test seed — the v2 sequence needs
+deliberate behavioral assessment + test recalibration before new sims switch
+over. Legacy saves keep v1 (their sequence is preserved exactly). The v2
+mechanism is exercised directly by `packages/simulation/test/rng.test.ts`
+(DR-6 fork-versioning describe block) so it stays regression-guarded while
+dormant in production.
 
 ---
 

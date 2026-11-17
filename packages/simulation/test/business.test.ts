@@ -1178,7 +1178,7 @@ describe('BusinessSystem — registry slot #8', () => {
       now: state.clock.elapsedSeconds + STEP,
       stepSeconds: STEP,
       dayOfYear: state.clock.day,
-      rng: Rng.fromState(state.rngState),
+      rng: Rng.fromState(state.rngState, state.rngVersion),
     };
     const result = businessSystem.execute(state, ctx);
     const ev = result.events.find((e) => e.type === 'business-bankrupt');
@@ -1199,7 +1199,7 @@ describe('BusinessSystem — registry slot #8', () => {
       now: SECONDS_PER_DAY,
       stepSeconds: SECONDS_PER_DAY,
       dayOfYear: 1,
-      rng: Rng.fromState(state.rngState),
+      rng: Rng.fromState(state.rngState, state.rngVersion),
     };
     const result = businessSystem.execute(state, ctx);
     const business = result.state.businesses.find((b) => b.id === businessId)!;
@@ -1224,7 +1224,7 @@ describe('determinism + purity', () => {
       now: state.clock.elapsedSeconds + STEP,
       stepSeconds: STEP,
       dayOfYear: state.clock.day,
-      rng: Rng.fromState(state.rngState),
+      rng: Rng.fromState(state.rngState, state.rngVersion),
     };
     const r1 = businessSystem.execute(state, ctx);
     const r2 = businessSystem.execute(state, ctx);
@@ -1255,7 +1255,7 @@ describe('determinism + purity', () => {
       now: state.clock.elapsedSeconds + STEP,
       stepSeconds: STEP,
       dayOfYear: state.clock.day,
-      rng: Rng.fromState(state.rngState),
+      rng: Rng.fromState(state.rngState, state.rngVersion),
     };
     // Should not throw — the system deep-copies on entry.
     expect(() => businessSystem.execute(frozen, ctx)).not.toThrow();
@@ -1279,7 +1279,7 @@ describe('determinism + purity', () => {
 describe('BusinessSystem — RNG fork deferred (R-P8-N: zero root draws)', () => {
   it('execute() consumes ZERO root RNG draws (rng state unchanged)', () => {
     const initial = freshState(42);
-    const rng = Rng.fromState(initial.rngState);
+    const rng = Rng.fromState(initial.rngState, initial.rngVersion);
     const before = rng.getState();
     const ctx: SystemContext = {
       now: initial.clock.elapsedSeconds + STEP,
@@ -1299,7 +1299,7 @@ describe('BusinessSystem — RNG fork deferred (R-P8-N: zero root draws)', () =>
     const full = engine.advance(initial, STEP);
     // Manually replay one step WITHOUT the BusinessSystem to isolate its
     // root-RNG contribution (mirrors runOneStep's RNG threading).
-    const rng = Rng.fromState(initial.rngState);
+    const rng = Rng.fromState(initial.rngState, initial.rngVersion);
     const ctx: SystemContext = {
       now: initial.clock.elapsedSeconds + STEP,
       stepSeconds: STEP,
@@ -1324,7 +1324,7 @@ describe('BusinessSystem — RNG fork deferred (R-P8-N: zero root draws)', () =>
       type: 'purchase-business',
       payload: { businessTypeId: WATER_EXTRACTION_PLANT.id },
     }).state;
-    const rng = Rng.fromState(withBusiness.rngState);
+    const rng = Rng.fromState(withBusiness.rngState, withBusiness.rngVersion);
     const ctx: SystemContext = {
       now: withBusiness.clock.elapsedSeconds + STEP,
       stepSeconds: STEP,

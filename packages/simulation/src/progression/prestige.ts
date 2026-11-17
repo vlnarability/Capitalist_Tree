@@ -357,6 +357,9 @@ export function applyPrestigeReset(
     clock: state.clock,
     history: state.history,
     rngState: state.rngState,
+    // DR-6: preserve the fork version across a prestige reset (the new
+    // generation keeps the same RNG fork behavior — zero root draws, R-P9-1).
+    rngVersion: state.rngVersion,
     rngStreams: state.rngStreams,
     scheduler: state.scheduler,
     eventState: state.eventState,

@@ -321,7 +321,7 @@ describe('WeatherSystem integration — seasonal distribution sanity (5 sim year
     } as const;
     // Initialize weatherRng exactly as the WeatherSystem does: restore from
     // rngStreams.weather if non-zero, else fork from the root RNG.
-    const rootRng = Rng.fromState(s0.rngState);
+    const rootRng = Rng.fromState(s0.rngState, s0.rngVersion);
     const persisted = s0.rngStreams?.weather;
     const isZero = !!persisted && persisted.every((w) => w === 0);
     const weatherRng =

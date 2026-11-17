@@ -1346,3 +1346,28 @@ const v15ToV16: Migration = (state: GameState): GameState => {
 };
 
 migrations.register(15, v15ToV16);
+
+/**
+ * DR-6 (docs/reviews/DECISIONS.md): stamp `rngVersion` on legacy saves.
+ *
+ * Pre-v17 saves have no `rngVersion` field. They MUST migrate in at v1
+ * (legacy root-consuming fork) so their RNG sequence does not silently
+ * change — the whole point of DR-6's versioning is that switching to the
+ * non-root-consuming v2 fork only affects NEW simulations. The gameStateSchema
+ * also defaults the field to 1, but the migration stamps it explicitly so the
+ * intent is recorded + a future schema change can't accidentally shift it.
+ *
+ * Idempotent: a save that already has `rngVersion` (e.g. a v17 save re-loaded
+ * through the migration path, or a hand-patched save) keeps its value.
+ */
+const v16ToV17: Migration = (state: GameState): GameState => {
+  const out: GameState = { ...state };
+  const maybeRngVersion = (out as { rngVersion?: number }).rngVersion;
+  if (maybeRngVersion !== undefined) {
+    return out;
+  }
+  (out as { rngVersion: number }).rngVersion = 1;
+  return out;
+};
+
+migrations.register(16, v16ToV17);

@@ -189,6 +189,10 @@ export function baseState(overrides: Partial<GameState> = {}): GameState {
     },
     history: { snapshots: [], archive: [] },
     rngState: [0, 0, 0, 0],
+    // DR-6: new sims + the fixture initialize at v1 (the v2 switchover is
+    // deferred — see DECISIONS.md DR-6 + initial-state.ts). The fixture
+    // mirrors the current GameState shape so idempotency tests see the field.
+    rngVersion: 1,
     rngStreams: { weather: [0, 0, 0, 0] },
     scheduler: { events: [] },
     // P10a (v13): EventSystem state (slot #12). The full v13 shape is

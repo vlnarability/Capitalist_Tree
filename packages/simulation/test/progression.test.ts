@@ -143,7 +143,7 @@ function ctxAt(state: GameState, now: number): SystemContext {
     now,
     stepSeconds: STEP,
     dayOfYear: state.clock.day,
-    rng: Rng.fromState(state.rngState),
+    rng: Rng.fromState(state.rngState, state.rngVersion),
   };
 }
 
@@ -1250,7 +1250,7 @@ describe('determinism + purity', () => {
 describe('ProgressionSystem — RNG fork deferred (R-P9-1: zero root draws)', () => {
   it('execute() consumes ZERO root RNG draws (rng state unchanged)', () => {
     const initial = freshState(42);
-    const rng = Rng.fromState(initial.rngState);
+    const rng = Rng.fromState(initial.rngState, initial.rngVersion);
     const before = rng.getState();
     const c: SystemContext = {
       now: initial.clock.elapsedSeconds + STEP,
@@ -1267,7 +1267,7 @@ describe('ProgressionSystem — RNG fork deferred (R-P9-1: zero root draws)', ()
 
   it('execute() consumes ZERO root RNG draws even when the achievement check runs (first tick, tracked empty)', () => {
     const initial = freshState(42);
-    const rng = Rng.fromState(initial.rngState);
+    const rng = Rng.fromState(initial.rngState, initial.rngVersion);
     const before = rng.getState();
     const c: SystemContext = {
       now: initial.clock.elapsedSeconds + STEP,
@@ -1288,7 +1288,7 @@ describe('ProgressionSystem — RNG fork deferred (R-P9-1: zero root draws)', ()
     const full = engine.advance(initial, STEP);
     // Manually replay one step WITHOUT the ProgressionSystem to isolate its
     // root-RNG contribution (mirrors runOneStep's RNG threading).
-    const rng = Rng.fromState(initial.rngState);
+    const rng = Rng.fromState(initial.rngState, initial.rngVersion);
     const c: SystemContext = {
       now: initial.clock.elapsedSeconds + STEP,
       stepSeconds: STEP,

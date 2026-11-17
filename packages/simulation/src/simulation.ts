@@ -116,7 +116,24 @@ function nowMs(): number {
 
 function runOneStep(state: GameState, stepSeconds: number): SystemResult {
   // Rebuild RNG from persisted state so the position survives across calls.
-  const rng = Rng.fromState(state.rngState);
+  // DR-6: thread the save's rngVersion so fork() uses the correct behavior
+  // (v1 legacy root-consuming for old saves, v2 non-root-consuming for new).
+  const rng = Rng.fromState(state.rngState, state.rngVersion);
+  // DR-6 v2: per-tick root nonce. Under v1, forks themselves advanced the
+  // root (a side effect that varied the root state across ticks). Under v2,
+  // forks are non-root-consuming — so without this nonce, nothing would
+  // advance the root + every v2 fork would derive the SAME child sequence
+  // every tick (the root state is static), freezing per-tick RNG-driven
+  // outcomes like mortality rolls. The nonce advances the root exactly one
+  // draw per tick, independent of how many systems fork, so:
+  //   - the root state varies across ticks (mortality/weather rolls vary),
+  //   - adding a fork still does NOT shift the root or other systems' forks
+  //     (the nonce is fixed at 1 draw/tick regardless of fork count).
+  // v1 skips the nonce — its root advancement (via forks) is preserved exactly
+  // so legacy saves keep their RNG sequence.
+  if (rng.forkVersion === 2) {
+    rng.next();
+  }
   const ctx: SystemContext = {
     now: state.clock.elapsedSeconds + stepSeconds,
     stepSeconds,

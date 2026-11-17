@@ -965,7 +965,7 @@ describe('EnvironmentSystem — RNG determinism (R-P7-1: fork deferred, zero roo
     const initial = engine.initialize(cfg(42));
     // Rebuild the root RNG from the persisted state (mirrors simulation.ts
     // runOneStep's RNG handling).
-    const rng = Rng.fromState(initial.rngState);
+    const rng = Rng.fromState(initial.rngState, initial.rngVersion);
     const before = rng.getState();
     const ctx: SystemContext = {
       now: initial.clock.elapsedSeconds + STEP,
@@ -992,7 +992,7 @@ describe('EnvironmentSystem — RNG determinism (R-P7-1: fork deferred, zero roo
     // Manually replay one step WITHOUT the EnvironmentSystem to isolate its
     // root-RNG contribution. Replicates runOneStep's RNG threading
     // (simulation.ts): one shared root Rng, ctx passed to every system.
-    const rng = Rng.fromState(initial.rngState);
+    const rng = Rng.fromState(initial.rngState, initial.rngVersion);
     const ctx: SystemContext = {
       now: initial.clock.elapsedSeconds + STEP,
       stepSeconds: STEP,

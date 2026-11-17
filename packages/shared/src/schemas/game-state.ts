@@ -64,6 +64,12 @@ export const gameStateSchema = z
     history: historicalStateSchema,
     // P0 additions beyond TDD §5.1 (documented in docs/simulation.md):
     rngState: rngStateSchema,
+    // DR-6 (docs/reviews/DECISIONS.md): which `Rng.fork()` behavior this save
+    // uses. v1 = legacy root-consuming (preserved for existing saves so their
+    // RNG sequence does not silently change); v2 = non-root-consuming (new
+    // sims initialize at v2). Default 1 so a legacy save missing the field
+    // parses as v1; the v16→v17 migration stamps it explicitly.
+    rngVersion: z.union([z.literal(1), z.literal(2)]).default(1),
     scheduler: schedulerStateSchema,
     // P2 addition: per-system RNG sub-streams that need to survive save/load
     // (TDD §18.3). Currently only WeatherSystem needs this.

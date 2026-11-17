@@ -44,7 +44,7 @@ function makeCtx(state: GameState): SystemContext {
     now: state.clock.elapsedSeconds + STEP,
     stepSeconds: STEP,
     dayOfYear: state.clock.day,
-    rng: Rng.fromState(state.rngState),
+    rng: Rng.fromState(state.rngState, state.rngVersion),
   };
 }
 
