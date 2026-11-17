@@ -41,6 +41,10 @@
  * §4.1, §18.4). Deterministic given `state` — no RNG.
  */
 import type { GameState } from '@capitalist-tree/shared';
+import {
+  PROVISIONAL_RESTORATION_THRESHOLD,
+  PROVISIONAL_DESTRUCTION_THRESHOLD,
+} from '@capitalist-tree/shared';
 
 // ---------------------------------------------------------------------------
 // Objective ids (GDD §12 — the 6 endings)
@@ -90,9 +94,8 @@ const OBJECTIVE_DESCRIPTIONS: Readonly<Record<ObjectiveId, string>> = {
 // 1e11 minor units. PROVISIONAL.
 const PROVISIONAL_WEALTHIEST_BEING_CASH_MINOR = 100_000_000_000n; // 1e11
 
-// PROVISIONAL (GDD §12) — restoration / balance thresholds.
-const PROVISIONAL_RESTORATION_THRESHOLD = 0.8;
-const PROVISIONAL_DESTRUCTION_THRESHOLD = 0.2;
+// P11 (W18): restoration / destruction thresholds now imported from the
+// shared progression constants (same source as the achievement evaluators).
 
 // PROVISIONAL (GDD §12) — generational-legacy generation count.
 const PROVISIONAL_GENERATIONAL_LEGACY_GENERATIONS = 3;

@@ -46,7 +46,11 @@ import type {
   GameState,
   SimulationEvent,
 } from '@capitalist-tree/shared';
-import { PROVISIONAL_ACHIEVEMENT_CHECK_INTERVAL_TICKS } from '@capitalist-tree/shared';
+import {
+  PROVISIONAL_ACHIEVEMENT_CHECK_INTERVAL_TICKS,
+  PROVISIONAL_RESTORATION_THRESHOLD,
+  PROVISIONAL_DESTRUCTION_THRESHOLD,
+} from '@capitalist-tree/shared';
 import { ACHIEVEMENTS, getAchievementById } from '@capitalist-tree/content';
 
 // ---------------------------------------------------------------------------
@@ -78,14 +82,17 @@ const PROVISIONAL_ACHIEVEMENT_GENERATIONS_THRESHOLD = 3;
 const PROVISIONAL_ACHIEVEMENT_SUPPLY_CHAIN_LEVELS = 6;
 
 // PROVISIONAL (GDD §17: Player Objectives — §12 The Great Restoration)
-// All four env indicators must exceed 0.8. PROVISIONAL.
-const PROVISIONAL_ACHIEVEMENT_RESTORATION_THRESHOLD = 0.8;
+// P11 (W18): aligned with the objective's shared threshold constant — both
+// evaluators read the same bar.
+const PROVISIONAL_ACHIEVEMENT_RESTORATION_THRESHOLD = PROVISIONAL_RESTORATION_THRESHOLD;
 
 // PROVISIONAL (GDD §17: Player Objectives — §12 The Last Tree)
-// Destruction thresholds (biodiversity < 0.2, forestCoverage < 0.1,
-// landUse.degraded > 0.8). PROVISIONAL.
-const PROVISIONAL_ACHIEVEMENT_DESTRUCTION_BIODIVERSITY_MAX = 0.2;
-const PROVISIONAL_ACHIEVEMENT_DESTRUCTION_FOREST_MAX = 0.1;
+// P11 (W18): aligned with the objective's shared DESTRUCTION_THRESHOLD.
+// Pre-fix, DESTRUCTION_FOREST_MAX was 0.1 (stricter than the objective's
+// 0.2) — the achievement + objective could disagree on whether forest was
+// "destroyed." Now both use 0.2.
+const PROVISIONAL_ACHIEVEMENT_DESTRUCTION_BIODIVERSITY_MAX = PROVISIONAL_DESTRUCTION_THRESHOLD;
+const PROVISIONAL_ACHIEVEMENT_DESTRUCTION_FOREST_MAX = PROVISIONAL_DESTRUCTION_THRESHOLD;
 const PROVISIONAL_ACHIEVEMENT_DESTRUCTION_DEGRADED_MIN = 0.8;
 
 // PROVISIONAL (GDD §17: Player Objectives — §12 The Natural Balance)

@@ -92,6 +92,7 @@ import {
   PROVISIONAL_UI_MAX_NOTIFICATIONS,
 } from '../lib/constants';
 import type { UiAction } from '../lib/actions';
+import { simulationEventsToNotifications } from '../lib/format/event-to-notification';
 
 // ----------------------------------------------------------------------------
 // Public types.
@@ -395,6 +396,11 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
       simState: result.state,
       events: appendBounded(get().events, result.events, PROVISIONAL_UI_MAX_EVENT_LOG),
     });
+    // P11 (W25): bridge significant SimulationEvents → UI notifications.
+    const notes = simulationEventsToNotifications(result.events);
+    for (const n of notes) {
+      get().pushNotification(n);
+    }
     return result.events;
   },
 
@@ -413,6 +419,11 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
       simState: state,
       events: appendBounded(get().events, events ?? [], PROVISIONAL_UI_MAX_EVENT_LOG),
     });
+    // P11 (W25): bridge significant SimulationEvents → UI notifications.
+    const notes = simulationEventsToNotifications(events ?? []);
+    for (const n of notes) {
+      get().pushNotification(n);
+    }
   },
 
   setEngineStatus: (status) => set({ engineStatus: status }),

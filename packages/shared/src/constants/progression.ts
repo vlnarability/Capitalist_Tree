@@ -77,3 +77,19 @@ export const PROVISIONAL_TRAIT_MAGNITUDE_DEFAULT = 0.75;
 // biodiversity, generation count — so running it every tick is wasteful).
 // 60 ticks = 60 simulation minutes = 1 real minute at 1x speed.
 export const PROVISIONAL_ACHIEVEMENT_CHECK_INTERVAL_TICKS = 60;
+
+// ---------------------------------------------------------------------------
+// P11 (W18 / RV4-F-M6): shared achievement + objective thresholds. Pre-fix,
+// the achievement (achievements.ts) + objective (objectives.ts) evaluators
+// each declared their OWN local threshold constants — they drifted: the
+// achievement's DESTRUCTION_FOREST_MAX was 0.1 while the objective's
+// DESTRUCTION_THRESHOLD (used for both biodiversity + forest) was 0.2. These
+// shared constants ensure both evaluators read identical thresholds so the
+// "great-restoration" achievement + objective + the "last-tree" pair measure
+// the same bar.
+// ---------------------------------------------------------------------------
+
+/** Restoration threshold (GDD §12 The Great Restoration): indicators ≥ this. */
+export const PROVISIONAL_RESTORATION_THRESHOLD = 0.8;
+/** Destruction threshold (GDD §12 The Last Tree): indicators ≤ this. */
+export const PROVISIONAL_DESTRUCTION_THRESHOLD = 0.2;
