@@ -3,6 +3,7 @@ import {
   engine,
   deepCopy,
   runOfflineCatchUp,
+  runOfflineCatchUpChunked,
   planOfflineCatchUp,
   DEFAULT_GAME_CONFIG,
 } from '../src/index.js';
@@ -412,5 +413,54 @@ describe('runOfflineCatchUp — purity (rule 2: no input mutation)', () => {
     expect(() => runOfflineCatchUp(s, T + ONE_REAL_HOUR_MS)).not.toThrow();
     // Input is structurally unchanged.
     expect(s).toEqual(freshState());
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P11 (W11 / RV5-F1): chunked catch-up with a progress callback (for the Web
+// Worker path — the worker posts {type:'progress'} after each chunk).
+// ---------------------------------------------------------------------------
+describe('runOfflineCatchUpChunked — progress callback (W11)', () => {
+  it('calls onProgress after each chunk with (completed, total)', () => {
+    const s = deepCopy(freshState());
+    const T = s.metadata.lastSimulatedAt;
+    // 1 real hour → 2 chunks at factor 60.
+    const nowMs = T + ONE_REAL_HOUR_MS;
+    const plan = planOfflineCatchUp(s, nowMs);
+    expect(plan.chunksPlanned).toBe(2);
+
+    const calls: Array<{ completed: number; total: number }> = [];
+    const result = runOfflineCatchUpChunked(s, nowMs, (completed, total) => {
+      calls.push({ completed, total });
+    });
+    // Called once per chunk: (1, 2) then (2, 2).
+    expect(calls).toEqual([
+      { completed: 1, total: 2 },
+      { completed: 2, total: 2 },
+    ]);
+    // The result is identical to the synchronous runOfflineCatchUp.
+    const syncResult = runOfflineCatchUp(s, nowMs);
+    expect(result.summary.chunksRun).toBe(syncResult.summary.chunksRun);
+    expect(result.state.clock.elapsedSeconds).toBe(syncResult.state.clock.elapsedSeconds);
+  });
+
+  it('reports (0, 0) for a zero-chunk catch-up (fresh save)', () => {
+    const s = deepCopy(freshState());
+    const T = s.metadata.lastSimulatedAt;
+    const calls: Array<{ completed: number; total: number }> = [];
+    const result = runOfflineCatchUpChunked(s, T, (completed, total) => {
+      calls.push({ completed, total });
+    });
+    expect(result.summary.chunksRun).toBe(0);
+    expect(calls).toEqual([{ completed: 0, total: 0 }]);
+  });
+
+  it('without a callback, behaves identically to runOfflineCatchUp', () => {
+    const s = deepCopy(freshState());
+    const T = s.metadata.lastSimulatedAt;
+    const chunked = runOfflineCatchUpChunked(s, T + ONE_REAL_HOUR_MS);
+    const sync = runOfflineCatchUp(s, T + ONE_REAL_HOUR_MS);
+    expect(chunked.state.clock.elapsedSeconds).toBe(sync.state.clock.elapsedSeconds);
+    expect(chunked.summary.chunksRun).toBe(sync.summary.chunksRun);
   });
 });

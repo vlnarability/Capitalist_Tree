@@ -94,7 +94,7 @@ import {
   CurrencyCosmeticPicker,
 } from '../components/economy';
 import { AutomationPanel } from '../components/automation';
-import { OfflineModal } from '../components/offline';
+import { OfflineModal, CatchUpProgressBar } from '../components/offline';
 
 // ----------------------------------------------------------------------------
 // Page component.
@@ -241,6 +241,11 @@ export default function HomePage(): ReactElement {
           null when no summary is parked, so this mount is a no-op most of
           the time. */}
       <OfflineModal />
+      {/* P11 (W11): progress bar for the Web Worker offline catch-up. Renders
+          null when no catch-up is running, so this mount is a no-op most of
+          the time. Shows while the worker runs chunks, then the OfflineModal
+          renders the summary. */}
+      <CatchUpProgressBar />
 
       {/* Top row: speed + save/load controls + the advanced-view toggle.
           Always visible — the player should be able to pause / save /

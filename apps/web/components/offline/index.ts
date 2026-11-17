@@ -14,3 +14,4 @@
  */
 export { OfflineModal, type OfflineModalProps } from './OfflineModal';
 export { OfflineDeltaRow, type OfflineDeltaRowProps } from './OfflineDeltaRow';
+export { CatchUpProgressBar, type CatchUpProgressBarProps } from './CatchUpProgressBar';

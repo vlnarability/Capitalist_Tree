@@ -328,7 +328,18 @@ function buildSummary(before: FieldSnapshot, after: FieldSnapshot, plan: Offline
  * Determinism: same `(state, nowMs)` produces a bit-identical result across
  * calls (the engine is pure and seeded). See the determinism test.
  */
-export function runOfflineCatchUp(state: GameState, nowMs: number): OfflineCatchUpResult {
+/**
+ * P11 (W11 / RV5-F1): chunked catch-up with a progress callback. Identical to
+ * {@link runOfflineCatchUp} but calls `onProgress(completed, total)` after
+ * each chunk so a Web Worker (or async yielding wrapper) can post progress to
+ * the main thread for a progress bar. The callback is optional — when
+ * omitted, this is equivalent to {@link runOfflineCatchUp}.
+ */
+export function runOfflineCatchUpChunked(
+  state: GameState,
+  nowMs: number,
+  onProgress?: (completed: number, total: number) => void,
+): OfflineCatchUpResult {
   const plan = planOfflineCatchUp(state, nowMs);
 
   // Before-snapshot is read from the input state (the pre-catch-up reality).
@@ -339,6 +350,8 @@ export function runOfflineCatchUp(state: GameState, nowMs: number): OfflineCatch
   if (plan.chunksPlanned === 0) {
     const emptyState = deepCopy(state);
     const emptySummary = buildSummary(before, before, { ...plan, simElapsedSeconds: 0, chunksPlanned: 0 });
+    // Report 100% even for the zero-chunk case so the UI can dismiss cleanly.
+    onProgress?.(0, 0);
     return { state: emptyState, summary: emptySummary, events: [] };
   }
 
@@ -367,6 +380,9 @@ export function runOfflineCatchUp(state: GameState, nowMs: number): OfflineCatch
         chunkEvents.push(ev);
       }
     }
+    // P11 (W11): report progress after each chunk so the Web Worker can post
+    // it to the main thread for the progress bar.
+    onProgress?.(i + 1, plan.chunksPlanned);
   }
 
   // Step 9 — after-snapshot + summary.
@@ -394,4 +410,14 @@ export function runOfflineCatchUp(state: GameState, nowMs: number): OfflineCatch
   const events: SimulationEvent[] = [startedEvent, ...chunkEvents, completedEvent];
 
   return { state: work, summary, events };
+}
+
+/**
+ * Synchronous catch-up (no progress callback). P11 (W11): delegates to
+ * {@link runOfflineCatchUpChunked} without a callback. Kept for callers that
+ * don't need progress (tests, the plan-only preview). The Web Worker path
+ * uses {@link runOfflineCatchUpChunked} with a `postMessage` callback.
+ */
+export function runOfflineCatchUp(state: GameState, nowMs: number): OfflineCatchUpResult {
+  return runOfflineCatchUpChunked(state, nowMs);
 }

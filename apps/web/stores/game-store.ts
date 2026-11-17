@@ -175,6 +175,15 @@ export interface GameUiState {
    * reference.
    */
   readonly pendingOfflineSummary: OfflineSummary | null;
+  /**
+   * P11 (W11 / RV5-F1): the Web Worker offline catch-up progress, or `null`
+   * when no catch-up is running. `{completed, total}` is updated after each
+   * chunk via `postMessage` from the worker so the UI can render a progress
+   * bar (30-day absence ≈ 1800 chunks — without this the main thread froze
+   * for minutes). `total=0` means the catch-up is zero-chunk (about to
+   * complete). UI-only — NOT part of the saved GameState.
+   */
+  readonly catchUpProgress: { completed: number; total: number } | null;
 }
 
 /**
@@ -221,6 +230,11 @@ export interface GameStoreState {
    * click). UI mutator only.
    */
   clearPendingOfflineSummary: () => void;
+  /**
+   * P11 (W11) — set the Web Worker catch-up progress (`null` = not running).
+   * UI mutator only — drives the progress bar while the worker runs chunks.
+   */
+  setCatchUpProgress: (progress: { completed: number; total: number } | null) => void;
 
   // --- UI-only action dispatch (symmetric to `dispatch` for `UiAction`) ---
   applyUiAction: (action: UiAction) => void;
@@ -333,6 +347,7 @@ export function initialGameUiState(): GameUiState {
     selectedCurrencyId: PROVISIONAL_UI_DEFAULT_CURRENCY_VISUAL_ID,
     reducedMotionOverride: 'auto',
     pendingOfflineSummary: null,
+    catchUpProgress: null,
   };
 }
 
@@ -462,6 +477,10 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
 
   clearPendingOfflineSummary: () =>
     set((s) => ({ ui: { ...s.ui, pendingOfflineSummary: null } })),
+
+  // P11 (W11) — Web Worker catch-up progress (drives the progress bar).
+  setCatchUpProgress: (progress) =>
+    set((s) => ({ ui: { ...s.ui, catchUpProgress: progress } })),
 
   // --- UI-only action dispatch ---
   //

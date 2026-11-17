@@ -16,6 +16,7 @@
  */
 export {
   runOfflineCatchUp,
+  runOfflineCatchUpChunked,
   planOfflineCatchUp,
   type OfflineCatchUpResult,
   type OfflineCatchUpPlan,

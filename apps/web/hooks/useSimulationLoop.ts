@@ -65,7 +65,7 @@ import {
   PROVISIONAL_UI_COMMIT_THROTTLE_MS,
   PROVISIONAL_UI_LOOP_FRAME_DT_MAX_MS,
 } from '../lib/constants';
-import { applyCatchUpOnLoad } from '../lib/persistence/offline-catch-up-trigger';
+import { applyCatchUpOnLoadAsync } from '../lib/persistence/offline-catch-up-async';
 
 // ----------------------------------------------------------------------------
 // Public types.
@@ -165,7 +165,17 @@ export function useSimulationLoop(
         // `Date.now()` is the spec-allowed single read at save/load time
         // (TDD §18.1); the catch-up processor itself is pure + deterministic
         // given (state, nowMs). A tampered clock is routed to a notification.
-        const catchUpResult = applyCatchUpOnLoad(state, Date.now(), useGameStore.getState());
+        // P11 (W11 / RV5-F1): the catch-up runs in a Web Worker off the main
+        // thread with progress reporting so a long absence (30 days ≈ 1800
+        // chunks) doesn't freeze the UI. Falls back to synchronous if the
+        // Worker is unavailable.
+        const catchUpResult = await applyCatchUpOnLoadAsync(
+          state,
+          Date.now(),
+          useGameStore.getState(),
+          (completed, total) => useGameStore.getState().setCatchUpProgress({ completed, total }),
+        );
+        useGameStore.getState().setCatchUpProgress(null); // clear on completion
         state = catchUpResult.state;
         if (catchUpResult.summary !== null) {
           useGameStore.getState().setPendingOfflineSummary(catchUpResult.summary);
@@ -313,8 +323,14 @@ export function useSimulationLoop(
     // P6d2 — re-run the offline catch-up on manual Load (same path as boot).
     // A stale save catches up; a tampered clock surfaces a notification; a
     // fresh save just resumes. The parked summary (if any) renders the
-    // OfflineModal.
-    const catchUpResult = applyCatchUpOnLoad(loaded, Date.now(), useGameStore.getState());
+    // OfflineModal. P11 (W11): runs in a Web Worker with progress reporting.
+    const catchUpResult = await applyCatchUpOnLoadAsync(
+      loaded,
+      Date.now(),
+      useGameStore.getState(),
+      (completed, total) => useGameStore.getState().setCatchUpProgress({ completed, total }),
+    );
+    useGameStore.getState().setCatchUpProgress(null); // clear on completion
     const state = catchUpResult.state;
     stateRef.current = state;
     accumulatorRef.current = 0;
