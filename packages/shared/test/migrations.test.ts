@@ -1033,6 +1033,7 @@ describe('MigrationRegistry', () => {
     expect(out.eventState.global.governmentPolicy).toEqual({
       environmentalRegulations: 0.3,
       carbonTaxRate: 0,
+      tariffRate: 0,
       subsidies: [],
     });
     // monetaryPolicy — schema defaults.

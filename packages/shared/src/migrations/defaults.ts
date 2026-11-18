@@ -1124,7 +1124,16 @@ const v12ToV13: Migration = (state: GameState): GameState => {
     const existingGlobal = existing.global as Record<string, unknown> | undefined;
     const global = isObject(existingGlobal)
       ? (() => {
-          const g: Record<string, unknown> = {};
+          // P11 (W8) / P13-C fix: spread `existingGlobal` first to preserve
+          // forward-compatible fields the v12→v13 migration doesn't know about
+          // (mirrors the top-level `{ ...existing, scheduler, global }` spread
+          // below). Pre-fix this rebuilt `global` as `{}` + a fixed field list,
+          // which dropped any unknown sub-field — breaking idempotency for saves
+          // migrated through the v12→v13 hop. The reconstructions below then
+          // overlay the known sub-fields (each preserves its own existing
+          // values + backfills missing ones), so the net effect is "preserve
+          // everything, backfill missing".
+          const g: Record<string, unknown> = { ...existingGlobal };
           // regions — preserve if array, else [].
           g.regions = Array.isArray(existingGlobal.regions) ? existingGlobal.regions : [];
           // aggregatedIndicators — preserve present sub-fields, backfill missing

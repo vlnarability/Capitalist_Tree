@@ -227,6 +227,7 @@ export function baseState(overrides: Partial<GameState> = {}): GameState {
         governmentPolicy: {
           environmentalRegulations: 0.3,
           carbonTaxRate: 0,
+          tariffRate: 0,
           subsidies: [],
         },
         monetaryPolicy: {
