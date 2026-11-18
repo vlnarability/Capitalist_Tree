@@ -62,9 +62,45 @@ above real-time targets hold (financial independence ≤ 60d, neglect death ≥
 `@provisional` rate constants (growth, mortality, market scarcity,
 environmental recovery) are tuned against these targets.
 
-**Status:** Adopted — targets provisional. Replaces the GDD §17 "Environmental
-recovery timescales" + "Detailed photosynthesis and energy allocation
-equations" open items with concrete measured goals.
+**Status:** Adopted — targets provisional; balance audit complete. Replaces the
+GDD §17 "Environmental recovery timescales" + "Detailed photosynthesis and
+energy allocation equations" open items with concrete measured goals.
+
+**Balance audit (10-day idle/neglect trajectory, seed 42).** An idle sim (no
+player actions = "neglect") was run for 10 sim days to read the current
+`@provisional` constants against the targets:
+
+| Day | stress | health | reserves | leaves | water | height |
+|---|---|---|---|---|---|---|
+| 1  | 0.972 | 0.289 | 123.3 | 50 | 49.9/50 | 0.50 |
+| 3  | 1.000 | 0.258 | 114.2 | 50 | 49.6/50 | 0.50 |
+| 7  | 1.000 | 0.225 |  96.1 | 50 | 49.1/50 | 0.50 |
+| 10 | 1.000 | 0.201 |  82.7 | 50 | 48.7/50 | 0.50 |
+
+**Misalignment found — neglect death ~1–2 months vs the 6–12 month target.**
+The idle tree reaches **critical stress (1.0) within 1 day** + reserves decline
+~4/day (123 → 82 over 10 days), so reserves cross the 10%-of-capacity mortality
+threshold around day ~28. With stress already critical, the reserves-exhausted
+mortality path (0.05/day) then kills the tree within ~1–2 months — **3–6× too
+fast** for the DR-1 neglect target (6–12 months). The drivers are the stress
+accumulation rates (`PROVISIONAL_BIOLOGY_STRESS_*_PER_DAY`: water 0.2, nutrient
+0.15, reserve 0.1, damage 0.05) + the maintenance/production balance that
+depletes reserves. Note the tree has full water (49.9/50) yet stress is 1.0 by
+day 3 — so the active driver is nutrient/reserve stress, not water.
+
+**Tuning direction (P12-C / focused follow-up).** To hit the 6–12 month neglect
+target, the stress accumulation rates +/or the reserve-depletion rate need to
+slow ~3–6×, AND/OR the mortality prob (0.05/day) needs re-calibration so a
+critically-stressed tree lingers longer. This is an iterative tuning pass
+(adjust constants → re-run the audit → check the target) best done with the P12-C
+design-promise bot running the 5/25/100yr extractive-vs-sustainable comparison.
+The financial-independence target (30–60d) could not be measured in this audit
+(the idle sim accrues no currency — harvesting + market activity require player
+actions or automation, which P12-C exercises). The ecological targets
+(2–4yr collapse, 1–5yr recovery) need year-scale runs.
+
+The audit script lives at `packages/simulation/test/_dr1_audit.test.ts`
+(diagnostic, not a regression test — re-run it after tuning to re-measure).
 
 ---
 
