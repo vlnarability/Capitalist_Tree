@@ -38,6 +38,14 @@ export interface SystemContext {
   readonly dayOfYear: number;
   /** Root RNG. Systems should `fork(name)` for their own sub-stream. */
   readonly rng: Rng;
+  /** SimulationEvents emitted by the systems that ran EARLIER in this same
+   *  step (in registry order). Lets a system react to what other systems
+   *  just emitted — e.g. the AutomationSystem's `event` policy kind fires
+   *  when a matching event type appears here. Systems that run first in the
+   *  registry see an empty array. The engine threads a live reference to its
+   *  accumulating per-step events array, so each system sees every event
+   *  emitted before it (not after). Systems MUST NOT mutate this array. */
+  readonly events: readonly SimulationEvent[];
 }
 
 export interface SystemResult {

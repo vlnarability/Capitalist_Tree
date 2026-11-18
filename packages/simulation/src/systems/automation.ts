@@ -24,13 +24,14 @@
  *      c. Accumulate the new state + events (each automation sees the effects
  *         of the ones before it this tick).
  *
- * @provisional Event-triggered policies: the engine does not pass the in-step
- * events to systems (`SystemContext` has no events field), so the
- * AutomationSystem cannot observe what other systems emitted this tick.
- * `event` policies therefore always evaluate to `condition-not-met` in this
- * revision. Wiring this requires extending `SystemContext` (or having the
- * engine thread events through), which is out of P6b2 scope — left as a
- * TODO for a follow-up that touches the engine + system interface.
+ * Event-triggered policies: the engine threads the SimulationEvents emitted
+ * by earlier systems in the same step into `ctx.events` (see `runOneStep` in
+ * `packages/simulation/src/simulation.ts`). The AutomationSystem reads
+ * `ctx.events.map(e => e.type)` + an `event` policy fires when its
+ * `eventType` appears in that list. AutomationSystem is registry slot #9, so
+ * it sees events from slots #1–#8; events emitted by later slots
+ * (EnvironmentSystem #10, EventSystem #12) in the SAME tick are not visible
+ * to it (would need a second automation pass — out of scope for this wiring).
  *
  * The system is pure: it deep-copies the input state, mutates the copy, and
  * returns the new state. The input is NEVER mutated (TDD §4.1).
@@ -110,10 +111,15 @@ export const automationSystem: System = {
     // the automation path's draws independent of other systems' sequences.
     const rng = ctx.rng.fork('AutomationSystem');
 
-    // @provisional: event-triggered policies (see module doc). The engine
-    // does not thread in-step events to systems, so this is empty and `event`
-    // policies always evaluate to condition-not-met for now.
-    const tickEvents: readonly string[] = [];
+    // The events emitted by the systems that ran earlier in this same step
+    // (threaded through ctx.events by the engine). An `event` policy fires
+    // when its `eventType` appears here. AutomationSystem is registry slot
+    // #9, so it sees events from slots #1–#8 (TimeSystem, WeatherSystem,
+    // ResourceSystem, BiologySystem, EconomySystem, PersonalSystem,
+    // BusinessSystem, ProgressionSystem); events emitted by later slots
+    // (EnvironmentSystem, EventSystem) in the SAME tick are not visible to it
+    // (would need a second automation pass — out of scope).
+    const tickEvents: readonly string[] = ctx.events.map((e) => e.type);
 
     // Iterate over a snapshot of the automation array — executeAutomation may
     // append to `next.automation` (e.g. a purchase-equipment action spawned by

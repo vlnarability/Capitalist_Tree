@@ -134,7 +134,7 @@ function runOneStep(state: GameState, stepSeconds: number): SystemResult {
   if (rng.forkVersion === 2) {
     rng.next();
   }
-  const ctx: SystemContext = {
+  const baseCtx = {
     now: state.clock.elapsedSeconds + stepSeconds,
     stepSeconds,
     dayOfYear: state.clock.day,
@@ -148,6 +148,13 @@ function runOneStep(state: GameState, stepSeconds: number): SystemResult {
 
   for (const system of defaultRegistry.all()) {
     const sysStart = profilerEnabled ? nowMs() : 0;
+    // Thread the events emitted so far this tick into ctx so a system can
+    // react to what earlier systems emitted in the same step (the
+    // AutomationSystem's `event` policy kind). `events` is the engine's live
+    // accumulator — each system sees every event emitted before it, in
+    // registry order. Systems are contractually pure + MUST NOT mutate
+    // ctx.events.
+    const ctx: SystemContext = { ...baseCtx, events };
     const result = system.execute(next, ctx);
     next = result.state;
     if (result.events.length > 0) {
