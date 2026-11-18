@@ -337,3 +337,25 @@ export const PROVISIONAL_WEATHER_DAMAGE_INTENSITY_THRESHOLD = 0.6;
 // Future tuning can differentiate per condition (storm damages structure,
 // frost damages foliage, etc.).
 export const PROVISIONAL_WEATHER_DAMAGE_SEVERITY_SCALE = 0.5;
+
+// PROVISIONAL (GDD §5.6 "Physical destruction" / P12-C neglect-death tuning).
+//
+// Fraction of current leaves lost when a weather-damage episode fires, scaled
+// by the episode's severity: `leafLoss = currentLeaves × severity × FRACTION`.
+// At severity ~0.5 + FRACTION 0.15, each episode strips ~7.5% of the canopy;
+// over ~5 episodes per 60-day prune window, the canopy drops to ~67% —
+// significant defoliation that cuts photosynthesis + reserve accumulation
+// without instantly bare-ing the tree.
+//
+// P12-C context: pre-P12-C, weather damage's ONLY mechanical impact was via
+// the damage-stress path (STRESS_DAMAGE_PER_DAY × activeDamage × stepDays,
+// counting ALL damage records). That made the weather damage (~0.09/day →
+// activeDamage ~5.4) the dominant neglect-death driver, killing the idle tree
+// in ~2 months — 3-6× too fast vs the DR-1 6-12 month target. P12-C moves the
+// weather damage's mechanical impact to defoliation (this constant) + excludes
+// `weather:*` records from the stress count (biology/stress.ts), so the
+// infestations (pest/disease, ~0.035/day → activeDamage ~2.1, just above the
+// recovery threshold of 2) become the RELIABLE neglect-death driver at ~9
+// months. The weather damage still wounds the tree (canopy loss → reduced
+// photosynthesis → slower reserve accrual) without dwarfing the infestations.
+export const PROVISIONAL_WEATHER_DAMAGE_LEAF_LOSS_FRACTION = 0.15;

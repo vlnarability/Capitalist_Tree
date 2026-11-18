@@ -78,9 +78,20 @@ export function updateStress(tree: TreeState, ctx: BiologyContext): StressUpdate
       stepDays;
   }
 
-  // Active damage stress — each unresolved damage record contributes.
-  // (Damage records decay naturally via age; the BiologySystem prunes them.)
-  const activeDamage = tree.damage.length;
+  // Active damage stress — each unresolved NON-WEATHER damage record
+  // contributes. (Damage records decay naturally via age; the BiologySystem
+  // prunes them.)
+  //
+  // P12-C: `weather:*` records are EXCLUDED — the weather damage's mechanical
+  // impact is defoliation (leaf loss applied in the WeatherSystem), not stress.
+  // Pre-P12-C, counting weather records made the weather damage (~0.09/day →
+  // activeDamage ~5.4) the dominant neglect-death driver, killing the idle
+  // tree in ~2 months (3-6× too fast vs the DR-1 6-12 month target). Excluding
+  // them makes the infestations (pest/disease, ~0.035/day → activeDamage ~2.1,
+  // just above the recovery threshold of recovery/STRESS_DAMAGE_PER_DAY = 2)
+  // the RELIABLE neglect-death driver at ~9 months. Severe-defoliation +
+  // pest + disease records still count.
+  const activeDamage = tree.damage.filter((d) => !d.type.startsWith('weather:')).length;
   stressAdd += PROVISIONAL_BIOLOGY_STRESS_DAMAGE_PER_DAY * activeDamage * stepDays;
 
   // Stress recovery: if no major stressors (water OK, nutrients OK, reserves

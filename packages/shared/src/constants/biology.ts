@@ -305,9 +305,12 @@ export const PROVISIONAL_BIOLOGY_STRESS_RESERVE_PER_DAY = 0.1;
 
 // PROVISIONAL (GDD §5.6 / §17: detailed photosynthesis and energy allocation equations)
 //
-// Stress added per active damage record per day. Damage records (severe
-// defoliation, weather damage) accumulate stress while they're on the tree;
-// the BiologySystem prunes old records via the mortality window.
+// Stress added per active (non-weather) damage record per day. Damage records
+// (severe defoliation, pest, disease) accumulate stress while they're on the
+// tree; the BiologySystem prunes old records via the mortality window.
+// (P12-C: `weather:*` records are excluded from this count — see
+// biology/stress.ts. The weather damage's mechanical impact is defoliation,
+// applied in the WeatherSystem.)
 export const PROVISIONAL_BIOLOGY_STRESS_DAMAGE_PER_DAY = 0.05;
 
 // ---------------------------------------------------------------------------

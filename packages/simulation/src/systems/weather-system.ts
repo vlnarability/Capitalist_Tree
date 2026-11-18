@@ -39,6 +39,7 @@ import type {
 } from '@capitalist-tree/shared';
 import {
   PROVISIONAL_WEATHER_DEFAULT_CLIMATE_ID,
+  PROVISIONAL_WEATHER_DAMAGE_LEAF_LOSS_FRACTION,
 } from '@capitalist-tree/shared';
 import {
   findClimateById,
@@ -183,6 +184,18 @@ export const weatherSystem: System = {
       // Targeted clone of originalTree + its damage array (the rest of state
       // is already shared by reference from the line-67 shallow clone).
       const damageType = eventDef.damageType!;
+      // P12-C: the weather damage's mechanical impact is DEFOILIATION (leaf
+      // loss), not stress. Pre-P12-C the only impact was via the damage-stress
+      // path (counting ALL damage records), which made the weather damage the
+      // dominant neglect-death driver (~2mo, 3-6× too fast vs the DR-1 6-12mo
+      // target). Now the weather:* records are excluded from the stress count
+      // (biology/stress.ts), + the canopy loss here is the weather damage's
+      // mechanical impact: reduced photosynthesis → slower reserve accrual.
+      // The leaf loss scales with severity × FRACTION of current leaves (a
+      // mature tree loses more canopy in absolute terms).
+      const currentLeaves = next.originalTree.foliage.currentLeaves;
+      const leafLoss = currentLeaves * severity * PROVISIONAL_WEATHER_DAMAGE_LEAF_LOSS_FRACTION;
+      const newLeaves = Math.max(0, currentLeaves - leafLoss);
       next.originalTree = {
         ...next.originalTree,
         damage: [
@@ -193,6 +206,10 @@ export const weatherSystem: System = {
             appliedAt: ctx.now,
           },
         ],
+        foliage: {
+          ...next.originalTree.foliage,
+          currentLeaves: newLeaves,
+        },
       };
       events.push({
         type: 'weather-damage',
