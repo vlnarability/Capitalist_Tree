@@ -359,14 +359,23 @@ export const PROVISIONAL_BIOLOGY_WEAR_DEATH_THRESHOLD = 6.0;
 // PROVISIONAL (GDD §5.6 "Pests" / §17: detailed biology model).
 //
 // Probability per day of a pest infestation taking hold (adds a `pest` damage
-// record). Pests are the more frequent biological threat (~1 per 50 days).
-export const PROVISIONAL_BIOLOGY_PEST_INFESTATION_RATE_PER_DAY = 0.02;
+// record). Pests are the more frequent biological threat.
+//
+// P12-C redesign follow-up: raised from 0.02 to 0.03 (~1.5×). At 0.02, the
+// combined infestation rate (pest 0.02 + disease 0.015 = 0.035/day growing
+// season, disease-only in winter) accumulated wear at ~0.0113/day observed —
+// too slow for the wear path's onset (3.0) to be reached within the DR-1
+// 6-12mo target (onset at ~9mo, threshold at ~18mo). At 0.03 (combined 0.0525
+// growing), the observed wear rate ~0.017/day → onset (3.0) at ~6mo, threshold
+// (6.0) at ~12mo, so the wear-path neglect death fires in the 6-12mo window.
+export const PROVISIONAL_BIOLOGY_PEST_INFESTATION_RATE_PER_DAY = 0.03;
 
 // PROVISIONAL (GDD §5.6 "Disease" / §17: detailed biology model).
 //
 // Probability per day of a disease taking hold (adds a `disease` damage
-// record). Rarer than pests (~1 per 67 days).
-export const PROVISIONAL_BIOLOGY_DISEASE_INFESTATION_RATE_PER_DAY = 0.015;
+// record). Rarer than pests. Raised 0.015 → 0.0225 (~1.5×) alongside the pest
+// rate (P12-C redesign follow-up) for the same wear-accumulation reason.
+export const PROVISIONAL_BIOLOGY_DISEASE_INFESTATION_RATE_PER_DAY = 0.0225;
 
 // PROVISIONAL (GDD §5.6 / §17).
 //

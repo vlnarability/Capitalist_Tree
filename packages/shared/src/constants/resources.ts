@@ -51,9 +51,25 @@ export const PROVISIONAL_RESOURCE_EVAPORATION_BASE_TEMP_C = 15;
 // simulation day, expressed as a fraction of the species' daily water
 // requirement scaled by `roots.absorptionCapacity`. This caps uptake so a
 // small root cannot drain a saturated soil in a single step (Liebig-style
-// capacity limit). 1.5 means a full root system can take up to 150% of the
-// daily need — headroom for refilling the internal water buffer.
-export const PROVISIONAL_RESOURCE_MAX_UPTAKE_FRACTION = 1.5;
+// capacity limit). Also reused by the nutrient balance (nutrients.ts) as the
+// same headroom factor for nutrient uptake.
+//
+// P12-C redesign follow-up: raised from 1.5 to 5.0. At 1.5, with the sapling's
+// rootAbsorptionCapacity (0.3 for White Oak, 0.25 for Eastern Hemlock — and
+// note roots.absorptionCapacity is never updated as roots.development grows,
+// a separate follow-up), the effective uptake cap was MAX × rootAbs = 0.45×
+// (oak) / 0.375× (hemlock) of the daily consumption. For water this was fine
+// (the stored buffer stayed far above the daily need → waterFactor stayed
+// high), but for NUTRIENTS it meant the tree absorbed only 45% of what it
+// consumed → the tree's internal nutrient pool depleted below the species'
+// requirement within ~90 days → nutrientFactor < 0.5 → nutrient stress →
+// stress climbed to 1.0 → reserves+stress mortality fired at ~5mo, before the
+// wear path's ~6mo onset (defeating the DR-1 6-12mo target). At 5.0, the
+// effective cap is 1.5× (oak) / 1.25× (hemlock) of consumption → the tree
+// refills its nutrient pool faster than it drains → nutrientFactor stays
+// >= 0.5 → no nutrient stress → the wear path drives the chronic-neglect
+// death at ~6-12mo. Water is unaffected (waterFactor was already high).
+export const PROVISIONAL_RESOURCE_MAX_UPTAKE_FRACTION = 5.0;
 
 // PROVISIONAL (GDD §17: detailed resource simulation equations)
 //
