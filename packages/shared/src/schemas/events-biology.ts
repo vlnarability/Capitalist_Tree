@@ -94,3 +94,30 @@ export const infestationEventSchema = z.object({
   }),
 });
 export type InfestationEvent = z.infer<typeof infestationEventSchema>;
+
+/**
+ * `seed-dispersed` event (GAP-19 / GDD §11.2 — reproduction / seeding).
+ *
+ * Emitted by the BiologySystem when the tree's `seedGrowthProgress` accumulator
+ * (fed by `alloc.reproduction`) reaches 1.0 AND the tree is past its fruiting
+ * age (`ageDays >= species.matureAgeDays ×
+ * PROVISIONAL_BIOLOGY_REPRODUCTION_FRUITING_AGE_FRACTION`). Carries the seed
+ * yield this event, the tree's total seed count after, + the reset accumulator
+ * value (0). A future `plant-seed` action (GDD §11.2 Genetic Legacy) will
+ * consume the accumulated `tree.seeds` to establish offspring trees.
+ */
+export const seedDispersedEventSchema = z.object({
+  type: z.literal('seed-dispersed'),
+  at: z.number().int().nonnegative(),
+  payload: z.object({
+    /** The tree that produced + dispersed the seeds. */
+    treeId: z.string().min(1),
+    /** Seeds produced by THIS dispersal event (= SEED_YIELD). */
+    seedsProduced: z.number().int().positive(),
+    /** The tree's total seed count after this event (monotonic). */
+    seedsTotal: z.number().int().nonnegative(),
+    /** `seedGrowthProgress` after the reset (0 — the accumulator emptied). */
+    seedGrowthProgressAfter: z.number().min(0).max(1),
+  }),
+});
+export type SeedDispersedEvent = z.infer<typeof seedDispersedEventSchema>;

@@ -203,6 +203,8 @@ export function initializeState(config: GameConfig): GameState {
       stress: 0,
       damage: [],
       wear: 0, // P12-C redesign: cumulative non-weather damage severity (chronic-neglect mortality)
+      seedGrowthProgress: 0, // GAP-19: reproduction accumulator (filled by alloc.reproduction)
+      seeds: 0, // GAP-19: total seeds dispersed (consumed by a future plant-seed action)
       pendingIssuances: [], // P1: queue of CurrencyIssuanceRequests for P3's EconomySystem
     },
     world: {

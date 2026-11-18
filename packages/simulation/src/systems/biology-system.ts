@@ -76,6 +76,9 @@ import {
 import {
   PROVISIONAL_BIOLOGY_DEATH_DEFOLIATION_WINDOW_DAYS,
   PROVISIONAL_BIOLOGY_WEAR_PER_DAMAGE,
+  PROVISIONAL_BIOLOGY_REPRODUCTION_SEED_ENERGY_COST_EU,
+  PROVISIONAL_BIOLOGY_REPRODUCTION_FRUITING_AGE_FRACTION,
+  PROVISIONAL_BIOLOGY_REPRODUCTION_SEED_YIELD,
 } from '@capitalist-tree/shared';
 
 const SECONDS_PER_DAY = 24 * 60 * 60;
@@ -299,6 +302,39 @@ export const biologySystem: System = {
           detail: mortality.detail,
         },
       });
+    }
+
+    // 15b. Reproduction (GAP-19 / GDD §5.2, §11.2). The reproduction energy
+    // bucket (`alloc.reproduction`, fed by the allocation weight) fills
+    // `tree.seedGrowthProgress`. When it reaches 1.0 AND the tree is past its
+    // fruiting age (`ageDays >= matureAgeDays × FRUITING_AGE_FRACTION`),
+    // disperse a seed: increment `tree.seeds`, reset the accumulator, emit
+    // `seed-dispersed`. Dead trees don't reproduce. Saplings accumulate
+    // progress (capped at 1.0) but don't fruit until the gate opens — so the
+    // first seed fires soon after maturity.
+    if (tree.alive && alloc.reproduction > 0) {
+      const progressAfter = Math.min(
+        1,
+        tree.seedGrowthProgress +
+          alloc.reproduction / PROVISIONAL_BIOLOGY_REPRODUCTION_SEED_ENERGY_COST_EU,
+      );
+      tree.seedGrowthProgress = progressAfter;
+      const fruitingAgeDays =
+        species.matureAgeDays * PROVISIONAL_BIOLOGY_REPRODUCTION_FRUITING_AGE_FRACTION;
+      if (progressAfter >= 1 && tree.ageDays >= fruitingAgeDays) {
+        tree.seeds += PROVISIONAL_BIOLOGY_REPRODUCTION_SEED_YIELD;
+        tree.seedGrowthProgress = 0;
+        events.push({
+          type: 'seed-dispersed',
+          at: ctx.now,
+          payload: {
+            treeId: tree.id,
+            seedsProduced: PROVISIONAL_BIOLOGY_REPRODUCTION_SEED_YIELD,
+            seedsTotal: tree.seeds,
+            seedGrowthProgressAfter: 0,
+          },
+        });
+      }
     }
 
     // 16. Soft notifications for adverse conditions (info for the UI).

@@ -110,6 +110,17 @@ export const treeStateSchema = z.object({
   // recovery threshold. The stress-based paths remain for acute crises
   // (crippling, reserves-exhaustion); wear handles chronic neglect.
   wear: z.number().min(0).default(0),
+  // GAP-19 / GDD §11.2: reproduction accumulator. Fills from `alloc.reproduction`
+  // (eu) each biology tick; when it reaches 1.0 AND the tree is past its fruiting
+  // age, the BiologySystem emits a `seed-dispersed` event + resets it. Mirrors
+  // `foliage.leafGrowthProgress` (a [0,1] accumulator fed by an energy bucket).
+  // Defaults to 0 — deserialize's safeParse fills it for pre-existing saves, so
+  // no schema-version bump is required.
+  seedGrowthProgress: z.number().min(0).max(1).default(0),
+  // GAP-19: total seeds the tree has produced + dispersed (monotonic counter).
+  // A future `plant-seed` action (GDD §11.2 Genetic Legacy) will consume these
+  // to establish offspring trees. Defaults to 0 (safeParse backfill).
+  seeds: z.number().int().nonnegative().default(0),
   // P1: pending currency issuance requests queued by `harvest-leaves`.
   // Drained by P3's EconomySystem during `advance`. Empty by default.
   pendingIssuances: z.array(currencyIssuanceRequestSchema).default([]),

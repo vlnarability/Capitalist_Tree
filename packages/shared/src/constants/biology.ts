@@ -265,9 +265,10 @@ export const PROVISIONAL_BIOLOGY_NUTRIENT_UPTAKE_RATE = 1.0; // units per unit a
 // Allocation weights for surplus energy (after maintenance is paid). Each is a
 // fraction of the surplus; the remainder goes to reserve storage. Weights are
 // survival-first: roots are prioritized over trunk, trunk over branches,
-// branches over new leaves, leaves over reproduction. Reproduction is a stub
-// (0.0) until P6+ (Genetic Legacy) — the slot exists so allocation math does
-// not need to change when reproduction is added.
+// branches over new leaves, leaves over reproduction. Reproduction is the
+// smallest bucket (lowest priority) — a tree only directs surplus energy to
+// reproduction once the higher-priority survival/growth buckets are satisfied
+// (GAP-19 / GDD §5.2 "Reproductive development where applicable").
 //
 // The sum is intentionally < 1.0 so a substantial fraction of surplus goes to
 // reserve storage. This is critical for sapling bootstrap: a sapling's small
@@ -280,9 +281,34 @@ export const PROVISIONAL_BIOLOGY_ALLOCATION_WEIGHTS = Object.freeze({
   trunkGrowth: 0.10,
   branchGrowth: 0.10,
   leafGrowth: 0.15,
-  reproduction: 0.0,
+  reproduction: 0.05,
 });
 export type AllocationWeights = typeof PROVISIONAL_BIOLOGY_ALLOCATION_WEIGHTS;
+
+// PROVISIONAL (GAP-19 / GDD §5.2, §11.2 — reproduction / seeding).
+//
+// The reproduction bucket (`alloc.reproduction`) fills a per-tree
+// `seedGrowthProgress` accumulator in [0, 1]. Each tick:
+//   seedGrowthProgress = min(1, current + alloc.reproduction / SEED_ENERGY_COST)
+// When it reaches 1.0 AND the tree is past its fruiting age, the BiologySystem
+// emits a `seed-dispersed` event, increments `tree.seeds` by SEED_YIELD, and
+// resets the accumulator to 0. The fruiting gate is a fraction of the species'
+// `matureAgeDays` (White Oak's 24000 d ≈ 66 sim-yr is unreachable in normal
+// play, so fruiting at 0.1× ≈ 6.6 sim-yr makes the mechanic reachable — a
+// documented design decision; tunable).
+//
+// Balance: a mature tree with ~50 eu/tick surplus × 0.05 weight = 2.5 eu/tick
+// into reproduction → 500 / 2.5 = 200 ticks to a seed (≈200 d at 1-day steps,
+// ~2-3 seeds/sim-year). Saplings produce almost no surplus so they barely
+// invest — correct (reproduction is a late-game mechanic, GDD §11.2 Genetic
+// Legacy).
+/** Energy (eu) required to fill `seedGrowthProgress` from 0 to 1 (one seed).
+ * @provisional. */
+export const PROVISIONAL_BIOLOGY_REPRODUCTION_SEED_ENERGY_COST_EU = 500;
+/** Fruitng age = species.matureAgeDays × this fraction. @provisional. */
+export const PROVISIONAL_BIOLOGY_REPRODUCTION_FRUITING_AGE_FRACTION = 0.1;
+/** Seeds produced per dispersal event. @provisional. */
+export const PROVISIONAL_BIOLOGY_REPRODUCTION_SEED_YIELD = 1;
 
 // PROVISIONAL (GDD §5.6: tree death)
 //

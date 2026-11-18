@@ -5,6 +5,7 @@ import {
   defoliationEventSchema,
   biologyNotificationEventSchema,
   infestationEventSchema,
+  seedDispersedEventSchema,
 } from './events-biology.js';
 import {
   weatherDamageEventSchema,
@@ -148,6 +149,7 @@ export const simulationEventSchema = z.discriminatedUnion('type', [
   defoliationEventSchema,
   biologyNotificationEventSchema,
   infestationEventSchema,
+  seedDispersedEventSchema,
   weatherDamageEventSchema,
   waterAppliedEventSchema,
   fertilizerAppliedEventSchema,

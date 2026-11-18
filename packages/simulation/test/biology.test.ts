@@ -295,10 +295,13 @@ describe('energy allocation (TDD §7.3) — survival-first', () => {
     expect(alloc.maintenance).toBeGreaterThan(0);
     expect(alloc.surplus).toBeGreaterThan(0);
     // DR-4: heightGrowth is now a separate bucket (was part of trunkGrowth).
-    expect(alloc.rootGrowth + alloc.heightGrowth + alloc.trunkGrowth + alloc.branchGrowth + alloc.leafGrowth + alloc.reserveStorage)
+    // GAP-19: reproduction is now a real bucket (was a 0.0 stub). The sum of
+    // all growth buckets + reproduction + reserveStorage = surplus.
+    expect(alloc.rootGrowth + alloc.heightGrowth + alloc.trunkGrowth + alloc.branchGrowth + alloc.leafGrowth + alloc.reproduction + alloc.reserveStorage)
       .toBeCloseTo(alloc.surplus, 5);
-    // Reproduction is a stub.
-    expect(alloc.reproduction).toBe(0);
+    // GAP-19: reproduction now gets a fraction of the surplus (weight 0.05).
+    expect(alloc.reproduction).toBeGreaterThan(0);
+    expect(alloc.reproduction).toBeCloseTo(alloc.surplus * 0.05, 5);
   });
 
   it('winter dormancy for deciduous: zero leaf growth', () => {
