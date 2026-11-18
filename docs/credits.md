@@ -67,19 +67,37 @@ asset is wired into the build.
 
 ## Chosen assets
 
-*Filled in as each asset is selected + wired. Each row records: the slot, the
-file name, the source URL, the exact license, and the attribution text the
-license requires (empty for CC0).*
+*Each row records: the slot, the file (path under `apps/web/public`), the source
+URL, the exact license, and the attribution text the license requires (empty for
+CC0). All licenses verified at the source page on 2026-11-18.*
 
 | Slot | File | Source URL | License | Attribution |
 | --- | --- | --- | --- | --- |
-| _(pending selection)_ | | | | |
+| Hero / title background | `/assets/images/hero-background.jpg` | https://opengameart.org/content/bevouliin-tree-in-mist-game-background | CC0 | — |
+| Tree / canopy fallback art | `/assets/images/tree-fallback.png` | https://opengameart.org/content/a-tree | CC0 | — |
+| Ambient background music | `/assets/audio/music-ambient.mp3` | https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1100766 | CC-BY | Music: "The Forest and the Trees" by Kevin MacLeod (incompetech.com) — licensed CC-BY 4.0 |
+| SFX — UI click | `/assets/audio/sfx-click.mp3` | https://opengameart.org/content/button-click-sound-effect-cc0public-domain | CC0 | — |
+| SFX — purchase / transaction | `/assets/audio/sfx-purchase.mp3` | https://opengameart.org/content/level-up-power-up-coin-get-13-sounds | CC0 | — |
+| SFX — notification | `/assets/audio/sfx-notification.mp3` | https://opengameart.org/content/level-up-power-up-coin-get-13-sounds | CC0 | — |
+
+### Source-pivot note
+
+The original recommendation was Kenney (art) + Pixabay (music) + Freesound
+(SFX). From the build sandbox, **kenney.nl + pixabay.com return HTTP 403** and
+**Freesound downloads require OAuth**, so the picks pivoted to **OpenGameArt
+(CC0, direct downloads)** for art + SFX and **Kevin MacLeod / incompetech
+(CC-BY, direct MP3)** for music. Kevin MacLeod's music carries a CC-BY
+attribution requirement (recorded above); all other picks are CC0
+(no attribution legally required, though the authors are credited on the
+Credits screen as a courtesy).
 
 ---
 
 ## Attribution lines (to render on the in-game Credits screen)
 
 _Appended here as CC-BY / CC-BY-SA assets are added, so the Credits screen has
-a single canonical list to render. CC0 assets need no line here._
+a single canonical list to render. CC0 assets need no line here. Mirrored from
+`packages/content/src/credits` `ATTRIBUTION_LINES`._
 
-- _(none yet — no attribution-bearing assets selected)_
+- Music: "The Forest and the Trees" by Kevin MacLeod (incompetech.com) — licensed under CC-BY 4.0.
+

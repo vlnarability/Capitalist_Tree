@@ -34,3 +34,4 @@ export * from './progression/index.js';
 export * from './events/index.js';
 export * from './government/subsidies.js';
 export * from './i18n/index.js';
+export * from './credits/index.js';
