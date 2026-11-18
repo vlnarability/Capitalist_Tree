@@ -1300,6 +1300,10 @@ describe('BusinessSystem — RNG fork deferred (R-P8-N: zero root draws)', () =>
     // Manually replay one step WITHOUT the BusinessSystem to isolate its
     // root-RNG contribution (mirrors runOneStep's RNG threading).
     const rng = Rng.fromState(initial.rngState, initial.rngVersion);
+    // DR-6 v2: mirror runOneStep's per-tick root nonce so the manual replay
+    // advances the root identically to the full engine (under v2 the nonce
+    // is the only root advancement; under v1 the forks advanced it).
+    if (rng.forkVersion === 2) rng.next();
     const ctx: SystemContext = {
       now: initial.clock.elapsedSeconds + STEP,
       stepSeconds: STEP,

@@ -1056,6 +1056,9 @@ describe('EventSystem — RNG fork deferred (R-P10-N: zero root draws)', () => {
     // Manually replay one step WITHOUT the EventSystem to isolate its
     // root-RNG contribution (mirrors runOneStep's RNG threading).
     const rng = Rng.fromState(initial.rngState, initial.rngVersion);
+    // DR-6 v2: mirror runOneStep's per-tick root nonce so the manual replay
+    // advances the root identically to the full engine.
+    if (rng.forkVersion === 2) rng.next();
     const c: SystemContext = {
       now: initial.clock.elapsedSeconds + STEP,
       stepSeconds: STEP,
@@ -1102,11 +1105,16 @@ describe('EventSystem — RNG fork deferred (R-P10-N: zero root draws)', () => {
         },
       };
     }
-    const state = crippled(3);
-    // Advance one sim day (enough for the BiologySystem mortality check to
-    // kill the starved tree — calibrated to the current 2-fork-per-step
-    // root sequence).
-    const result = engine.advance(state, DAY);
+    const state = crippled(7);
+    // Advance 10 sim days. Under DR-6 v2 (non-root-consuming forks + the
+    // per-tick root nonce), the mortality roll sequence differs from v1's
+    // root-consuming-fork sequence, so the starved tree dies later (within
+    // ~10 days, not within 1 day as under v1). Seed 7 dies within this window
+    // under v2 (seed 3, used pre-DR-6, survives ~10 days under v2's sequence).
+    // The EventSystem uses a hash-derived sub-RNG (never touches ctx.rng), so
+    // it cannot perturb the BiologySystem's mortality sequence — the tree dies
+    // the same way with the EventSystem present.
+    const result = engine.advance(state, DAY * 10);
     expect(result.state.originalTree.alive).toBe(false);
   });
 });

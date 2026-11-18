@@ -381,12 +381,14 @@ export function initializeState(config: GameConfig): GameState {
       archive: [],
     },
     rngState: rng.getState(),
-    // DR-6: fork version. The v2 non-root-consuming fork + the versioning
-    // infrastructure (Rng.forkVersion, the v16→v17 migration, the v1/v2 tests)
-    // are implemented, but NEW sims still initialize at v1. The switchover to
-    // v2 is deferred — see DECISIONS.md DR-6 for the systematic-mortality
-    // finding (starved trees don't die reliably under v2's fork sequence).
-    rngVersion: 1,
+    // DR-6: new sims initialize at fork version 2 (non-root-consuming forks).
+    // The v2 fork + the per-tick root nonce (simulation.ts) advance the root
+    // one draw per tick independent of fork count, so adding a fork cannot
+    // shift other systems' RNG-driven outcomes (mortality, weather, etc.).
+    // Legacy saves migrate in at v1 (their RNG sequence is preserved exactly).
+    // See DECISIONS.md DR-6 for the switchover rationale + the probe-artifact
+    // false-alarm that briefly deferred it.
+    rngVersion: 2,
     rngStreams: {
       // WeatherSystem's persisted RNG sub-stream. Initialized at game start by
       // forking from the root RNG; advanced each tick by WeatherSystem.

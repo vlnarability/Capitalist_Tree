@@ -376,15 +376,19 @@ describe('runOfflineCatchUp — originalTree.alive transition (GDD §5.6)', () =
     };
   }
 
-  it('a starved tree dies during a 1-chunk catch-up: alive.before === true, alive.after === false', () => {
-    const s = crippled(3);
+  it('a starved tree dies during a 3-chunk catch-up: alive.before === true, alive.after === false', () => {
+    // DR-6 v2: the mortality sequence differs from v1 (non-root-consuming
+    // forks + per-tick nonce), so the starved tree dies later — seed 7 dies
+    // on sim day 3 under v2 (seed 3, used pre-DR-6, dies within 1 day under v1
+    // but survives ~10 days under v2's sequence). 3 chunks = 3 sim days.
+    const s = crippled(7);
     expect(s.originalTree.alive).toBe(true);
     const T = s.metadata.lastSimulatedAt;
     // 24 real minutes → 1 sim day → 1 chunk.
-    const nowMs = T + realMsForChunks(1);
+    const nowMs = T + realMsForChunks(3);
     const r = runOfflineCatchUp(s, nowMs);
 
-    expect(r.summary.chunksRun).toBe(1);
+    expect(r.summary.chunksRun).toBe(3);
     expect(r.summary.biological.alive.before).toBe(true);
     expect(r.summary.biological.alive.after).toBe(false);
     expect(r.state.originalTree.alive).toBe(false);

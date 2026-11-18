@@ -1289,6 +1289,9 @@ describe('ProgressionSystem — RNG fork deferred (R-P9-1: zero root draws)', ()
     // Manually replay one step WITHOUT the ProgressionSystem to isolate its
     // root-RNG contribution (mirrors runOneStep's RNG threading).
     const rng = Rng.fromState(initial.rngState, initial.rngVersion);
+    // DR-6 v2: mirror runOneStep's per-tick root nonce so the manual replay
+    // advances the root identically to the full engine.
+    if (rng.forkVersion === 2) rng.next();
     const c: SystemContext = {
       now: initial.clock.elapsedSeconds + STEP,
       stepSeconds: STEP,
@@ -1336,8 +1339,12 @@ describe('ProgressionSystem — RNG fork deferred (R-P9-1: zero root draws)', ()
         },
       };
     }
-    const s = crippled(3);
-    const result = engine.advance(s, SECONDS_PER_DAY);
+    const s = crippled(7);
+    // DR-6 v2: the mortality sequence differs from v1 (non-root-consuming
+    // forks + per-tick nonce), so the starved tree dies within ~10 days, not
+    // 1 day. Seed 7 dies in this window under v2. The ProgressionSystem does
+    // not consume ctx.rng, so it cannot perturb the BiologySystem's mortality.
+    const result = engine.advance(s, SECONDS_PER_DAY * 10);
     expect(result.state.originalTree.alive).toBe(false);
     expect(result.events.some((e) => e.type === 'tree-died')).toBe(true);
   });

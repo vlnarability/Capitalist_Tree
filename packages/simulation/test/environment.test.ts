@@ -993,6 +993,9 @@ describe('EnvironmentSystem — RNG determinism (R-P7-1: fork deferred, zero roo
     // root-RNG contribution. Replicates runOneStep's RNG threading
     // (simulation.ts): one shared root Rng, ctx passed to every system.
     const rng = Rng.fromState(initial.rngState, initial.rngVersion);
+    // DR-6 v2: mirror runOneStep's per-tick root nonce so the manual replay
+    // advances the root identically to the full engine.
+    if (rng.forkVersion === 2) rng.next();
     const ctx: SystemContext = {
       now: initial.clock.elapsedSeconds + STEP,
       stepSeconds: STEP,
@@ -1041,8 +1044,13 @@ describe('EnvironmentSystem — RNG determinism (R-P7-1: fork deferred, zero roo
         },
       };
     }
-    const s = crippled(3);
-    const result = engine.advance(s, SECONDS_PER_DAY);
+    const s = crippled(7);
+    // DR-6 v2: the mortality sequence differs from v1 (non-root-consuming
+    // forks + per-tick nonce), so the starved tree dies within ~10 days, not
+    // 1 day. Seed 7 dies in this window under v2. The EnvironmentSystem forks
+    // ctx.rng but under v2 the fork is non-root-consuming, so it cannot perturb
+    // the BiologySystem's mortality sequence — the tree dies the same way.
+    const result = engine.advance(s, SECONDS_PER_DAY * 10);
     expect(result.state.originalTree.alive).toBe(false);
     // The tree-died event fired (BiologySystem mortality ran on the
     // unshifted sequence).
