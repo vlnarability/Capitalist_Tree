@@ -42,6 +42,7 @@ import {
   setMonetaryPolicyActionSchema,
   lobbyGovernmentActionSchema,
   importCommodityActionSchema,
+  exportCommodityActionSchema,
 } from './actions-events.js';
 
 /**
@@ -116,6 +117,7 @@ export const gameActionSchema = z.discriminatedUnion('type', [
   setMonetaryPolicyActionSchema,
   lobbyGovernmentActionSchema,
   importCommodityActionSchema,
+  exportCommodityActionSchema,
 ]);
 export type GameAction = z.infer<typeof gameActionSchema>;
 export type NoOpAction = z.infer<typeof noOpActionSchema>;

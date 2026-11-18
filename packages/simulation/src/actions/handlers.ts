@@ -28,6 +28,7 @@ import type {
   WaterApplicationResult,
   PurchaseAction,
   ImportCommodityAction,
+  ExportCommodityAction,
 } from '@capitalist-tree/shared';
 import {
   PROVISIONAL_BIOLOGY_HARVEST_STRESS_PER_LEAF_FRACTION,
@@ -49,7 +50,9 @@ import { applyFertilizer, applyWaterToSoil } from '../resources/index.js';
 import {
   applyPurchase,
   applyImport,
+  applyExport,
   InsufficientFundsError,
+  InsufficientInventoryError,
   UnknownMarketError,
   payExpenseHandler,
   transferHandler,
@@ -436,12 +439,24 @@ const importCommodityHandler: ActionListener<ImportCommodityAction> = (state, ac
   return { state: result.state, events: result.events };
 };
 
+// P13-B / GAP-24: export-commodity — sell inventory abroad at the domestic
+// price; revenue issued from the authority (mint) → player (foreign buyer pays
+// into the domestic economy). Inventory debited.
+const exportCommodityHandler: ActionListener<ExportCommodityAction> = (state, action) => {
+  const result = applyExport(state, {
+    marketId: action.payload.marketId,
+    quantity: action.payload.quantity,
+    timestamp: state.clock.elapsedSeconds,
+  });
+  return { state: result.state, events: result.events };
+};
+
 // Re-export the typed errors so the action layer (or a UI) can catch them.
 // The errors are NOT part of the saved GameState — they are runtime-only
 // signals. The handler above lets them propagate to `executeAction`, which
 // surfaces them as exceptions for the engine caller to handle (P3c may
 // wrap them into `notification` events for the UI).
-export { InsufficientFundsError, UnknownMarketError };
+export { InsufficientFundsError, InsufficientInventoryError, UnknownMarketError };
 
 export const actionHandlers: Record<string, ActionListener> = {
   'no-op': noOp,
@@ -451,6 +466,7 @@ export const actionHandlers: Record<string, ActionListener> = {
   'apply-fertilizer': applyFertilizerHandler as ActionListener,
   'purchase': purchaseHandler as ActionListener,
   'import-commodity': importCommodityHandler as ActionListener,
+  'export-commodity': exportCommodityHandler as ActionListener,
   'pay-expense': payExpenseHandler as ActionListener,
   'transfer': transferHandler as ActionListener,
   'sell-tree': sellTreeHandler as ActionListener,

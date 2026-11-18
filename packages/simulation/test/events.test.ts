@@ -54,6 +54,7 @@ import {
   UnknownEventDefinitionError,
   UnknownActiveEventError,
   UnknownMarketError,
+  InsufficientInventoryError,
   DEFAULT_REGION_IDS,
   ECOSYSTEM_RESILIENCE_WEIGHTS,
 } from '../src/index.js';
@@ -1042,6 +1043,72 @@ describe('actions — import-commodity (P13-B / GAP-24)', () => {
     expect(() =>
       engine.executeAction(state, {
         type: 'import-commodity',
+        payload: { marketId: 'market:no-such', quantity: 1, tick: 0 },
+      }),
+    ).toThrow(UnknownMarketError);
+  });
+});
+
+describe('actions — export-commodity (P13-B / GAP-24)', () => {
+  it('debits inventory + issues revenue to the player from the foreign sale', () => {
+    // Stock inventory first via an import (100 L of water).
+    let state = freshState();
+    state = engine.executeAction(state, {
+      type: 'import-commodity',
+      payload: { marketId: 'market:water', quantity: 100, tick: 0 },
+    }).state;
+    const held = state.inventory.items.find((i) => i.resourceId === 'resource:water')?.quantity ?? 0;
+    expect(held).toBeGreaterThanOrEqual(100);
+    const cashBefore = state.player.personalCash;
+
+    // Export 50 L @ 10 minor/L → revenue = 500 issued to the player.
+    const result = engine.executeAction(state, {
+      type: 'export-commodity',
+      payload: { marketId: 'market:water', quantity: 50, tick: 1000 },
+    });
+    // Inventory debited by 50.
+    const afterHeld = result.state.inventory.items.find(
+      (i) => i.resourceId === 'resource:water',
+    )?.quantity;
+    expect(afterHeld).toBe(held - 50);
+    // Revenue (500) issued to the player.
+    expect(BigInt(result.state.player.personalCash)).toBe(BigInt(cashBefore) + 500n);
+    // transaction-recorded + a system event.
+    expect(result.events.some((e) => e.type === 'transaction-recorded')).toBe(true);
+    expect(result.events.some((e) => e.type === 'system')).toBe(true);
+  });
+
+  it('drops the inventory item when the export empties it', () => {
+    let state = freshState();
+    state = engine.executeAction(state, {
+      type: 'import-commodity',
+      payload: { marketId: 'market:water', quantity: 10, tick: 0 },
+    }).state;
+    // Export all 10 → the resource:water item is removed from inventory.
+    const result = engine.executeAction(state, {
+      type: 'export-commodity',
+      payload: { marketId: 'market:water', quantity: 10, tick: 1000 },
+    });
+    expect(
+      result.state.inventory.items.find((i) => i.resourceId === 'resource:water'),
+    ).toBeUndefined();
+  });
+
+  it('throws InsufficientInventoryError when inventory is short', () => {
+    const state = freshState(); // empty inventory
+    expect(() =>
+      engine.executeAction(state, {
+        type: 'export-commodity',
+        payload: { marketId: 'market:water', quantity: 1, tick: 0 },
+      }),
+    ).toThrow(InsufficientInventoryError);
+  });
+
+  it('throws UnknownMarketError for an unknown market id', () => {
+    const state = freshState();
+    expect(() =>
+      engine.executeAction(state, {
+        type: 'export-commodity',
         payload: { marketId: 'market:no-such', quantity: 1, tick: 0 },
       }),
     ).toThrow(UnknownMarketError);

@@ -221,6 +221,28 @@ export const importCommodityActionSchema = z.object({
 export type ImportCommodityAction = z.infer<typeof importCommodityActionSchema>;
 
 /**
+ * `export-commodity` action (P13-B / GAP-24 — GDD §15 international trade). The
+ * inverse of `import-commodity`: sell `quantity` of the market's commodity from
+ * the player's inventory to the foreign/external counterparty at the current
+ * domestic market price. The foreign buyer's payment enters the domestic
+ * economy (money creation) — the handler issues the revenue from the authority
+ * (mint) → `player:personal` + debits inventory. Exports carry no tariff (the
+ * `tariffRate` lever applies to imports only).
+ */
+export const exportCommodityActionSchema = z.object({
+  type: z.literal('export-commodity'),
+  payload: z.object({
+    /** Domestic market id whose price anchors the foreign sale. */
+    marketId: z.string().min(1),
+    /** Quantity to export (debits inventory at the market's commodityId). */
+    quantity: z.number().int().positive(),
+    /** Simulation second at which the action runs (deterministic event `at`). */
+    tick: z.number().int().nonnegative(),
+  }),
+});
+export type ExportCommodityAction = z.infer<typeof exportCommodityActionSchema>;
+
+/**
  * `set-monetary-policy` action — adjust the central-bank interest rate /
  * inflation target / money-supply growth (GDD §404-408 monetary policy tools).
  *

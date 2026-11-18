@@ -1159,6 +1159,35 @@ describe('actions — restructure-ownership (P13-A / GAP-23)', () => {
     }
   });
 
+  it('scales the valuation by the new org type\'s valuationMultiplier (P13-A / GAP-23)', () => {
+    let state = freshState();
+    state = engine.executeAction(state, {
+      type: 'purchase-business',
+      payload: { businessTypeId: WATER_EXTRACTION_PLANT.id },
+    }).state;
+    const businessId = state.businesses[0]!.id;
+    const baseValuation = BigInt(state.businesses[0]!.valuation);
+
+    // sole-prop (mult 1.0) → corporation (mult 1.2): valuation × 1.2.
+    const corp = engine.executeAction(state, {
+      type: 'restructure-ownership',
+      payload: { businessId, structure: 'corporation' },
+    });
+    expect(BigInt(corp.state.businesses[0]!.valuation)).toBe(
+      BigInt(Math.floor((Number(baseValuation) * 1.2) / 1.0)),
+    );
+
+    // corporation (1.2) → non-profit (0.75): valuation × 0.75 / 1.2.
+    const nonprofit = engine.executeAction(corp.state, {
+      type: 'restructure-ownership',
+      payload: { businessId, structure: 'non-profit' },
+    });
+    const corpVal = BigInt(corp.state.businesses[0]!.valuation);
+    expect(BigInt(nonprofit.state.businesses[0]!.valuation)).toBe(
+      BigInt(Math.floor((Number(corpVal) * 0.75) / 1.2)),
+    );
+  });
+
   it('throws UnknownBusinessError for an unknown business id', () => {
     const state = freshState();
     expect(() =>

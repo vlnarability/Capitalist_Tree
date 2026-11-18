@@ -789,3 +789,73 @@ describe('EconomySystem integration — market updates via engine.advance', () =
     expect(priceChanges.length).toBeLessThanOrEqual(5);
   });
 });
+
+describe('applyPurchase — subsidy rebate (P13-B / GAP-25)', () => {
+  it('issues a rebate when an active subsidy targets the purchased commodity', () => {
+    // Set a 20% water-conservation subsidy (targets resource:water).
+    let state = freshState();
+    state = engine.executeAction(state, {
+      type: 'set-government-policy',
+      payload: { policy: { subsidies: [{ type: 'subsidy:water-conservation', rate: 0.2 }] }, tick: 0 },
+    }).state;
+    const cashBefore = state.player.personalCash;
+    // market:water basePrice = '10' minor/L. Buy 100 L → totalCost = 1000,
+    // rebate = 200, net cost = 800. Player balance: cashBefore - 1000 + 200.
+    const result = engine.executeAction(state, {
+      type: 'purchase',
+      payload: { marketId: 'market:water', quantity: 100 },
+    });
+    expect(BigInt(result.state.player.personalCash)).toBe(BigInt(cashBefore) - 800n);
+    // A subsidy-rebate notification + a rebate transaction-recorded event.
+    expect(result.events.some((e) => e.type === 'notification' && (e.payload as { code?: string }).code === 'subsidy-rebate')).toBe(true);
+    const txs = result.events.filter((e) => e.type === 'transaction-recorded');
+    // One for the purchase, one for the rebate.
+    expect(txs.length).toBe(2);
+  });
+
+  it('issues no rebate when no active subsidy targets the commodity', () => {
+    // A water-conservation subsidy does NOT target resource:energy.
+    let state = freshState();
+    state = engine.executeAction(state, {
+      type: 'set-government-policy',
+      payload: { policy: { subsidies: [{ type: 'subsidy:water-conservation', rate: 0.2 }] }, tick: 0 },
+    }).state;
+    const cashBefore = state.player.personalCash;
+    const result = engine.executeAction(state, {
+      type: 'purchase',
+      payload: { marketId: 'market:energy', quantity: 10 },
+    });
+    // No rebate — full cost debited, no subsidy-rebate event.
+    expect(result.events.some((e) => e.type === 'notification' && (e.payload as { code?: string }).code === 'subsidy-rebate')).toBe(false);
+    const txs = result.events.filter((e) => e.type === 'transaction-recorded');
+    expect(txs.length).toBe(1); // purchase only
+    // Player balance only reflects the purchase (no rebate credit).
+    const unitPrice = BigInt(state.economy.markets.find((m) => m.id === 'market:energy')!.price);
+    expect(BigInt(result.state.player.personalCash)).toBe(BigInt(cashBefore) - unitPrice * 10n);
+  });
+
+  it('caps the combined rebate rate at 1 (fully-discounted purchase)', () => {
+    // Two subsidies both targeting resource:water, rates 0.6 + 0.6 = 1.2 → capped 1.0.
+    let state = freshState();
+    state = engine.executeAction(state, {
+      type: 'set-government-policy',
+      payload: {
+        policy: {
+          subsidies: [
+            { type: 'subsidy:water-conservation', rate: 0.6 },
+            { type: 'subsidy:sapling-planting', rate: 0.6 }, // targets seeds, not water — should NOT stack
+          ],
+        },
+        tick: 0,
+      },
+    }).state;
+    // Only water-conservation targets water → rate 0.6, not 1.2.
+    const cashBefore = state.player.personalCash;
+    const result = engine.executeAction(state, {
+      type: 'purchase',
+      payload: { marketId: 'market:water', quantity: 100 },
+    });
+    // totalCost = 1000, rebate = 600, net = 400.
+    expect(BigInt(result.state.player.personalCash)).toBe(BigInt(cashBefore) - 400n);
+  });
+});

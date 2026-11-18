@@ -66,7 +66,7 @@ import {
   PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID,
   PROVISIONAL_SIMULATION_STEP_SECONDS,
 } from '@capitalist-tree/shared';
-import { getBusinessTypeById } from '@capitalist-tree/content';
+import { getBusinessTypeById, getOrgTypeIncentives } from '@capitalist-tree/content';
 import type { ActionListener } from '../actions/handlers.js';
 import {
   transfer,
@@ -882,11 +882,24 @@ export const restructureOwnershipHandler: ActionListener<RestructureOwnershipAct
   }
 
   const prevStructure = business.ownership.structure;
+  // P13-A / GAP-23: scale the valuation by the new org type's
+  // valuationMultiplier relative to the old (e.g. sole-prop 1.0 → corporation
+  // 1.2 = +20%; → non-profit 0.75 = -25%). Floor to minor units, clamp ≥ 0.
+  const prevMult = getOrgTypeIncentives(prevStructure).valuationMultiplier;
+  const newMult = getOrgTypeIncentives(structure).valuationMultiplier;
+  const prevValuation = parseAmount(business.valuation, 'valuation');
+  const newValuation = BigInt(
+    Math.floor((Number(prevValuation) * newMult) / prevMult),
+  );
   const next: GameState = {
     ...state,
     businesses: state.businesses.map((b) =>
       b.id === businessId
-        ? { ...b, ownership: { ...b.ownership, structure } }
+        ? {
+            ...b,
+            ownership: { ...b.ownership, structure },
+            valuation: newValuation > 0n ? newValuation.toString(10) : '0',
+          }
         : b,
     ),
   };

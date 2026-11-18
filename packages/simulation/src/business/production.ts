@@ -76,6 +76,7 @@ import {
 } from '@capitalist-tree/shared';
 import { transfer, getBalance, parseAmount } from '../economy/ledger.js';
 import { applyEnvironmentalImpact } from '../environment/index.js';
+import { getOrgTypeIncentives } from '@capitalist-tree/content';
 import { applyRevenue, applyExpenses } from './accounting.js';
 import {
   executeMarketTransaction,
@@ -531,13 +532,30 @@ export function operateBusiness(
   // 11. Apply environmental impact (pro-rated by the step fraction via the
   //     centralized helper — same pattern as automation/execute.ts, so the
   //     EnvironmentSystem at slot #10 consumes the mutated env state).
+  //     P13-A / GAP-23: scale the impact by the org type's
+  //     environmentalImpactMultiplier (sustainable-enterprise = 0.5 → half the
+  //     footprint; others = 1.0). Skip the allocation when the multiplier is 1.
+  const envImpactMult = getOrgTypeIncentives(business.ownership.structure)
+    .environmentalImpactMultiplier;
+  const baseImpact = business.environmentalImpact;
+  const scaledImpact =
+    envImpactMult === 1
+      ? baseImpact
+      : {
+          carbonEmissions: baseImpact.carbonEmissions * envImpactMult,
+          waterConsumption: baseImpact.waterConsumption * envImpactMult,
+          soilDegradation: baseImpact.soilDegradation * envImpactMult,
+          pollution: baseImpact.pollution * envImpactMult,
+          landDisturbance: baseImpact.landDisturbance * envImpactMult,
+          biodiversityImpact: baseImpact.biodiversityImpact * envImpactMult,
+        };
   next = {
     ...next,
     world: {
       ...next.world,
       environment: applyEnvironmentalImpact(
         next.world.environment,
-        business.environmentalImpact,
+        scaledImpact,
         dtSeconds,
       ),
     },
