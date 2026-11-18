@@ -350,10 +350,11 @@ describe('runOfflineCatchUp — originalTree.alive transition (GDD §5.6)', () =
    * `rng.next() < prob` with a per-day probability. It cannot be triggered
    * deterministically in a single chunk for an arbitrary seed. But the engine
    * is deterministic given (seed, state): for seed=3, a fully crippled tree
-   * (stress=1, reserves=0, water=0, no leaves, + 2 severe-defoliation events
-   * within the 60-day window) dies on the FIRST 1-sim-day chunk. So a 1-chunk
-   * catch-up (24 real minutes at factor 60) deterministically flips
-   * alive: true → false. Verified empirically before writing this test.
+   * (stress=1, reserves=0, water=0, no leaves, + 4 severe-defoliation events
+   * within the 90-day window — P12-C follow-up #2 raised COUNT 2→4, WINDOW
+   * 60→90) dies on the FIRST 1-sim-day chunk. So a 1-chunk catch-up (24 real
+   * minutes at factor 60) deterministically flips alive: true → false.
+   * Verified empirically before writing this test.
    */
   function crippled(seed: number): GameState {
     const s = engine.initialize({ ...DEFAULT_GAME_CONFIG, seed, createdAt: 0 });
@@ -369,6 +370,8 @@ describe('runOfflineCatchUp — originalTree.alive transition (GDD §5.6)', () =
         water: { ...t.water, stored: 0 },
         foliage: { ...t.foliage, currentLeaves: 0 },
         damage: [
+          { type: 'severe-defoliation', severity: 1, appliedAt: s.clock.elapsedSeconds },
+          { type: 'severe-defoliation', severity: 1, appliedAt: s.clock.elapsedSeconds },
           { type: 'severe-defoliation', severity: 1, appliedAt: s.clock.elapsedSeconds },
           { type: 'severe-defoliation', severity: 1, appliedAt: s.clock.elapsedSeconds },
         ],

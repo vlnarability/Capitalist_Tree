@@ -684,12 +684,16 @@ describe('mortality (GDD §5.6) — repeated defoliation', () => {
   it('repeated severe defoliation raises mortality risk', () => {
     // Use a full-day step so the per-day death probability is meaningful.
     // stepDays = 1.0 → DEATH_DAILY_PROBABILITY applies at full strength.
+    // P12-C follow-up #2: DEATH_DEFOLIATION_COUNT raised 2→4, so the test now
+    // uses 4 recent severe-defoliations to trigger the mortality check.
     const ctx = testContext({ stepSeconds: SECONDS_PER_DAY });
     const now = 100 * SECONDS_PER_DAY;
     const tree = testTree({
       damage: [
         { type: 'severe-defoliation', severity: 0.7, appliedAt: now - 5 * SECONDS_PER_DAY },
         { type: 'severe-defoliation', severity: 0.7, appliedAt: now - 10 * SECONDS_PER_DAY },
+        { type: 'severe-defoliation', severity: 0.7, appliedAt: now - 20 * SECONDS_PER_DAY },
+        { type: 'severe-defoliation', severity: 0.7, appliedAt: now - 30 * SECONDS_PER_DAY },
       ],
       stress: 0.95,
       energy: { reserves: 5, production: 0, consumption: 0 },

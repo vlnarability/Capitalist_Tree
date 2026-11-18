@@ -32,6 +32,11 @@ export default defineConfig({
       // rendering src dirs in one place.
       'tests/**/*.test.{ts,tsx}',
     ],
+    // P12-C: the design-promise bot is a slow (~9 min) verification tool that
+    // runs 3 scenarios at 1-day steps for 90 days + writes a markdown report.
+    // Excluded from the default test run (CI); run manually via
+    // `pnpm exec vitest run packages/simulation/test/design-promise-bot.test.ts`.
+    exclude: ['packages/simulation/test/design-promise-bot.test.ts'],
     environment: 'node',
     globals: false,
     reporters: ['default'],

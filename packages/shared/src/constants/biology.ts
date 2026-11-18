@@ -96,13 +96,27 @@ export const PROVISIONAL_BIOLOGY_HARVEST_STRESS_PER_LEAF_FRACTION = 0.5;
 // Number of severe defoliations (>50% foliage removed) within
 // `PROVISIONAL_BIOLOGY_DEATH_DEFOLIATION_WINDOW_DAYS` sim days that triggers
 // a death check. A mature tree survives one but suffers on repeats.
-export const PROVISIONAL_BIOLOGY_DEATH_DEFOLIATION_COUNT = 2;
+//
+// P12-C redesign follow-up #2: raised 2 → 4. At 2, the defoliation mortality
+// fired far too early — because `PROVISIONAL_BIOLOGY_DEFAULT_MAX_HARVEST_FRACTION`
+// (0.5) equals `SEVERE_DEFOLIATION_FRACTION` (0.5), every max harvest is a
+// severe-defoliation, so 2 max harvests within 60 days killed the tree (even a
+// mature one), defeating the DR-1 intent ("survives one, suffers on repeats" +
+// "aggressive harvesting fatal within a growing season" — ~1yr, not ~1mo). At
+// 4, a mature tree tolerates up to 3 max harvests within the window; the 4th
+// triggers the mortality check (a probability ramp, not an instant kill).
+export const PROVISIONAL_BIOLOGY_DEATH_DEFOLIATION_COUNT = 4;
 
 // PROVISIONAL (GDD §5.6: tree death — repeated severe defoliation)
 //
 // Rolling window (sim days) used to count severe defoliations for the
 // mortality check.
-export const PROVISIONAL_BIOLOGY_DEATH_DEFOLIATION_WINDOW_DAYS = 60;
+//
+// P12-C redesign follow-up #2: widened 60 → 90. Paired with the COUNT raise
+// (2→4) so the density of severe-defoliations that triggers death is roughly
+// preserved (~1 per 22 days) but the absolute count is higher, giving the tree
+// more recovery headroom between harvests.
+export const PROVISIONAL_BIOLOGY_DEATH_DEFOLIATION_WINDOW_DAYS = 90;
 
 // PROVISIONAL (GDD §5.6: tree death)
 //
