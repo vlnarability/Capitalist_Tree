@@ -38,7 +38,15 @@ export default defineConfig({
     // `pnpm exec vitest run packages/simulation/test/design-promise-bot.test.ts`
     // (temporarily comment out this exclude line first — vitest applies the
     // exclude even when the file is passed explicitly).
-    exclude: ['packages/simulation/test/design-promise-bot.test.ts'],
+    exclude: [
+      'packages/simulation/test/design-promise-bot.test.ts',
+      // DR-1 long-timeframe runner (P12-C follow-up): 1-day steps × multi-year
+      // is infeasible inline — the engine runs at ~1-2s/tick at 1-day steps (the
+      // bot's 90d × 3 scenarios already takes ~9min). Excluded from the default
+      // run; run manually for an overnight verification of the collapse ≥2yr /
+      // recovery ≥1yr targets.
+      'packages/simulation/test/dr1-long-run.test.ts',
+    ],
     environment: 'node',
     globals: false,
     reporters: ['default'],
