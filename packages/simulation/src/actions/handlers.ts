@@ -31,6 +31,7 @@ import type {
 import {
   PROVISIONAL_BIOLOGY_HARVEST_STRESS_PER_LEAF_FRACTION,
   PROVISIONAL_BIOLOGY_DEATH_DEFOLIATION_WINDOW_DAYS,
+  PROVISIONAL_BIOLOGY_WEAR_PER_DAMAGE,
   PROVISIONAL_RESOURCE_SOIL_WATER_CAPACITY,
   UnknownActionError,
 } from '@capitalist-tree/shared';
@@ -206,11 +207,16 @@ const harvestLeavesHandler: ActionListener<HarvestLeavesAction> = (state, action
     result.foliageBefore > 0 ? result.leavesHarvested / result.foliageBefore : 0;
   const damage: TreeDamageState[] = [...tree.damage];
   if (fractionRemoved >= SEVERE_DEFOLIATION_FRACTION) {
+    const sev = Math.min(1, fractionRemoved);
     damage.push({
       type: 'severe-defoliation',
-      severity: Math.min(1, fractionRemoved),
+      severity: sev,
       appliedAt: state.clock.elapsedSeconds,
     });
+    // P12-C redesign: over-pruning/over-harvesting is a neglect signal —
+    // accumulate the severe-defoliation severity into the monotonic wear
+    // counter (drives the chronic-neglect mortality path in death.ts).
+    tree.wear += sev * PROVISIONAL_BIOLOGY_WEAR_PER_DAMAGE;
   }
   tree.damage = damage;
 

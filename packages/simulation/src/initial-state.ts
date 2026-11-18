@@ -198,6 +198,7 @@ export function initializeState(config: GameConfig): GameState {
       health: 1, // placeholder; BiologySystem recomputes this each tick (GDD §5.1)
       stress: 0,
       damage: [],
+      wear: 0, // P12-C redesign: cumulative non-weather damage severity (chronic-neglect mortality)
       pendingIssuances: [], // P1: queue of CurrencyIssuanceRequests for P3's EconomySystem
     },
     world: {

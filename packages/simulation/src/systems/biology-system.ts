@@ -75,6 +75,7 @@ import {
 } from '../progression/trait-effects.js';
 import {
   PROVISIONAL_BIOLOGY_DEATH_DEFOLIATION_WINDOW_DAYS,
+  PROVISIONAL_BIOLOGY_WEAR_PER_DAMAGE,
 } from '@capitalist-tree/shared';
 
 const SECONDS_PER_DAY = 24 * 60 * 60;
@@ -241,6 +242,14 @@ export const biologySystem: System = {
     );
     if (infestationDamage.length > 0) {
       tree.damage = [...tree.damage, ...infestationDamage];
+      // P12-C redesign: accumulate non-weather damage severity into the
+      // monotonic wear counter (drives the chronic-neglect mortality path in
+      // death.ts). Weather damage is excluded (ambient; its impact is
+      // defoliation, applied in the WeatherSystem).
+      tree.wear += infestationDamage.reduce(
+        (sum, d) => sum + d.severity * PROVISIONAL_BIOLOGY_WEAR_PER_DAMAGE,
+        0,
+      );
       for (const d of infestationDamage) {
         events.push({
           type: 'infestation',

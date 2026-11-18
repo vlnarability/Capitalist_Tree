@@ -90,8 +90,11 @@ describe('P12-B infestation — BiologySystem integration (60-day idle)', () => 
     expect(['pest', 'disease']).toContain(first.payload.kind);
     expect(first.payload.severity).toBeGreaterThanOrEqual(0);
     expect(first.payload.severity).toBeLessThanOrEqual(1);
-    // The accumulated damage drove the stress above 0 (the neglect-death
-    // trajectory — pre-P12-B the idle tree stayed at stress=0 indefinitely).
-    expect(t.stress).toBeGreaterThan(0);
+    // The accumulated infestation damage drove the WEAR above 0 (the chronic-
+    // neglect trajectory — pre-P12-B the idle tree stayed at wear=0
+    // indefinitely). P12-C redesign: infestations contribute to the monotonic
+    // wear counter (death.ts path 4), NOT the stress — the stress now reflects
+    // only acute strain (water/nutrient/reserve deficits + severe-defoliation).
+    expect(t.wear).toBeGreaterThan(0);
   });
 });

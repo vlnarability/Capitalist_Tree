@@ -313,6 +313,33 @@ export const PROVISIONAL_BIOLOGY_STRESS_RESERVE_PER_DAY = 0.1;
 // applied in the WeatherSystem.)
 export const PROVISIONAL_BIOLOGY_STRESS_DAMAGE_PER_DAY = 0.05;
 
+// PROVISIONAL (GDD §5.6 / P12-C redesign — chronic-neglect mortality).
+//
+// Cumulative "wear" — a monotonic accumulation of NON-WEATHER damage severity
+// (pest, disease, severe-defoliation). Each damage event adds `severity ×
+// WEAR_PER_DAMAGE` to tree.wear; wear never decays + is never pruned (unlike
+// tree.damage, which is prune-windowed to 60 days). This makes the chronic-
+// neglect death reliable: the wear crosses the mortality thresholds at a
+// predictable time regardless of the activeDamage prune-window fluctuation +
+// Poisson variance that makes the stress-based neglect death fragile near the
+// recovery threshold (see P12-C commit 739d4df for the analysis).
+//
+// Weather damage is EXCLUDED from the wear (it's ambient — happens regardless
+// of player care; its mechanical impact is defoliation, applied in the
+// WeatherSystem). The wear accumulates only from NEGLECT signals: infestations
+// (pest/disease, which take hold when the player isn't doing pest control) +
+// severe-defoliation (from over-pruning/over-harvesting).
+//
+// Calibration (idle sim, no pest control): infestation rate ~0.035/day × mean
+// severity ~0.5 = ~0.0175 severity/day. WEAR_PER_DAMAGE=1 → wear ≈ cumulative
+// severity. ONSET 3.0 ≈ 0.0175 × 171 days (~5.7mo); THRESHOLD 6.0 ≈ 0.0175 ×
+// 343 days (~11.4mo). The mortality probability ramps linearly from 0 at ONSET
+// to DEATH_DAILY_PROBABILITY at THRESHOLD, so the tree dies in the 6-12mo
+// window (the DR-1 target). Tunable in future P12-C iterations.
+export const PROVISIONAL_BIOLOGY_WEAR_PER_DAMAGE = 1.0;
+export const PROVISIONAL_BIOLOGY_WEAR_MORTALITY_ONSET = 3.0;
+export const PROVISIONAL_BIOLOGY_WEAR_DEATH_THRESHOLD = 6.0;
+
 // ---------------------------------------------------------------------------
 // P12-B (GAP-18): pest + disease infestations.
 //

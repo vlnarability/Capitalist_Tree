@@ -78,20 +78,24 @@ export function updateStress(tree: TreeState, ctx: BiologyContext): StressUpdate
       stepDays;
   }
 
-  // Active damage stress — each unresolved NON-WEATHER damage record
-  // contributes. (Damage records decay naturally via age; the BiologySystem
-  // prunes them.)
+  // Active damage stress — only SEVERE-DEFOLIATION records contribute (the
+  // acute defoliation crisis from over-pruning/over-harvesting). Damage records
+  // decay naturally via age; the BiologySystem prunes them.
   //
-  // P12-C: `weather:*` records are EXCLUDED — the weather damage's mechanical
-  // impact is defoliation (leaf loss applied in the WeatherSystem), not stress.
-  // Pre-P12-C, counting weather records made the weather damage (~0.09/day →
-  // activeDamage ~5.4) the dominant neglect-death driver, killing the idle
-  // tree in ~2 months (3-6× too fast vs the DR-1 6-12 month target). Excluding
-  // them makes the infestations (pest/disease, ~0.035/day → activeDamage ~2.1,
-  // just above the recovery threshold of recovery/STRESS_DAMAGE_PER_DAY = 2)
-  // the RELIABLE neglect-death driver at ~9 months. Severe-defoliation +
-  // pest + disease records still count.
-  const activeDamage = tree.damage.filter((d) => !d.type.startsWith('weather:')).length;
+  // P12-C redesign: `weather:*`, `pest`, + `disease` records are EXCLUDED from
+  // the stress. Pre-P12-C-redesign, counting infestation records made the
+  // infestation-driven stress climb to critical at ~3mo, firing the (now-
+  // removed) stress-alone mortality path + the reserves+stress path (via
+  // weather-defoliation-driven reserve depletion) — both BEFORE the wear path's
+  // ~6mo onset, defeating the DR-1 6-12mo target. The chronic infestation
+  // damage is now tracked by the monotonic `wear` counter (death.ts path 4),
+  // which is robust against the activeDamage prune-window fluctuation + Poisson
+  // variance. The stress now reflects only ACUTE strain: water/nutrient/reserve
+  // deficits (below) + severe-defoliation (here). Severe-defoliation also feeds
+  // the wear + the defoliation-count mortality path (path 1) — the overlap is
+  // intentional (a severe defoliation is an acute crisis worth all three
+  // signals).
+  const activeDamage = tree.damage.filter((d) => d.type === 'severe-defoliation').length;
   stressAdd += PROVISIONAL_BIOLOGY_STRESS_DAMAGE_PER_DAY * activeDamage * stepDays;
 
   // Stress recovery: if no major stressors (water OK, nutrients OK, reserves

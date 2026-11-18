@@ -101,6 +101,15 @@ export const treeStateSchema = z.object({
   health: z.number().min(0).max(1),
   stress: z.number().min(0).max(1),
   damage: z.array(treeDamageStateSchema),
+  // P12-C redesign: cumulative "wear" — a monotonic accumulation of damage
+  // severity (severity × WEAR_PER_DAMAGE per damage event, never pruned,
+  // never recovers). Drives a dedicated mortality path (death.ts) that fires
+  // when wear crosses WEAR_DEATH_THRESHOLD, giving a reliable ~6-12mo neglect
+  // death regardless of the activeDamage prune-window fluctuation + Poisson
+  // variance that makes the stress-based neglect death fragile near the
+  // recovery threshold. The stress-based paths remain for acute crises
+  // (crippling, reserves-exhaustion); wear handles chronic neglect.
+  wear: z.number().min(0).default(0),
   // P1: pending currency issuance requests queued by `harvest-leaves`.
   // Drained by P3's EconomySystem during `advance`. Empty by default.
   pendingIssuances: z.array(currencyIssuanceRequestSchema).default([]),
