@@ -11,11 +11,13 @@
  */
 import type { TreeSpecies } from '@capitalist-tree/shared';
 import { WHITE_OAK } from './white-oak.js';
+import { EASTERN_HEMLOCK } from './eastern-hemlock.js';
 
 export { WHITE_OAK } from './white-oak.js';
+export { EASTERN_HEMLOCK } from './eastern-hemlock.js';
 
 /** All known species. Add new species here. */
-export const ALL_SPECIES: readonly TreeSpecies[] = [WHITE_OAK];
+export const ALL_SPECIES: readonly TreeSpecies[] = [WHITE_OAK, EASTERN_HEMLOCK];
 
 /** Look up a species by id. Returns the species or `undefined` if unknown. */
 export function findSpeciesById(speciesId: string): TreeSpecies | undefined {

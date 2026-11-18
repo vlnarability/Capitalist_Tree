@@ -259,9 +259,13 @@ Per RV7's P11/P12/P13 phasing. Titles and one-paragraph scope only; full prompts
 > **2026-11-17 — Roadmap revised per DECISIONS.md (DR-1 through DR-9).** Status
 > of the prompts below:
 > - **1–6 (P11-A through P11-F): COMPLETE** (W1–W30 + W15 follow-up all landed).
-> - **7 (P12-A 2nd species): RE-SEQUENCED.** DR-4 makes height/diameter
->   independence a prerequisite — P12-A-pre (the biology allocation schema
->   refactor) must land before a 2nd species.
+> - **7 (P12-A 2nd species): COMPLETE.** DR-4 (height/diameter independence,
+>   commit 96b95dd) was the prerequisite; Eastern Hemlock (evergreen,
+>   `deciduous: false`) added as the 2nd species — exercises the data-driven
+>   content pipeline + the evergreen seasonal contrast (keeps
+>   photosynthesizing/leaves in winter vs the oak's dormancy) + DR-4's
+>   per-species height/diameter split (hemlock height-focused 0.55 vs oak
+>   girth-heavy 0.40).
 > - **8 (P12-B pests/disease/reproduction): UNCHANGED.** Large feature; not
 >   design-blocked.
 > - **9 (P12-C balance re-tuning): UNBLOCKED** against DR-1's real-time targets.
