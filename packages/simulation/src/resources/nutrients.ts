@@ -55,8 +55,10 @@ import {
   PROVISIONAL_RESOURCE_MAX_UPTAKE_FRACTION,
   PROVISIONAL_RESOURCE_NUTRIENT_REPLENISH_PER_DAY,
   PROVISIONAL_RESOURCE_SOIL_NUTRIENT_CAPACITY,
+  PROVISIONAL_RESOURCE_SOIL_PH_IDEAL,
   PROVISIONAL_RESOURCE_SOIL_WATER_CAPACITY,
 } from '@capitalist-tree/shared';
+import { phFraction, compactionFraction, microbialFraction } from './soil.js';
 
 /** Per-nutrient breakdown of the soil + tree balance. */
 export interface NutrientComponentBalance {
@@ -112,6 +114,17 @@ export function computeNutrientBalance(params: {
   rootAbsorptionCapacity: number;
   soilWater: number;
   stepDays: number;
+  /** Soil pH (0-14). Reduces uptake when far from the ideal (phFraction).
+   *  Optional — defaults to the ideal pH (factor 1.0) so callers that don't
+   *  track soil pH get the legacy no-constraint behaviour. The ResourceSystem
+   *  passes the real value. */
+  ph?: number;
+  /** Soil compaction (0-1, 0=loose). Reduces uptake linearly. Optional —
+   *  defaults to 0 (loose, factor 1.0). */
+  compaction?: number;
+  /** Soil microbial activity (>=0, 1=baseline). Scales uptake directly.
+   *  Optional — defaults to 1.0 (baseline, factor 1.0). */
+  microbialActivity?: number;
 }): NutrientBalance {
   const {
     soilNutrients,
@@ -122,6 +135,11 @@ export function computeNutrientBalance(params: {
     rootAbsorptionCapacity,
     soilWater,
     stepDays,
+    // Neutral defaults → envUptakeFactor = 1.0 (legacy behaviour) when the
+    // caller doesn't pass real soil values.
+    ph = PROVISIONAL_RESOURCE_SOIL_PH_IDEAL,
+    compaction = 0,
+    microbialActivity = 1.0,
   } = params;
 
   const foliageFraction = Math.min(
@@ -147,6 +165,15 @@ export function computeNutrientBalance(params: {
     PROVISIONAL_RESOURCE_NUTRIENT_REPLENISH_PER_DAY *
     PROVISIONAL_RESOURCE_SOIL_NUTRIENT_CAPACITY;
 
+  // P12-D wiring (GAP-20): the root cap is gated by the soil environment —
+  // pH far from ideal, compaction, + microbe-dead soil all reduce nutrient
+  // uptake. Computed once here (same factor for N/P/K) + applied inside the
+  // per-component closure. At the neutral default the product is 1.0 so
+  // behaviour is unchanged; degraded soil lowers the cap, leaving the
+  // unclaimed nutrients in the soil pool (preserves mass conservation).
+  const envUptakeFactor =
+    phFraction(ph) * compactionFraction(compaction) * microbialFraction(microbialActivity);
+
   const component = (
     soilBefore: number,
     treeBefore: number,
@@ -162,12 +189,14 @@ export function computeNutrientBalance(params: {
     // Root absorption cap (units/day). Same Liebig-style headroom as water:
     //   rootCap = requirement × foliageFraction × MAX_UPTAKE_FRACTION × rootAbs
     // Decoupled from consumption so the tree can refill its (small) internal
-    // nutrient buffer faster than it consumes.
+    // nutrient buffer faster than it consumes. Gated by envUptakeFactor (see
+    // above) so degraded soil lowers the cap.
     const rootCapPerDay =
       requirement *
       foliageFraction *
       PROVISIONAL_RESOURCE_MAX_UPTAKE_FRACTION *
-      rootAbsorptionCapacity;
+      rootAbsorptionCapacity *
+      envUptakeFactor;
     const rootCap = rootCapPerDay * stepDays;
     // Tree absorption is Liebig: min(root cap, available in soil).
     const absorbed = Math.min(rootCap, soilPostLeach);

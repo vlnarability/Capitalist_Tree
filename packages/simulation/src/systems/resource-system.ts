@@ -127,6 +127,9 @@ export const resourceSystem: System = {
       evaporationRatePerDay: evapRatePerDay,
       rootAbsorptionCapacity: tree.roots.absorptionCapacity,
       stepDays,
+      ph: env.soil.ph,
+      compaction: env.soil.compaction,
+      microbialActivity: env.soil.microbialActivity,
     });
     applyWaterBalance(env, tree, waterBalance);
 
@@ -140,6 +143,9 @@ export const resourceSystem: System = {
       rootAbsorptionCapacity: tree.roots.absorptionCapacity,
       soilWater: env.soil.soilWater,
       stepDays,
+      ph: env.soil.ph,
+      compaction: env.soil.compaction,
+      microbialActivity: env.soil.microbialActivity,
     });
     applyNutrientBalance(env, tree, nutrientBalance);
 

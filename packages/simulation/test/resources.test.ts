@@ -480,6 +480,123 @@ describe('nutrient balance — conservation (TDD §18.4 invariant)', () => {
   });
 });
 
+describe('soil environment gates uptake (P12-D / GAP-20)', () => {
+  // The env uptake factor = phFraction(ph) × compactionFraction(compaction) ×
+  // microbialFraction(microbialActivity). At neutral defaults (ph 6.5,
+  // compaction 0, microbial 1.0) it's 1.0 (legacy behaviour); degraded soil
+  // lowers the root cap so the tree takes up less water + nutrients. The
+  // unclaimed mass stays in the soil pool (→ runoff/drainage for water, stays
+  // in soilPostLeach for nutrients), preserving the conservation invariant.
+  it('water uptake is reduced by degraded soil (low pH, high compaction, low microbial)', () => {
+    const tree = neutralTree({
+      water: { stored: 30, capacity: 50 },
+      roots: { development: 0.5, absorptionCapacity: 0.5 },
+    });
+    const evapRatePerDay = computeSoilEvaporationRate(WEATHER_EVENT_MAP.sunny, 22);
+    const baseArgs = {
+      soilWater: 80,
+      treeWater: tree.water.stored,
+      treeWaterCapacity: tree.water.capacity,
+      dailyWaterNeedL: 10,
+      rainfall: 5,
+      evaporationRatePerDay: evapRatePerDay,
+      rootAbsorptionCapacity: tree.roots.absorptionCapacity,
+      stepDays: STEP_DAYS,
+    };
+    const neutral = computeWaterBalance({
+      ...baseArgs,
+      ph: 6.5,
+      compaction: 0,
+      microbialActivity: 1.0,
+    });
+    const degraded = computeWaterBalance({
+      ...baseArgs,
+      ph: 5.5, // |5.5-6.5|=1.0 → phFraction 0.5 (suboptimal, not blocked)
+      compaction: 0.8, // → compactionFraction 0.2
+      microbialActivity: 0.1, // → microbialFraction 0.1
+    });
+    // Degraded soil → strictly less uptake than neutral, but still > 0
+    // (factor = 0.5 × 0.2 × 0.1 = 0.01).
+    expect(degraded.treeUptake).toBeLessThan(neutral.treeUptake);
+    expect(degraded.treeUptake).toBeGreaterThan(0);
+    // Conservation holds for both (unclaimed water → runoff/drainage).
+    const conserved = (b: typeof neutral) =>
+      b.soilWaterAfter + b.treeWaterAfter + b.evaporation + b.drainage + b.runoff + b.transpiration;
+    expect(conserved(degraded)).toBeCloseTo(80 + 30 + 5, 5);
+    expect(conserved(neutral)).toBeCloseTo(80 + 30 + 5, 5);
+  });
+
+  it('nutrient uptake is reduced by degraded soil', () => {
+    const treeNutrients = { nitrogen: 5, phosphorus: 2, potassium: 4 };
+    const soilNutrients = { nitrogen: 80, phosphorus: 70, potassium: 60 };
+    const baseArgs = {
+      soilNutrients,
+      treeNutrients,
+      speciesNutrientRequirement: WHITE_OAK.nutrientRequirement,
+      speciesMaxFoliage: 10050,
+      currentLeaves: 5000,
+      rootAbsorptionCapacity: 0.5,
+      soilWater: 100,
+      stepDays: STEP_DAYS,
+    };
+    const neutral = computeNutrientBalance({
+      ...baseArgs,
+      ph: 6.5,
+      compaction: 0,
+      microbialActivity: 1.0,
+    });
+    const degraded = computeNutrientBalance({
+      ...baseArgs,
+      ph: 5.5,
+      compaction: 0.8,
+      microbialActivity: 0.1,
+    });
+    // Degraded soil → strictly less nitrogen absorption + a lower tree buffer.
+    expect(degraded.nitrogen.absorbed).toBeLessThan(neutral.nitrogen.absorbed);
+    expect(degraded.nitrogen.treeAfter).toBeLessThan(neutral.nitrogen.treeAfter);
+  });
+
+  it('fully compacted soil blocks water uptake entirely (factor 0)', () => {
+    const tree = neutralTree({
+      water: { stored: 30, capacity: 50 },
+      roots: { development: 0.5, absorptionCapacity: 0.5 },
+    });
+    const evapRatePerDay = computeSoilEvaporationRate(WEATHER_EVENT_MAP.sunny, 22);
+    const blocked = computeWaterBalance({
+      soilWater: 80,
+      treeWater: tree.water.stored,
+      treeWaterCapacity: tree.water.capacity,
+      dailyWaterNeedL: 10,
+      rainfall: 5,
+      evaporationRatePerDay: evapRatePerDay,
+      rootAbsorptionCapacity: tree.roots.absorptionCapacity,
+      stepDays: STEP_DAYS,
+      compaction: 1.0, // fully compacted → compactionFraction = 0 → factor 0
+    });
+    expect(blocked.treeUptake).toBe(0);
+  });
+
+  it('extreme pH blocks water uptake entirely (factor 0)', () => {
+    const tree = neutralTree({
+      water: { stored: 30, capacity: 50 },
+      roots: { development: 0.5, absorptionCapacity: 0.5 },
+    });
+    const evapRatePerDay = computeSoilEvaporationRate(WEATHER_EVENT_MAP.sunny, 22);
+    const blocked = computeWaterBalance({
+      soilWater: 80,
+      treeWater: tree.water.stored,
+      treeWaterCapacity: tree.water.capacity,
+      dailyWaterNeedL: 10,
+      rainfall: 5,
+      evaporationRatePerDay: evapRatePerDay,
+      rootAbsorptionCapacity: tree.roots.absorptionCapacity,
+      stepDays: STEP_DAYS,
+      ph: 10.0, // ideal 6.5 ± tolerance 2.0 → 0 at pH 8.5+; 10.0 → phFraction 0
+    });
+    expect(blocked.treeUptake).toBe(0);
+  });
+});
+
 describe('fertilizer application (TDD §18.1: fertilizer changes nutrients)', () => {
   it('balanced 10-10-10 adds 10/10/10 per unit to soil', () => {
     const env = neutralEnv({ soil: { soilWater: 50, organicMatter: 50, contamination: 0, nutrients: { nitrogen: 30, phosphorus: 30, potassium: 30 }, health: 1, ph: 6.5, compaction: 0, microbialActivity: 1.0 } });
