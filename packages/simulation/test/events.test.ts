@@ -53,6 +53,7 @@ import {
   severityMultiplier,
   UnknownEventDefinitionError,
   UnknownActiveEventError,
+  UnknownMarketError,
   DEFAULT_REGION_IDS,
   ECOSYSTEM_RESILIENCE_WEIGHTS,
 } from '../src/index.js';
@@ -955,6 +956,95 @@ describe('actions — set-government-policy', () => {
     expect(result.state.eventState.global.governmentPolicy.subsidies).toEqual([
       { type: 'subsidy:renewable-energy', rate: 0.25 },
     ]);
+  });
+});
+
+describe('actions — lobby-government (P13-B / GAP-25)', () => {
+  it('debits the lobby cost + nudges the target field up, emits events', () => {
+    const state = freshState();
+    const cashBefore = state.player.personalCash;
+    const before = state.eventState.global.governmentPolicy.environmentalRegulations;
+    const result = engine.executeAction(state, {
+      type: 'lobby-government',
+      payload: { targetField: 'environmentalRegulations', direction: 'up', tick: 1000 },
+    });
+    // Field nudged up by 0.05, clamped to [0,1].
+    expect(result.state.eventState.global.governmentPolicy.environmentalRegulations).toBeCloseTo(
+      before + 0.05,
+      6,
+    );
+    // Lobby cost (10000 minor) debited from the player.
+    expect(BigInt(result.state.player.personalCash)).toBe(BigInt(cashBefore) - 10_000n);
+    // government-policy-changed + a notification.
+    expect(result.events.some((e) => e.type === 'government-policy-changed')).toBe(true);
+    expect(result.events.some((e) => e.type === 'notification')).toBe(true);
+  });
+
+  it('nudges down + clamps at 0 (never negative)', () => {
+    const state = freshState();
+    // carbonTaxRate starts at 0 — nudging down stays at 0 (clamped).
+    expect(state.eventState.global.governmentPolicy.carbonTaxRate).toBe(0);
+    const result = engine.executeAction(state, {
+      type: 'lobby-government',
+      payload: { targetField: 'carbonTaxRate', direction: 'down', tick: 0 },
+    });
+    expect(result.state.eventState.global.governmentPolicy.carbonTaxRate).toBe(0);
+  });
+
+  it('can nudge the tariffRate lever', () => {
+    const state = freshState();
+    const result = engine.executeAction(state, {
+      type: 'lobby-government',
+      payload: { targetField: 'tariffRate', direction: 'up', tick: 0 },
+    });
+    expect(result.state.eventState.global.governmentPolicy.tariffRate).toBeCloseTo(0.05, 6);
+  });
+});
+
+describe('actions — import-commodity (P13-B / GAP-24)', () => {
+  it('credits inventory + debits the player by the base cost (no tariff)', () => {
+    const state = freshState();
+    const cashBefore = state.player.personalCash;
+    // market:water basePrice = '10' minor/L. Import 100 L → baseCost = 1000.
+    const result = engine.executeAction(state, {
+      type: 'import-commodity',
+      payload: { marketId: 'market:water', quantity: 100, tick: 1000 },
+    });
+    // Inventory credited with resource:water × 100.
+    const water = result.state.inventory.items.find((i) => i.resourceId === 'resource:water');
+    expect(water?.quantity).toBeGreaterThanOrEqual(100);
+    // Player debited by baseCost (1000) — no tariff (tariffRate defaults to 0).
+    expect(BigInt(result.state.player.personalCash)).toBe(BigInt(cashBefore) - 1000n);
+  });
+
+  it('applies the tariff surcharge to the authority account', () => {
+    // Set a 10% tariff first.
+    let state = freshState();
+    state = engine.executeAction(state, {
+      type: 'set-government-policy',
+      payload: { policy: { tariffRate: 0.1 }, tick: 0 },
+    }).state;
+    const cashBefore = state.player.personalCash;
+    // baseCost = 1000, tariff = 100, totalCost = 1100.
+    const result = engine.executeAction(state, {
+      type: 'import-commodity',
+      payload: { marketId: 'market:water', quantity: 100, tick: 1000 },
+    });
+    // Player debited by baseCost + tariff = 1100.
+    expect(BigInt(result.state.player.personalCash)).toBe(BigInt(cashBefore) - 1100n);
+    // transaction-recorded events emitted (base + tariff).
+    const tx = result.events.filter((e) => e.type === 'transaction-recorded');
+    expect(tx.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('throws UnknownMarketError for an unknown market id', () => {
+    const state = freshState();
+    expect(() =>
+      engine.executeAction(state, {
+        type: 'import-commodity',
+        payload: { marketId: 'market:no-such', quantity: 1, tick: 0 },
+      }),
+    ).toThrow(UnknownMarketError);
   });
 });
 

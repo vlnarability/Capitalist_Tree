@@ -112,6 +112,7 @@ import type {
 } from '@capitalist-tree/shared';
 import {
   PROVISIONAL_ECONOMY_AUTHORITY_ACCOUNT_ID,
+  PROVISIONAL_ECONOMY_EXTERNAL_ACCOUNT_ID,
   PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID,
   PROVISIONAL_ECONOMY_CATEGORY_PURCHASE,
   PROVISIONAL_ECONOMY_MARKET_ACCOUNT_PREFIX,
@@ -587,6 +588,146 @@ export function applyPurchase(state: GameState, params: PurchaseParams): Purchas
     transaction,
     totalCost: totalCost.toString(10),
     unitPrice: unitPrice.toString(10),
+  };
+}
+
+/**
+ * `import-commodity` params (P13-B / GAP-24 — international trade).
+ * The domestic market id anchors the foreign price; quantity credits inventory.
+ */
+export interface ImportParams {
+  marketId: string;
+  quantity: number;
+  timestamp: number;
+}
+
+export interface ImportResult {
+  state: GameState;
+  events: SimulationEvent[];
+  baseCost: string;
+  tariff: string;
+  totalCost: string;
+}
+
+/**
+ * Apply an `import-commodity` action (P13-B / GAP-24 — GDD §15 international
+ * trade). Buys `quantity` of the market's commodity from the foreign/external
+ * counterparty at the current domestic market price, plus a tariff surcharge
+ * (= baseCost × `governmentPolicy.tariffRate`) sunk to the authority account.
+ *
+ *   - baseCost flows player:personal → external:default (the foreign seller).
+ *   - tariff flows player:personal → authority (the government), only if > 0.
+ *   - inventory is credited at the market's commodityId (like `purchase`).
+ *   - the domestic market's supply/demand is NOT adjusted (the good comes from
+ *     abroad, not the domestic market stock).
+ *
+ * Pure: returns a new state, never mutates input. Throws `UnknownMarketError`
+ * if the market id is unknown; `InsufficientFundsError` propagates from `transfer`.
+ */
+export function applyImport(state: GameState, params: ImportParams): ImportResult {
+  const market = state.economy.markets.find((m) => m.id === params.marketId);
+  if (!market) {
+    throw new UnknownMarketError(params.marketId);
+  }
+
+  const unitPrice = parseAmount(market.price, 'price');
+  const quantity = BigInt(params.quantity);
+  const baseCost = unitPrice * quantity;
+  const tariffRate = state.eventState.global.governmentPolicy.tariffRate;
+  const tariff = BigInt(Math.floor(Number(baseCost) * tariffRate));
+
+  // 1. Pay the foreign seller (base cost → external:default).
+  const afterBase = transfer(state, {
+    sourceAccount: PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID,
+    destinationAccount: PROVISIONAL_ECONOMY_EXTERNAL_ACCOUNT_ID,
+    amount: baseCost.toString(10),
+    category: 'import',
+    description: `Import ${params.quantity} × ${market.commodityId} from ${market.id} (foreign)`,
+    timestamp: params.timestamp,
+  });
+
+  // 2. Pay the tariff to the authority (only if non-zero).
+  let afterTariff = afterBase;
+  const events: SimulationEvent[] = [
+    {
+      type: 'transaction-recorded',
+      at: params.timestamp,
+      payload: {
+        record:
+          afterBase.economy.transactions[afterBase.economy.transactions.length - 1]!,
+      },
+    },
+  ];
+  if (tariff > 0n) {
+    afterTariff = transfer(afterBase, {
+      sourceAccount: PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID,
+      destinationAccount: PROVISIONAL_ECONOMY_AUTHORITY_ACCOUNT_ID,
+      amount: tariff.toString(10),
+      category: 'import-tariff',
+      description: `Import tariff (${(tariffRate * 100).toFixed(1)}%) on ${params.quantity} × ${market.commodityId}`,
+      timestamp: params.timestamp,
+    });
+    events.push({
+      type: 'transaction-recorded',
+      at: params.timestamp,
+      payload: {
+        record:
+          afterTariff.economy.transactions[afterTariff.economy.transactions.length - 1]!,
+      },
+    });
+  }
+
+  // 3. Credit inventory (mirror purchase — increment if exists, append otherwise).
+  const items = afterTariff.inventory.items;
+  const existingIdx = items.findIndex((i) => i.resourceId === market.commodityId);
+  const newItems =
+    existingIdx >= 0
+      ? items.map((item, idx) =>
+          idx === existingIdx ? { ...item, quantity: item.quantity + params.quantity } : item,
+        )
+      : [...items, { resourceId: market.commodityId, quantity: params.quantity }];
+
+  // 4. Mirror the new player balance to player.personalCash.
+  const playerAccount = afterTariff.economy.accounts.find(
+    (a) => a.id === PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID,
+  );
+  const playerBalanceAfter = playerAccount?.balance ?? afterTariff.player.personalCash;
+
+  const newState: GameState = {
+    ...afterTariff,
+    inventory: { items: newItems },
+    player:
+      playerBalanceAfter !== afterTariff.player.personalCash
+        ? { ...afterTariff.player, personalCash: playerBalanceAfter }
+        : afterTariff.player,
+  };
+
+  const totalCost = baseCost + tariff;
+  events.push({
+    type: 'system',
+    at: params.timestamp,
+    payload: {
+      systemId: 'EconomySystem',
+      message: `Imported ${params.quantity} × ${market.commodityId}: base ${baseCost.toString(10)} to foreign seller + tariff ${tariff.toString(10)} to authority.`,
+      data: {
+        marketId: market.id,
+        commodityId: market.commodityId,
+        quantity: params.quantity,
+        baseCost: baseCost.toString(10),
+        tariff: tariff.toString(10),
+        tariffRate,
+        totalCost: totalCost.toString(10),
+        playerBalanceAfter,
+      },
+    },
+  });
+
+  return {
+    state: newState,
+    events,
+    baseCost: baseCost.toString(10),
+    tariff: tariff.toString(10),
+    totalCost: totalCost.toString(10),
   };
 }
 

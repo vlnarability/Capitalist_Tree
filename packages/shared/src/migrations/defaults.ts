@@ -1084,6 +1084,7 @@ const v12ToV13: Migration = (state: GameState): GameState => {
         governmentPolicy: {
           environmentalRegulations: 0.3,
           carbonTaxRate: 0,
+          tariffRate: 0,
           subsidies: [],
         },
         monetaryPolicy: {
@@ -1174,11 +1175,12 @@ const v12ToV13: Migration = (state: GameState): GameState => {
                   0.3,
                 ),
                 carbonTaxRate: num(existingGov.carbonTaxRate, 0),
+                tariffRate: num(existingGov.tariffRate, 0),
                 subsidies: Array.isArray(existingGov.subsidies)
                   ? existingGov.subsidies
                   : [],
               }
-            : { environmentalRegulations: 0.3, carbonTaxRate: 0, subsidies: [] };
+            : { environmentalRegulations: 0.3, carbonTaxRate: 0, tariffRate: 0, subsidies: [] };
           // monetaryPolicy — preserve present sub-fields, backfill missing.
           const existingMon = existingGlobal.monetaryPolicy as
             | Record<string, unknown>

@@ -27,6 +27,7 @@ import type {
   FertilizerApplicationResult,
   WaterApplicationResult,
   PurchaseAction,
+  ImportCommodityAction,
 } from '@capitalist-tree/shared';
 import {
   PROVISIONAL_BIOLOGY_HARVEST_STRESS_PER_LEAF_FRACTION,
@@ -47,6 +48,7 @@ import { findFertilizerById } from '@capitalist-tree/content';
 import { applyFertilizer, applyWaterToSoil } from '../resources/index.js';
 import {
   applyPurchase,
+  applyImport,
   InsufficientFundsError,
   UnknownMarketError,
   payExpenseHandler,
@@ -86,6 +88,7 @@ import {
   resolveEventHandler,
   setGovernmentPolicyHandler,
   setMonetaryPolicyHandler,
+  lobbyGovernmentHandler,
 } from '../events/actions.js';
 
 export type ActionListener<A extends GameAction = GameAction> = (
@@ -422,6 +425,17 @@ const purchaseHandler: ActionListener<PurchaseAction> = (state, action) => {
   return { state: result.state, events: result.events };
 };
 
+// P13-B / GAP-24: import-commodity — buy from the foreign market at the
+// domestic price + a tariff surcharge (base → external:default, tariff → authority).
+const importCommodityHandler: ActionListener<ImportCommodityAction> = (state, action) => {
+  const result = applyImport(state, {
+    marketId: action.payload.marketId,
+    quantity: action.payload.quantity,
+    timestamp: state.clock.elapsedSeconds,
+  });
+  return { state: result.state, events: result.events };
+};
+
 // Re-export the typed errors so the action layer (or a UI) can catch them.
 // The errors are NOT part of the saved GameState — they are runtime-only
 // signals. The handler above lets them propagate to `executeAction`, which
@@ -436,6 +450,7 @@ export const actionHandlers: Record<string, ActionListener> = {
   'apply-water': applyWaterHandler as ActionListener,
   'apply-fertilizer': applyFertilizerHandler as ActionListener,
   'purchase': purchaseHandler as ActionListener,
+  'import-commodity': importCommodityHandler as ActionListener,
   'pay-expense': payExpenseHandler as ActionListener,
   'transfer': transferHandler as ActionListener,
   'sell-tree': sellTreeHandler as ActionListener,
@@ -466,6 +481,7 @@ export const actionHandlers: Record<string, ActionListener> = {
   'trigger-event': triggerEventHandler as ActionListener,
   'resolve-event': resolveEventHandler as ActionListener,
   'set-government-policy': setGovernmentPolicyHandler as ActionListener,
+  'lobby-government': lobbyGovernmentHandler as ActionListener,
   'set-monetary-policy': setMonetaryPolicyHandler as ActionListener,
 };
 

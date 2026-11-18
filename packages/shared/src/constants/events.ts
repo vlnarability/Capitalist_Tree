@@ -88,6 +88,21 @@ export const PROVISIONAL_GOVERNMENT_POLICY_INTERVAL_DAYS = 30;
 export const PROVISIONAL_MONETARY_POLICY_INTERVAL_DAYS = 30;
 
 // ---------------------------------------------------------------------------
+// P13-B / GAP-25 — lobbying (GDD §3.3 "Influence governments + regulations")
+//
+// The `lobby-government` action debits a fixed cost from the player to the
+// authority account (political spend) + nudges one policy lever by a bounded
+// rate. The cost + rate are PROVISIONAL — tuned so lobbying is a meaningful
+// but not dominant lever (a player can shift a field from 0 to 1 in ~20
+// lobby actions = ~$2000, a mid-game expense).
+// ---------------------------------------------------------------------------
+
+/** Cost per `lobby-government` action, in bigint minor currency units ($100). */
+export const PROVISIONAL_LOBBY_COST_MINOR = 10_000;
+/** Per-action nudge on the target policy field (0.05 → 5 percentage points). */
+export const PROVISIONAL_LOBBY_INFLUENCE_RATE = 0.05;
+
+// ---------------------------------------------------------------------------
 // Regional aggregation + irreversibility (GDD §10.1, §10.2, §10.3)
 // ---------------------------------------------------------------------------
 

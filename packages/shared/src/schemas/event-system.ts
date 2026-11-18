@@ -370,6 +370,9 @@ export const governmentPolicySchema = z.object({
   environmentalRegulations: z.number().min(0).max(1).default(0.3),
   /** Carbon tax rate (0 = none, 1 = confiscatory). */
   carbonTaxRate: z.number().min(0).max(1).default(0),
+  /** Import tariff rate (0 = free trade, 1 = prohibitive) — P13-B / GAP-24.
+   *  Surcharge on `import-commodity` purchases, sunk to the authority account. */
+  tariffRate: z.number().min(0).max(1).default(0),
   /** Active subsidy programs (type id + rate 0-1). */
   subsidies: z
     .array(
@@ -429,6 +432,7 @@ export const globalStateSchema = z.object({
   governmentPolicy: governmentPolicySchema.default(() => ({
     environmentalRegulations: 0.3,
     carbonTaxRate: 0,
+    tariffRate: 0,
     subsidies: [],
   })),
   /** Monetary policy (interest rate, inflation target, money-supply growth). */
@@ -487,6 +491,7 @@ export const eventStateSchema = z.object({
     governmentPolicy: {
       environmentalRegulations: 0.3,
       carbonTaxRate: 0,
+      tariffRate: 0,
       subsidies: [],
     },
     monetaryPolicy: {

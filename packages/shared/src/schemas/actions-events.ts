@@ -170,6 +170,57 @@ export const setGovernmentPolicyActionSchema = z.object({
 export type SetGovernmentPolicyAction = z.infer<typeof setGovernmentPolicyActionSchema>;
 
 /**
+ * `lobby-government` action (P13-B / GAP-25 — GDD §3.3 "Influence governments
+ * and environmental regulations"). The player spends cash to nudge a single
+ * government-policy lever up or down by a bounded `PROVISIONAL_LOBBY_INFLUENCE_RATE`
+ * — a softer, cost-bound alternative to the direct `set-government-policy`
+ * override. The lobby cost is sunk to the authority account (political spend).
+ *
+ * The handler debits `PROVISIONAL_LOBBY_COST_MINOR` from `player:personal` →
+ * `authority`, clamps the target field into [0, 1], and emits
+ * `government-policy-changed` + a `notification`. Pure.
+ */
+export const lobbyGovernmentActionSchema = z.object({
+  type: z.literal('lobby-government'),
+  payload: z.object({
+    /** Which policy lever to nudge. */
+    targetField: z.enum(['environmentalRegulations', 'carbonTaxRate', 'tariffRate']),
+    /** Direction of the nudge. */
+    direction: z.enum(['up', 'down']),
+    /** Simulation second at which the action runs (deterministic event `at`). */
+    tick: z.number().int().nonnegative(),
+  }),
+});
+export type LobbyGovernmentAction = z.infer<typeof lobbyGovernmentActionSchema>;
+
+/**
+ * `import-commodity` action (P13-B / GAP-24 — GDD §15 international trade).
+ * Buy a commodity from the foreign/external market at the current domestic
+ * market price, plus a tariff surcharge (= price × quantity ×
+ * `governmentPolicy.tariffRate`) sunk to the authority account. The base cost
+ * flows to `external:default` (the foreign seller); the tariff to `authority`
+ * (the government). Credits the player's inventory, mirroring `purchase` but
+ * settling cross-border.
+ *
+ * Export is the inverse but routes revenue via issuance (the foreign buyer's
+ * money enters the domestic economy) — deferred to a follow-up; the import
+ * direction is the cleaner first cut (money flows out, no foreign-account
+ * balance constraint).
+ */
+export const importCommodityActionSchema = z.object({
+  type: z.literal('import-commodity'),
+  payload: z.object({
+    /** Domestic market id whose price anchors the foreign purchase. */
+    marketId: z.string().min(1),
+    /** Quantity to import (credits inventory at the market's commodityId). */
+    quantity: z.number().int().positive(),
+    /** Simulation second at which the action runs (deterministic event `at`). */
+    tick: z.number().int().nonnegative(),
+  }),
+});
+export type ImportCommodityAction = z.infer<typeof importCommodityActionSchema>;
+
+/**
  * `set-monetary-policy` action — adjust the central-bank interest rate /
  * inflation target / money-supply growth (GDD §404-408 monetary policy tools).
  *
