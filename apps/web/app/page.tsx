@@ -101,6 +101,7 @@ import { EventsPanel } from '../components/events';
 import { PolicyPanel } from '../components/policy';
 import { OfflineModal, CatchUpProgressBar } from '../components/offline';
 import { EndingScreen } from '../components/common/EndingScreen';
+import { WelcomePanel } from '../components/common/WelcomePanel';
 
 // ----------------------------------------------------------------------------
 // Page component.
@@ -251,6 +252,9 @@ export default function HomePage(): ReactElement {
           newly completes. Renders null when no ending is parked, so this mount
           is a no-op most of the time. */}
       <EndingScreen />
+      {/* GAP-33 (first-time tutorial): one-time "Getting Started" orientation,
+          dismissed persists to localStorage. Renders null once dismissed. */}
+      <WelcomePanel />
       {/* P11 (W11): progress bar for the Web Worker offline catch-up. Renders
           null when no catch-up is running, so this mount is a no-op most of
           the time. Shows while the worker runs chunks, then the OfflineModal
