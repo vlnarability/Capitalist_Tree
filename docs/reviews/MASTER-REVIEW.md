@@ -266,12 +266,30 @@ Per RV7's P11/P12/P13 phasing. Titles and one-paragraph scope only; full prompts
 >   photosynthesizing/leaves in winter vs the oak's dormancy) + DR-4's
 >   per-species height/diameter split (hemlock height-focused 0.55 vs oak
 >   girth-heavy 0.40).
-> - **8 (P12-B pests/disease/reproduction): UNCHANGED.** Large feature; not
->   design-blocked.
-> - **9 (P12-C balance re-tuning): UNBLOCKED** against DR-1's real-time targets.
-> - **10 (P12-D soil depth + analytics + CI/CD): PARTIAL.** CI/CD (GAP-32) done;
->   soil depth (GAP-20) + analytics (GAP-31) remain. (Note: a soil-depth commit
->   was authored then lost to a sandbox reset — needs reapplication.)
+> - **8 (P12-B pests/disease/reproduction): PARTIAL.** Pests + disease
+>   infestations (GAP-18) done (b6ffa61) — they drive the P12-C wear path.
+>   Reproduction/seeding (GAP-19) remains: a large feature (seed production +
+>   planting flow + new action surface), and gated on `matureAgeDays` (24000 for
+>   White Oak, ~66yr) — the tree never reaches maturity in a typical sim
+>   (~1-2yr), so reproduction needs a design decision on the maturity threshold
+>   (e.g. fruiting at a fraction of matureAge, or vegetative reproduction)
+>   before implementation is useful.
+> - **9 (P12-C balance re-tuning): PARTIAL.** The chronic-neglect mortality
+>   path is done + meets the DR-1 6-12mo neglect-death target: P12-C
+>   weather→defoliation (739d4df) + the wear redesign (deaf446: monotonic wear
+>   counter + wear mortality path, removed the fragile stress-threshold chronic
+>   death) + the nutrient-uptake/infestation-rate follow-up (d9d750e:
+>   MAX_UPTAKE_FRACTION 1.5→5.0 fixed nutrient depletion so the tree survives
+>   winter; infestation rates ×1.5 so the wear reaches the onset at ~6mo).
+>   Verified: 270-day idle audit — seed 100 dies at ~6.2mo, seed 7 at ~10.4mo,
+>   both via the wear path. Remaining: the design-promise bot
+>   (extractive-vs-sustainable-vs-balanced at 5/25/100yr) + verifying the other
+>   DR-1 targets (financial independence ≤60d, ecological collapse ≥2yr under
+>   sustained exploitation, ecological recovery ≥1yr).
+> - **10 (P12-D soil depth + analytics + CI/CD): PARTIAL.** CI/CD (GAP-32)
+>   done; soil depth (GAP-20) done (9016f53 — pH/compaction/microbial promoted
+>   from P2 stubs into modeled dynamics, feeding soil health); analytics
+>   (GAP-31) remains.
 > - **11–12 (P13-A/B): UNCHANGED.** Large features.
 > - **13 (P13-C productization): IN FLIGHT.** CSP headers (W30) + perf gate
 >   (W29) + cross-browser E2E (GAP-37) done; Zod 4 (DR-7) + i18n scaffold +
