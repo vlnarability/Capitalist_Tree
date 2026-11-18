@@ -36,3 +36,4 @@ export * from './government/subsidies.js';
 export * from './i18n/index.js';
 export * from './credits/index.js';
 export * from './endings/index.js';
+export * from './explanations/index.js';
