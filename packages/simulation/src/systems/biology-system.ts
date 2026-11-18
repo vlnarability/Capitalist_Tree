@@ -65,6 +65,7 @@ import {
   updateStress,
   checkMortality,
   recentSevereDefoliations,
+  rollInfestation,
   getSpeciesOrFail,
   type BiologyContext,
 } from '../biology/index.js';
@@ -221,6 +222,37 @@ export const biologySystem: System = {
 
     // Update activeLeafArea for P4's renderer (GDD §5.1).
     tree.foliage.activeLeafArea = computeActiveLeafArea(tree, species.leafAreaPerLeaf);
+
+    // P12-B (GAP-18): pest + disease infestations. Roll BEFORE the stress
+    // computation so the new damage records count toward activeDamage (which
+    // drives STRESS_DAMAGE_PER_DAY × activeDamage × stepDays). Uses a dedicated
+    // RNG fork ('BiologySystem:infestation') so the infestation draws don't
+    // shift the mortality fork's sequence (DR-6 — non-root-consuming, versioned
+    // forks; a new fork label is the standard pattern for adding RNG draws).
+    // Pests are gated on foliage (pests eat leaves); disease can take hold on
+    // any living tree. The rates are per-day × stepDays (per-tick-vs-per-day
+    // scaling, same pattern as the weather fix + RV4-F-H2).
+    const infestationRng = ctx.rng.fork('BiologySystem:infestation');
+    const infestationDamage = rollInfestation(
+      tree.foliage.currentLeaves > 0,
+      bioCtx,
+      infestationRng,
+      stepDays,
+    );
+    if (infestationDamage.length > 0) {
+      tree.damage = [...tree.damage, ...infestationDamage];
+      for (const d of infestationDamage) {
+        events.push({
+          type: 'infestation',
+          at: ctx.now,
+          payload: {
+            treeId: tree.id,
+            kind: d.type as 'pest' | 'disease',
+            severity: d.severity,
+          },
+        });
+      }
+    }
 
     // 11. Update reserves (storage - draw - recovery).
     // Stress update needs to happen before reserves so we know recovery cost.

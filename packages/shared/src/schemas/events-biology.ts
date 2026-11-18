@@ -73,3 +73,24 @@ export const biologyNotificationEventSchema = z.object({
   }),
 });
 export type BiologyNotificationEvent = z.infer<typeof biologyNotificationEventSchema>;
+
+/**
+ * P12-B (GAP-18): a pest or disease infestation took hold on the tree.
+ *
+ * Emitted by the BiologySystem when `rollInfestation` appends a `pest` or
+ * `disease` damage record. The damage record itself drives the stress/
+ * mortality path (via `tree.damage.length`); this event is the hand-off for
+ * the UI (NotificationsPanel) + the event log.
+ */
+export const infestationEventSchema = z.object({
+  type: z.literal('infestation'),
+  at: z.number().int().nonnegative(),
+  payload: z.object({
+    treeId: z.string().min(1),
+    /** Whether this is a pest or a disease infestation. */
+    kind: z.enum(['pest', 'disease']),
+    /** Severity in [0, 1] — uniform in [MIN, MAX] (see biology constants). */
+    severity: z.number().min(0).max(1),
+  }),
+});
+export type InfestationEvent = z.infer<typeof infestationEventSchema>;

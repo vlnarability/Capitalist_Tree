@@ -309,3 +309,40 @@ export const PROVISIONAL_BIOLOGY_STRESS_RESERVE_PER_DAY = 0.1;
 // defoliation, weather damage) accumulate stress while they're on the tree;
 // the BiologySystem prunes old records via the mortality window.
 export const PROVISIONAL_BIOLOGY_STRESS_DAMAGE_PER_DAY = 0.05;
+
+// ---------------------------------------------------------------------------
+// P12-B (GAP-18): pest + disease infestations.
+//
+// Biological threats that accumulate `pest` / `disease` damage records on the
+// tree, driving the DR-1 6–12 month neglect-death target. The rates are
+// per-day; the BiologySystem scales by stepDays. With the 60-day damage-prune
+// window (PROVISIONAL_BIOLOGY_DEATH_DEFOLIATION_WINDOW_DAYS), the steady-state
+// activeDamage ≈ rate × 60. The damage stress (PROVISIONAL_BIOLOGY_STRESS_
+// DAMAGE_PER_DAY × activeDamage) must exceed the recovery rate
+// (PROVISIONAL_BIOLOGY_STRESS_RECOVERY_RATE = 0.1/day) for stress to climb —
+// i.e. activeDamage > 2, rate > 0.033/day. At the rates below (pest 0.02 +
+// disease 0.015 = 0.035/day total), activeDamage ≈ 2.1, stressAdd ≈ 0.105/day
+// just edges past recovery (0.1/day), so stress climbs to critical over ~9
+// months, then the critical-stress mortality path fires. Tunable in P12-C.
+// ---------------------------------------------------------------------------
+
+// PROVISIONAL (GDD §5.6 "Pests" / §17: detailed biology model).
+//
+// Probability per day of a pest infestation taking hold (adds a `pest` damage
+// record). Pests are the more frequent biological threat (~1 per 50 days).
+export const PROVISIONAL_BIOLOGY_PEST_INFESTATION_RATE_PER_DAY = 0.02;
+
+// PROVISIONAL (GDD §5.6 "Disease" / §17: detailed biology model).
+//
+// Probability per day of a disease taking hold (adds a `disease` damage
+// record). Rarer than pests (~1 per 67 days).
+export const PROVISIONAL_BIOLOGY_DISEASE_INFESTATION_RATE_PER_DAY = 0.015;
+
+// PROVISIONAL (GDD §5.6 / §17).
+//
+// Severity range for an infestation damage record (uniform in [min, max]).
+// The severity is recorded for the defoliation/mortality checks + future
+// condition-dependent scaling; the stress calculation uses the record COUNT,
+// not the severity.
+export const PROVISIONAL_BIOLOGY_INFESTATION_SEVERITY_MIN = 0.3;
+export const PROVISIONAL_BIOLOGY_INFESTATION_SEVERITY_MAX = 0.7;
