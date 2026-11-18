@@ -15,6 +15,8 @@
 import { describe, it, expect } from 'vitest';
 import { engine, DEFAULT_GAME_CONFIG, Rng } from '../src/index.js';
 import { shouldEmitDamage, computeDamageSeverity } from '../src/weather/effects.js';
+import { weatherSystem } from '../src/systems/weather-system.js';
+import type { SystemContext } from '../src/systems/system.js';
 import { findWeatherEvent } from '@capitalist-tree/content';
 import {
   PROVISIONAL_WEATHER_DAMAGE_INTENSITY_THRESHOLD,
@@ -22,6 +24,26 @@ import {
 } from '@capitalist-tree/shared';
 
 const STEP = 60; // PROVISIONAL_SIMULATION_STEP_SECONDS
+const SECONDS_PER_DAY = 24 * 60 * 60;
+
+/**
+ * Run ONE WeatherSystem step with a controllable stepSeconds. The engine's
+ * `advance` always uses STEP=60s (stepDays ≈ 0.000694), which after the
+ * per-tick-vs-per-day fix makes condition transitions rare (~0.45/day). To
+ * deterministically force a damage-capable transition in ONE step, we call
+ * the WeatherSystem directly with stepSeconds=SECONDS_PER_DAY (stepDays=1),
+ * which uses the full daily transition rate (the legacy behavior the
+ * streamSeeds below were calibrated against).
+ */
+function runWeatherStep(state: any, stepSeconds: number) {
+  const ctx: SystemContext = {
+    now: state.clock.elapsedSeconds + stepSeconds,
+    stepSeconds,
+    dayOfYear: state.clock.day,
+    rng: Rng.fromState(state.rngState, state.rngVersion),
+  };
+  return weatherSystem.execute(state, ctx);
+}
 
 describe('RV2-1 regression — weather damage is applied to tree.damage (W4 / DR-9)', () => {
   describe('damage logic (shouldEmitDamage + computeDamageSeverity)', () => {
@@ -73,7 +95,7 @@ describe('RV2-1 regression — weather damage is applied to tree.damage (W4 / DR
         },
         rngStreams: { ...s.rngStreams, weather: Rng.fromSeed(37).getState() },
       };
-      const r = engine.advance(state, STEP);
+      const r = runWeatherStep(state, SECONDS_PER_DAY);
       // 1. The weather-damage event fired (frost).
       const ev = r.events.find((e: any) => e.type === 'weather-damage');
       expect(ev).toBeDefined();
@@ -103,7 +125,7 @@ describe('RV2-1 regression — weather damage is applied to tree.damage (W4 / DR
         },
         rngStreams: { ...s.rngStreams, weather: Rng.fromSeed(19).getState() },
       };
-      const r = engine.advance(state, STEP);
+      const r = runWeatherStep(state, SECONDS_PER_DAY);
       const ev = r.events.find((e: any) => e.type === 'weather-damage');
       expect(ev).toBeDefined();
       expect(ev!.payload.damageType).toBe('wind');
@@ -126,7 +148,7 @@ describe('RV2-1 regression — weather damage is applied to tree.damage (W4 / DR
         },
         rngStreams: { ...s.rngStreams, weather: Rng.fromSeed(1).getState() },
       };
-      const r = engine.advance(state, STEP);
+      const r = runWeatherStep(state, SECONDS_PER_DAY);
       const weatherDmg = r.state.originalTree.damage.filter(
         (d: any) => typeof d.type === 'string' && d.type.startsWith('weather:'),
       );

@@ -66,41 +66,56 @@ environmental recovery) are tuned against these targets.
 GDD §17 "Environmental recovery timescales" + "Detailed photosynthesis and
 energy allocation equations" open items with concrete measured goals.
 
-**Balance audit (10-day idle/neglect trajectory, seed 42).** An idle sim (no
-player actions = "neglect") was run for 10 sim days to read the current
-`@provisional` constants against the targets:
+**Balance audit (10-day idle/neglect trajectory, seed 42) — UPDATED after the
+weather per-tick-scaling fix.** An idle sim (no player actions) was run for 10
+sim days to read the current `@provisional` constants against the targets.
+
+Initial audit (pre-fix) showed the idle tree reaching critical stress (1.0)
+within 1 day + dying in ~1–2 months — seemingly 3–6× too fast for the 6–12
+month neglect target. **Root-cause investigation found this was a BUG, not a
+tuning issue**: the weather transition matrix (calibrated for DAILY transitions)
+was applied every tick (60s) without `stepDays` scaling, so the condition
+changed ~1440× too fast (~648 changes/day vs ~0.45). Each transition into a
+damage-capable condition (frost/wind) appended a `weather:*` damage record —
+~48/day — which drove `STRESS_DAMAGE_PER_DAY × activeDamage` stress to 1.0
+within 1 day. A second compounding bug: `daysInCondition` incremented by
+`Math.ceil(stepSeconds/86400) = 1` per tick (should be `stepDays`), inflating it
+1440× + tripping the staleness bias almost immediately.
+
+**Fix (same class as RV4-F-H2):** `pickNextCondition` now scales the transition
+probabilities by `stepDays` (P_change_per_tick = P_change_daily × stepDays), +
+the WeatherSystem increments `daysInCondition` by `stepDays`. The weather now
+changes at the calibrated daily rate (~0.45/day → conditions persist ~1–2 days),
+damage fires ~0.09/day (~1 event per 11 days), + the `daysInCondition` schema
+was relaxed from `.int()` to allow the fractional increment.
+
+Post-fix trajectory (10-day idle, seed 42):
 
 | Day | stress | health | reserves | leaves | water | height |
 |---|---|---|---|---|---|---|
-| 1  | 0.972 | 0.289 | 123.3 | 50 | 49.9/50 | 0.50 |
-| 3  | 1.000 | 0.258 | 114.2 | 50 | 49.6/50 | 0.50 |
-| 7  | 1.000 | 0.225 |  96.1 | 50 | 49.1/50 | 0.50 |
-| 10 | 1.000 | 0.201 |  82.7 | 50 | 48.7/50 | 0.50 |
+| 1  | 0.000 | 0.784 | 127.6 | 51 | 49.9/50 | 0.50 |
+| 3  | 0.000 | 0.813 | 143.6 | 53 | 49.6/50 | 0.50 |
+| 7  | 0.000 | 0.857 | 167.6 | 58 | 49.0/50 | 0.51 |
+| 10 | 0.000 | 0.861 | 169.1 | 62 | 48.5/50 | 0.52 |
 
-**Misalignment found — neglect death ~1–2 months vs the 6–12 month target.**
-The idle tree reaches **critical stress (1.0) within 1 day** + reserves decline
-~4/day (123 → 82 over 10 days), so reserves cross the 10%-of-capacity mortality
-threshold around day ~28. With stress already critical, the reserves-exhausted
-mortality path (0.05/day) then kills the tree within ~1–2 months — **3–6× too
-fast** for the DR-1 neglect target (6–12 months). The drivers are the stress
-accumulation rates (`PROVISIONAL_BIOLOGY_STRESS_*_PER_DAY`: water 0.2, nutrient
-0.15, reserve 0.1, damage 0.05) + the maintenance/production balance that
-depletes reserves. Note the tree has full water (49.9/50) yet stress is 1.0 by
-day 3 — so the active driver is nutrient/reserve stress, not water.
+The tree is now HEALTHY in the idle sim (stress=0, health + reserves
+increasing, leaves growing). The pre-fix "neglect death ~1–2 months" was
+entirely a bug artifact — the idle sim is not true neglect (the tree gets water
+from rainfall + has initial nutrients), so with the bug fixed the tree
+sustains itself. The true 6–12 month neglect death requires actual deprivation
+(sustained drought, nutrient depletion) which the idle sim doesn't represent;
+measuring it needs the P12-C design-promise bot running a real neglect scenario.
 
-**Tuning direction (P12-C / focused follow-up).** To hit the 6–12 month neglect
-target, the stress accumulation rates +/or the reserve-depletion rate need to
-slow ~3–6×, AND/OR the mortality prob (0.05/day) needs re-calibration so a
-critically-stressed tree lingers longer. This is an iterative tuning pass
-(adjust constants → re-run the audit → check the target) best done with the P12-C
-design-promise bot running the 5/25/100yr extractive-vs-sustainable comparison.
-The financial-independence target (30–60d) could not be measured in this audit
-(the idle sim accrues no currency — harvesting + market activity require player
-actions or automation, which P12-C exercises). The ecological targets
-(2–4yr collapse, 1–5yr recovery) need year-scale runs.
+**Remaining tuning (P12-C).** With the weather bug fixed, the stress/mortality
+constants (`PROVISIONAL_BIOLOGY_STRESS_*_PER_DAY`, `DEATH_DAILY_PROBABILITY`)
+are no longer masked by the 48-damage-events/day spike + can be tuned honestly
+against the 6–12 month neglect target via the P12-C bot's 5/25/100yr
+extractive-vs-sustainable comparison. The financial-independence target (30–60d)
+could not be measured here (the idle sim accrues no currency). The ecological
+targets (2–4yr collapse, 1–5yr recovery) need year-scale runs.
 
 The audit script lives at `packages/simulation/test/_dr1_audit.test.ts`
-(diagnostic, not a regression test — re-run it after tuning to re-measure).
+(diagnostic — re-run it after tuning to re-measure).
 
 ---
 

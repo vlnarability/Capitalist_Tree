@@ -41,6 +41,8 @@ import {
 } from '@capitalist-tree/shared';
 import { engine, Rng, InMemoryStorage } from '../src/index.js';
 import { seasonFromDay } from '../src/systems/time-system.js';
+import { weatherSystem } from '../src/systems/weather-system.js';
+import type { SystemContext } from '../src/systems/system.js';
 import { DEFAULT_GAME_CONFIG } from '../src/initial-state.js';
 import type { GameConfig, WeatherCondition, Season } from '@capitalist-tree/shared';
 
@@ -423,21 +425,49 @@ describe('WeatherSystem determinism (TDD §18.3)', () => {
 
   it('weather-changed events are emitted when the condition changes', () => {
     const initial = engine.initialize(cfg(42));
-    const r = engine.advance(initial, 100 * STEP);
+    // The transition matrix is scaled by stepDays (the per-tick-vs-per-day
+    // fix), so the condition changes ~0.45×/day — 30 days gives ~13 changes
+    // (seed 42). Pre-fix the matrix was applied every tick (100 steps was
+    // plenty); now the calibrated daily rate needs a multi-day window.
+    const r = engine.advance(initial, 30 * SECONDS_PER_DAY);
     const weatherChanged = r.events.filter((e) => e.type === 'weather-changed');
     // We can't guarantee a specific count (depends on the seed), but over
-    // 100 steps there should be at least one condition change.
+    // 30 sim days there should be at least one condition change.
     expect(weatherChanged.length).toBeGreaterThan(0);
   });
 
   it('weather-damage events are emitted for severe conditions', () => {
+    // The per-tick-vs-per-day fix made weather damage realistic (~0.09/day,
+    // ~1 event per 11 days), so a natural-occurrence smoke test would be slow
+    // + flaky. Instead, force a damage-capable transition deterministically:
+    // set the weather sub-stream to a seed (37) that transitions 'sunny' →
+    // 'frost' with intensity ≥ 0.6 in one step, then assert the damage fires.
+    // (The RV2-1 regression test in regression-rv2-rv6.test.ts covers the
+    // full invariant — damage APPLIED to tree.damage — end-to-end.)
     const initial = engine.initialize(cfg(42));
-    // P11 (slow-test remediation): reduced from 3 sim years (518K steps,
-    // ~260s) to 7 days (10K steps, ~11s). Severe conditions (storm/frost/
-    // heat-wave/drought) transition in regularly + the 0.6 intensity
-    // threshold fires damage on ~40% of them — at least one weather-damage
-    // event occurs within 7 days (seed 42).
-    const r = engine.advance(initial, 7 * SECONDS_PER_DAY);
+    const state: any = {
+      ...initial,
+      world: {
+        ...initial.world,
+        weather: { ...initial.world.weather, condition: 'sunny', daysInCondition: 5 },
+      },
+      rngStreams: { ...initial.rngStreams, weather: Rng.fromSeed(37).getState() },
+    };
+    const r = (() => {
+      // Call the WeatherSystem directly with stepSeconds=SECONDS_PER_DAY
+      // (stepDays=1) so the daily transition rate applies + streamSeed 37
+      // deterministically transitions 'sunny' → 'frost'. The engine's advance
+      // always uses STEP=60s (stepDays ≈ 0.000694), which after the per-tick-
+      // vs-per-day fix makes transitions rare (~0.45/day) — too rare to force
+      // in one step.
+      const ctx: SystemContext = {
+        now: state.clock.elapsedSeconds + SECONDS_PER_DAY,
+        stepSeconds: SECONDS_PER_DAY,
+        dayOfYear: state.clock.day,
+        rng: Rng.fromState(state.rngState, state.rngVersion),
+      };
+      return weatherSystem.execute(state, ctx);
+    })();
     const damage = r.events.filter((e) => e.type === 'weather-damage');
     expect(damage.length).toBeGreaterThan(0);
   });

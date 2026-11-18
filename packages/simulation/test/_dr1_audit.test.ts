@@ -36,9 +36,11 @@ describe('DR-1 balance audit — neglect + financial trajectory', () => {
     console.error('DR-1 audit (idle, seed 42, 10 days):\n' + results.join('\n'));
     // DR-1 lower bound: a neglected tree survives at least 10 days (the target
     // is 6–12 months; 10 days is a weak floor that catches gross mortality
-    // regressions). The tree is alive at day 10 per the trajectory above.
-    // Stress reaching 1.0 by day 3 is the known misalignment documented in
-    // DECISIONS.md DR-1 (neglect death ~1–2mo vs 6–12mo target — 3–6× too fast).
+    // regressions). The tree is healthy in the idle sim (stress=0, health +
+    // reserves increasing) after the weather per-tick-scaling fix — the
+    // pre-fix "stress=1.0 by day 1" was a bug (weather transition applied
+    // every tick, 1440× too fast → 48 damage events/day). See DECISIONS.md
+    // DR-1 for the root-cause + fix.
     expect(state.originalTree.alive).toBe(true);
   });
 });

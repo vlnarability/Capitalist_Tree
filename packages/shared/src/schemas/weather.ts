@@ -71,7 +71,7 @@ export const weatherStateSchema = z.object({
    * apply the staleness bias (PROVISIONAL_WEATHER_STALENESS_BIAS) once it
    * exceeds PROVISIONAL_WEATHER_MAX_DAYS_IN_CONDITION.
    */
-  daysInCondition: z.number().int().nonnegative(),
+  daysInCondition: z.number().nonnegative(),
 });
 export type WeatherState = z.infer<typeof weatherStateSchema>;
 

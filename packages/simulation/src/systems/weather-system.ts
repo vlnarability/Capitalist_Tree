@@ -54,6 +54,8 @@ import {
   shouldEmitDamage,
 } from '../weather/effects.js';
 
+const SECONDS_PER_DAY = 24 * 60 * 60;
+
 export const weatherSystem: System = {
   id: 'WeatherSystem',
   execute(state: GameState, ctx: SystemContext): SystemResult {
@@ -101,11 +103,19 @@ export const weatherSystem: System = {
 
     // 3. Roll the Markov chain to pick the next condition.
     const currentWeather: WeatherState = next.world.weather;
+    // stepDays = the fraction of a day this tick represents (60s → ~0.000694).
+    // Passed to pickNextCondition so the daily transition matrix is scaled to
+    // the per-tick rate (pre-fix the matrix was applied every tick, changing
+    // the condition ~1440× too fast). Also used for the daysInCondition
+    // increment (pre-fix Math.ceil rounded 60s up to 1 day per tick, inflating
+    // daysInCondition + tripping the staleness bias almost immediately).
+    const stepDays = ctx.stepSeconds / SECONDS_PER_DAY;
     const nextCondition = pickNextCondition(
       matrix,
       currentWeather.condition,
       currentWeather.daysInCondition,
       weatherRng,
+      stepDays,
     );
 
     // 4. Roll a fresh intensity in [0, 1].
@@ -127,7 +137,7 @@ export const weatherSystem: System = {
 
     // 6. Update state.world.weather.
     const conditionChanged = nextCondition !== currentWeather.condition;
-    const newDaysInCondition = conditionChanged ? 0 : currentWeather.daysInCondition + Math.ceil(ctx.stepSeconds / 86400);
+    const newDaysInCondition = conditionChanged ? 0 : currentWeather.daysInCondition + stepDays;
     next.world.weather = {
       condition: nextCondition,
       temperature: localTemp,
