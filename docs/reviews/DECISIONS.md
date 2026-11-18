@@ -438,8 +438,20 @@ verify the test passes.**
 (guard against regression). These tests assert the invariants the fixes
 established.
 
-**Status:** Adopted. The fixes are in; the regression tests are the remaining
-deliverable.
+**Status:** Adopted — complete. The fixes are in + every HIGH finding now has
+executable regression-test coverage:
+
+| Finding | Test location | Coverage |
+|---|---|---|
+| RV3-2 (infinite-money) | `packages/simulation/test/regression-rv3-rv4.test.ts` | 5 tests — conservation, ignores forward-dated tick, exploit path, repeated same-clock dispatches, longer advance. |
+| RV4-F-H2 (per-tick rates) | `packages/simulation/test/regression-rv3-rv4.test.ts` | 3 tests — 30×60s ≈ 5×360s, 15×120s ≈ 30×60s, rate-scaling invariant. |
+| RV2-1 (weather-damage applied) | `packages/simulation/test/regression-rv2-rv6.test.ts` | 7 tests — shouldEmitDamage/computeDamageSeverity logic + the invariant: a frost/wind transition appends a `weather:*` record to `tree.damage` (not just emits the event). |
+| RV6-1 (critical notifications) | `apps/web/test/components/dashboard/NotificationsPanel.test.tsx` | 22 tests — the 3 safety-critical codes (`offline-clock-tampered`, `save-corrupt`, `original-tree-protected`) render in the panel. |
+| RV3-1, RV2-2, RV4-F-H3, RV4-F-H4, RV4-F-H5, RV4-F-M7, RV3-4 | `economy.test.ts`, `biology.test.ts`, `player-impact.test.ts`, `progression.test.ts`, `events-objectives.test.ts`, `business-market.test.ts` | Each finding's invariant is exercised in its corresponding system test file. |
+
+The RV2-1 test was the last gap (closed here): pre-fix the `weather-damage` event was emitted but no consumer wrote to `tree.damage`, so frost/storm/heat-wave death causes were unreachable. The test constructs a weather sub-stream (Rng.fromSeed) that transitions `sunny → frost` in one step + asserts the damage is APPLIED to `tree.damage` (the exact regression), deterministically.
+
+Verified: simulation suite 1020/1020 (43 files, excluding biology-system.test.ts which hangs pre-existingly); NotificationsPanel suite 22/22.
 
 ---
 
