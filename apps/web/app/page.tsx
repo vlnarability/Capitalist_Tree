@@ -100,6 +100,7 @@ import { ProgressionPanel } from '../components/progression';
 import { EventsPanel } from '../components/events';
 import { PolicyPanel } from '../components/policy';
 import { OfflineModal, CatchUpProgressBar } from '../components/offline';
+import { EndingScreen } from '../components/common/EndingScreen';
 
 // ----------------------------------------------------------------------------
 // Page component.
@@ -246,6 +247,10 @@ export default function HomePage(): ReactElement {
           null when no summary is parked, so this mount is a no-op most of
           the time. */}
       <OfflineModal />
+      {/* GAP-36 (GDD §12 endings): celebratory modal surfaced when an objective
+          newly completes. Renders null when no ending is parked, so this mount
+          is a no-op most of the time. */}
+      <EndingScreen />
       {/* P11 (W11): progress bar for the Web Worker offline catch-up. Renders
           null when no catch-up is running, so this mount is a no-op most of
           the time. Shows while the worker runs chunks, then the OfflineModal

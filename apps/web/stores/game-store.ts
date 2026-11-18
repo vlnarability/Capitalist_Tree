@@ -78,7 +78,8 @@
  * `commitSimState`).
  */
 import { create } from 'zustand';
-import { engine } from '@capitalist-tree/simulation';
+import { engine, OBJECTIVE_IDS } from '@capitalist-tree/simulation';
+import type { ObjectiveId } from '@capitalist-tree/simulation';
 import type {
   GameAction,
   GameState,
@@ -194,6 +195,21 @@ export interface GameUiState {
    * complete). UI-only — NOT part of the saved GameState.
    */
   readonly catchUpProgress: { completed: number; total: number } | null;
+  /**
+   * GAP-36 (GDD §12 — endings): the objective id whose completion ending is
+   * currently parked for the EndingScreen to render, or `null` when no ending
+   * modal is shown. Set by `commitSimState` when an objective newly completes
+   * (the previous simState's `eventState.objectives.completed` gains an id not
+   * present before); cleared by `clearPendingEnding` (the modal's Continue).
+   *
+   * UI-only — NOT part of the saved GameState. On load the previous simState is
+   * `null`, so already-completed objectives do NOT re-trigger the ending (the
+   * player already saw it). Completion itself IS persisted
+   * (`eventState.objectives.completed`, W8) — this field is only the transient
+   * "surface it once" signal. Rule 6: lives on the `ui` slice, so parking /
+   * clearing it never touches `simState`'s reference.
+   */
+  readonly pendingEnding: ObjectiveId | null;
 }
 
 /**
@@ -242,6 +258,11 @@ export interface GameStoreState {
    * click). UI mutator only.
    */
   clearPendingOfflineSummary: () => void;
+  /**
+   * GAP-36 — clear the parked ending (the EndingScreen's Continue click). UI
+   * mutator only; `simState` is referentially unchanged.
+   */
+  clearPendingEnding: () => void;
   /**
    * P11 (W11) — set the Web Worker catch-up progress (`null` = not running).
    * UI mutator only — drives the progress bar while the worker runs chunks.
@@ -360,6 +381,7 @@ export function initialGameUiState(): GameUiState {
     reducedMotionOverride: 'auto',
     locale: DEFAULT_LOCALE,
     pendingOfflineSummary: null,
+    pendingEnding: null,
     catchUpProgress: null,
   };
 }
@@ -427,6 +449,12 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
    * can publish without coupling to the store's internals.
    */
   commitSimState: (state, events) => {
+    // GAP-36: capture the previous simState BEFORE the swap so we can detect
+    // newly-completed objectives (an id in `state.eventState.objectives.completed`
+    // absent from `prev`). Only meaningful when prev is non-null — on the
+    // initial load prev is null and `completed` is already populated, so we
+    // must NOT treat that as new (else every reload re-fires every ending).
+    const prev = get().simState;
     set({
       simState: state,
       events: appendBounded(get().events, events ?? [], PROVISIONAL_UI_MAX_EVENT_LOG),
@@ -435,6 +463,19 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
     const notes = simulationEventsToNotifications(events ?? []);
     for (const n of notes) {
       get().pushNotification(n);
+    }
+    // GAP-36: surface an ending when an objective newly completes. Don't
+    // clobber an already-pending ending (if two complete in one tick, the
+    // second stays recorded in `completed` + shows on the ObjectivesPanel).
+    if (prev !== null && get().ui.pendingEnding === null) {
+      const prevCompleted = new Set(prev.eventState.objectives.completed);
+      const validIds = OBJECTIVE_IDS as readonly string[];
+      for (const id of state.eventState.objectives.completed) {
+        if (!prevCompleted.has(id) && validIds.includes(id)) {
+          set((s) => ({ ui: { ...s.ui, pendingEnding: id as ObjectiveId } }));
+          break;
+        }
+      }
     }
   },
 
@@ -504,6 +545,10 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
 
   clearPendingOfflineSummary: () =>
     set((s) => ({ ui: { ...s.ui, pendingOfflineSummary: null } })),
+
+  // --- GAP-36: pending ending (UI mutator — never touch simState) ---
+
+  clearPendingEnding: () => set((s) => ({ ui: { ...s.ui, pendingEnding: null } })),
 
   // P11 (W11) — Web Worker catch-up progress (drives the progress bar).
   setCatchUpProgress: (progress) =>

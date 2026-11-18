@@ -6,6 +6,17 @@ free, public-domain, or otherwise free-use (no AI-generated art, no emoji
 glyphs used as art). It is the source of truth for the in-game Credits screen.
 
 **Status:** the source repositories below have been vetted for license + fit.
+
+> **Review at end of remediation (P13-C follow-up):** the chosen assets were
+> selected under a source-pivot constraint (Kenney/Pixabay 403, Freesound OAuth
+> from the build sandbox → OpenGameArt CC0 + Kevin MacLeod CC-BY). Re-review
+> before launch for aesthetic fit — in particular (a) the hero background
+> (`hero-background.jpg`, Bevouliin "Tree in Mist") skews dark/atmospheric and
+> may want a brighter nature-sim alternative, and (b) the ambient music pick
+> ("The Forest and the Trees") should be confirmed against the final game mood.
+> Both are CC0/CC-BY swaps the credits data + `docs/credits.md` table update
+> mechanically.
+
 The specific asset picks (which exact file for which slot) are pending a
 selection pass — the "Chosen assets" table at the bottom is filled in as each
 asset is wired into the build.
