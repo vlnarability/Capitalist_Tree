@@ -271,6 +271,12 @@ export function initializeState(config: GameConfig): GameState {
         // start: the starting plot is undeveloped, undegraded, unprotected.
         // `landDisturbance` from automation increments `degraded` (P7c).
         landUse: { developed: 0, degraded: 0, protected: 0 },
+        // P13-A / GAP-21: additional indicators (pristine defaults — clean air,
+        // thriving ocean, no wetlands yet, no runoff).
+        airQuality: 1,
+        oceanHealth: 1,
+        wetlandCoverage: 0,
+        nutrientRunoff: 0,
       },
       weather: {
         condition: PROVISIONAL_WEATHER_INITIAL_CONDITION,

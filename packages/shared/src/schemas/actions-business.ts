@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { businessStatusSchema } from './business.js';
+import { businessStatusSchema, ownershipStateSchema } from './business.js';
 
 /**
  * Business-related GameAction variants (P8a — TDD §5.7 / §11, GDD §8.1 / §8.2 /
@@ -309,3 +309,29 @@ export const setBusinessStatusActionSchema = z.object({
   }),
 });
 export type SetBusinessStatusAction = z.infer<typeof setBusinessStatusActionSchema>;
+
+/**
+ * `restructure-ownership` action (P13-A / GAP-23 — GDD §8.3) — change a
+ * business's organizational structure (sole-proprietorship → corporation /
+ * cooperative / sustainable-enterprise / non-profit / state-owned).
+ *
+ * This is the entry point that makes the per-type incentives
+ * (`packages/content/src/businesses/org-types.ts`) player-facing: restructuring
+ * to a corporation exposes full shareholder growth pressure, to a non-profit
+ * removes it, to a sustainable-enterprise halves the env footprint, etc. The
+ * handler flips `ownership.structure` + emits a `notification` (the
+ * BusinessSystem picks up the new incentives on its next tick).
+ *
+ * Restructuring is free in this revision (a real implementation would charge a
+ * filing fee + legal cost — PROVISIONAL). The `share` is preserved.
+ */
+export const restructureOwnershipActionSchema = z.object({
+  type: z.literal('restructure-ownership'),
+  payload: z.object({
+    /** Id of the business to restructure (must exist in `state.businesses`). */
+    businessId: z.string().min(1),
+    /** New organizational structure (GDD §8.3 — one of the six types). */
+    structure: ownershipStateSchema.shape.structure,
+  }),
+});
+export type RestructureOwnershipAction = z.infer<typeof restructureOwnershipActionSchema>;

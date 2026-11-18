@@ -24,6 +24,7 @@ import {
   hireEmployeesActionSchema,
   layOffEmployeesActionSchema,
   setBusinessStatusActionSchema,
+  restructureOwnershipActionSchema,
 } from './actions-business.js';
 import {
   unlockResearchActionSchema,
@@ -97,6 +98,7 @@ export const gameActionSchema = z.discriminatedUnion('type', [
   hireEmployeesActionSchema,
   layOffEmployeesActionSchema,
   setBusinessStatusActionSchema,
+  restructureOwnershipActionSchema,
   // P9a: progression actions (schema-only — handlers + ProgressionSystem land in P9b).
   unlockResearchActionSchema,
   activateTraitActionSchema,

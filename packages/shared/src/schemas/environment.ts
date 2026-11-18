@@ -189,6 +189,40 @@ export const environmentStateSchema = z.object({
       protected: z.number().min(0).max(1),
     })
     .default(() => ({ developed: 0, degraded: 0, protected: 0 })),
+  /**
+   * P13-A / GAP-21 (GDD §10.1) — the four indicators P3b/P7 deferred. Each is
+   * stepped by the EnvironmentSystem (see `packages/simulation/src/environment/
+   * indicators.ts`) + defaults to a pristine value so legacy saves deserialize
+   * cleanly via safeParse (no schema-version bump required, mirroring the
+   * reproduction fields).
+   *
+   * Air quality in [0, 1] — 1 = clean, 0 = hazardous. Relaxes toward a target
+   * set by `atmosphere.emissions` (high emissions → poor air). Recover slow,
+   * degrade fast.
+   */
+  airQuality: z.number().min(0).max(1).default(1),
+  /**
+   * Ocean health in [0, 1] — 1 = thriving, 0 = dead (GDD §10.1). Relaxes
+   * toward a target set by the global-temperature anomaly (warming → bleaching)
+   * + excess CO2 (acidification). A long-horizon indicator — only visibly
+   * degrades across many sim years of warming.
+   */
+  oceanHealth: z.number().min(0).max(1).default(1),
+  /**
+   * Wetland coverage in [0, 1] — share of the plot that's wetland (GDD §10.1).
+   * Relaxes toward a target set by `landUse.protected` (restoration) minus
+   * `landUse.developed` (drainage). A future wetland-restoration action will
+   * push `protected` up; for now it tracks land-use decisions.
+   */
+  wetlandCoverage: z.number().min(0).max(1).default(0),
+  /**
+   * Accumulated nutrient runoff (≥ 0, units of nutrients — GDD §10.1). A stock,
+   * not a rate: rises when soil nutrients exceed the holding capacity (surplus
+   * leaches to waterways) + decays exponentially (biological uptake). Tracks
+   * over-fertilization pressure; a future water-quality indicator will consume
+   * it.
+   */
+  nutrientRunoff: z.number().nonnegative().default(0),
 });
 export type EnvironmentState = z.infer<typeof environmentStateSchema>;
 

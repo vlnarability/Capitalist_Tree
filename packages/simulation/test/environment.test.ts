@@ -37,6 +37,7 @@ import {
   stepFreshwater,
   stepSoil,
   stepBiodiversity,
+  stepIndicators,
   PROVISIONAL_ENV_EMISSIONS_TO_PPM,
   PROVISIONAL_ENV_METHANE_BASELINE_PPM,
   PROVISIONAL_ENV_N2O_BASELINE_PPM,
@@ -51,6 +52,7 @@ import {
   PROVISIONAL_ENV_TEMP_SENSITIVITY_PER_W_M2,
   PROVISIONAL_RESOURCE_CONTAMINATION_FULL_DEGRADE,
   PROVISIONAL_RESOURCE_ORGANIC_MATTER_SATURATION,
+  PROVISIONAL_RESOURCE_SOIL_NUTRIENT_CAPACITY,
   PROVISIONAL_SIMULATION_STEP_SECONDS as STEP,
 } from '@capitalist-tree/shared';
 import type { EnvironmentState, GameConfig, GameState, WeatherState } from '@capitalist-tree/shared';
@@ -97,6 +99,11 @@ function baseEnv(overrides: Partial<EnvironmentState> = {}): EnvironmentState {
     seaLevelRise: 0,
     energy: { stored: 0, capacity: 100, generationRate: 0, consumptionRate: 0 },
     landUse: { developed: 0, degraded: 0, protected: 0 },
+    // P13-A / GAP-21 indicators (pristine defaults).
+    airQuality: 1,
+    oceanHealth: 1,
+    wetlandCoverage: 0,
+    nutrientRunoff: 0,
   };
   return { ...base, ...overrides };
 }
@@ -712,7 +719,81 @@ describe('environment / biodiversity (stepBiodiversity)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 6. Integration — EnvironmentSystem in the full engine
+// 6. P13-A / GAP-21 — additional indicators (stepIndicators)
+// ---------------------------------------------------------------------------
+
+describe('environment / indicators (stepIndicators — P13-A / GAP-21)', () => {
+  const DAY = SECONDS_PER_DAY;
+  it('pristine env → indicators stay at pristine defaults (targets match)', () => {
+    const env = baseEnv();
+    const r = stepIndicators(env, DAY);
+    // No emissions, baseline temp, no development, no nutrient surplus → all
+    // targets are 1/1/0/0, so relaxing toward them changes nothing material.
+    expect(r.airQuality).toBeCloseTo(1, 5);
+    expect(r.oceanHealth).toBeCloseTo(1, 5);
+    expect(r.wetlandCoverage).toBeCloseTo(0, 5);
+    expect(r.nutrientRunoff).toBeCloseTo(0, 5);
+  });
+
+  it('high emissions degrade air quality toward the target', () => {
+    const env = baseEnv({ atmosphere: { ...baseEnv().atmosphere, emissions: 500 } });
+    // Target = 1 - clamp(500 × 0.001, 0, 1) = 0.5. One day relaxes 2% of the
+    // gap: 1 + (0.5 - 1) × 0.02 = 0.99.
+    const r = stepIndicators(env, DAY);
+    expect(r.airQuality).toBeLessThan(1);
+    expect(r.airQuality).toBeGreaterThan(0.5); // not yet at target
+    expect(r.airQuality).toBeCloseTo(0.99, 3);
+  });
+
+  it('warming + excess CO2 degrade ocean health toward the target', () => {
+    const env = baseEnv({
+      globalTemperature: PROVISIONAL_ENV_BASELINE_TEMP_C + 10, // +10 °C
+      atmosphere: { ...baseEnv().atmosphere, co2Concentration: 910 }, // +500 ppm
+    });
+    // Target = 1 - (10 × 0.05 + 500 × 0.0002) = 1 - (0.5 + 0.1) = 0.4.
+    const r = stepIndicators(env, DAY);
+    expect(r.oceanHealth).toBeLessThan(1);
+    expect(r.oceanHealth).toBeGreaterThan(0.4); // relaxing toward 0.4
+  });
+
+  it('protected land raises wetlandCoverage; developed land lowers it', () => {
+    const restored = baseEnv({ landUse: { developed: 0, degraded: 0, protected: 1 } });
+    // Target = 1 × 0.5 - 0 × 0.3 = 0.5. From 0, one day: 0 + 0.5 × 0.02 = 0.01.
+    const r1 = stepIndicators(restored, DAY);
+    expect(r1.wetlandCoverage).toBeGreaterThan(0);
+    expect(r1.wetlandCoverage).toBeLessThanOrEqual(0.5);
+
+    const drained = baseEnv({ landUse: { developed: 1, degraded: 0, protected: 0 }, wetlandCoverage: 0.5 });
+    // Target = 0 × 0.5 - 1 × 0.3 = -0.3 → clamped 0. From 0.5, relaxes down.
+    const r2 = stepIndicators(drained, DAY);
+    expect(r2.wetlandCoverage).toBeLessThan(0.5);
+  });
+
+  it('soil nutrient surplus accumulates into nutrientRunoff; decay clears it', () => {
+    // Soil nutrients above the holding capacity → surplus → runoff accumulates.
+    const capacityTotal = PROVISIONAL_RESOURCE_SOIL_NUTRIENT_CAPACITY * 3;
+    const env = baseEnv({
+      soil: { ...baseEnv().soil, nutrients: { nitrogen: capacityTotal + 100, phosphorus: 0, potassium: 0 } },
+      nutrientRunoff: 0,
+    });
+    const r = stepIndicators(env, DAY);
+    expect(r.nutrientRunoff).toBeGreaterThan(0);
+    // With no surplus + an existing spill, decay reduces it.
+    const decayEnv = baseEnv({ nutrientRunoff: 10 });
+    const r2 = stepIndicators(decayEnv, DAY);
+    expect(r2.nutrientRunoff).toBeLessThan(10);
+  });
+
+  it('purity: input env is not mutated', () => {
+    const env = baseEnv({ atmosphere: { ...baseEnv().atmosphere, emissions: 500 } });
+    const frozen = structuredClone(env);
+    stepIndicators(env, DAY);
+    expect(env).toEqual(frozen);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 7. Integration — EnvironmentSystem in the full engine
 // ---------------------------------------------------------------------------
 
 describe('EnvironmentSystem integration (engine.advance, slot #10)', () => {

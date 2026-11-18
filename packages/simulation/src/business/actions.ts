@@ -58,6 +58,7 @@ import type {
   HireEmployeesAction,
   LayOffEmployeesAction,
   SetBusinessStatusAction,
+  RestructureOwnershipAction,
 } from '@capitalist-tree/shared';
 import {
   PROVISIONAL_BUSINESS_VALUATION_HAIRCUT,
@@ -844,6 +845,68 @@ export const setBusinessStatusHandler: ActionListener<SetBusinessStatusAction> =
         systemId: 'BusinessSystem',
         message: `Business "${businessId}" status set to ${status}.`,
         data: { businessId, status },
+      },
+    },
+  ];
+  return { state: next, events };
+};
+
+/**
+ * `restructure-ownership` action handler (P13-A / GAP-23 — GDD §8.3).
+ *
+ * Changes a business's `ownership.structure` to one of the six GDD §8.3 types.
+ * This is the entry point for the per-type incentives
+ * (`packages/content/src/businesses/org-types.ts`): restructuring to a
+ * corporation exposes full shareholder growth pressure, to a non-profit
+ * removes it, to a sustainable-enterprise halves the env footprint, etc. The
+ * BusinessSystem picks up the new incentives on its next tick.
+ *
+ * Universal — any business can restructure (not gated on the business type's
+ * `supportedActions`, which are about production-specific actions). Free in
+ * this revision (a real implementation would charge a filing fee —
+ * PROVISIONAL). The `share` is preserved. Idempotent — restructuring to the
+ * current structure is a no-op.
+ *
+ * Pure: returns a new state, never mutates input.
+ */
+export const restructureOwnershipHandler: ActionListener<RestructureOwnershipAction> = (
+  state,
+  action,
+) => {
+  const { businessId, structure } = action.payload;
+  const business = requireBusiness(state, businessId);
+
+  // Idempotent — already in the requested structure.
+  if (business.ownership.structure === structure) {
+    return { state, events: [] };
+  }
+
+  const prevStructure = business.ownership.structure;
+  const next: GameState = {
+    ...state,
+    businesses: state.businesses.map((b) =>
+      b.id === businessId
+        ? { ...b, ownership: { ...b.ownership, structure } }
+        : b,
+    ),
+  };
+  const events: SimulationEvent[] = [
+    {
+      type: 'system',
+      at: state.clock.elapsedSeconds,
+      payload: {
+        systemId: 'BusinessSystem',
+        message: `Business "${businessId}" restructured from ${prevStructure} to ${structure}.`,
+        data: { businessId, prevStructure, structure },
+      },
+    },
+    {
+      type: 'notification',
+      at: state.clock.elapsedSeconds,
+      payload: {
+        severity: 'info',
+        message: `Business "${businessId}" restructured to ${structure}. The new incentive profile applies on the next business tick.`,
+        code: 'business-restructured',
       },
     },
   ];

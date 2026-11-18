@@ -1010,13 +1010,13 @@ describe('no negative balances (TDD §10.4, §18.4)', () => {
     // real. Useful for tests that want to sweep over all accounts.
     const s = freshState();
     const ids = realAccountIds(s);
-    // Player + external + 5 market accounts = 7 total.
-    expect(ids).toHaveLength(7);
+    // Player + external + 8 market accounts = 10 total (P13-A added 3 markets).
+    expect(ids).toHaveLength(10);
     expect(ids).toContain(PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID);
     expect(ids).toContain(PROVISIONAL_ECONOMY_EXTERNAL_ACCOUNT_ID);
     // Each market account is `market:<slug>`.
     const marketAccounts = ids.filter((id) => id.startsWith(PROVISIONAL_ECONOMY_MARKET_ACCOUNT_PREFIX));
-    expect(marketAccounts).toHaveLength(5);
+    expect(marketAccounts).toHaveLength(8);
   });
 
   it('conservation holds even when an overdraft is attempted (state unchanged)', () => {

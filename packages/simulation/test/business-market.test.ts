@@ -237,11 +237,12 @@ describe('clearMarkets — price drift toward supply/demand equilibrium', () => 
     expect(newPrice).toBe(549n);
   });
 
-  it('ensures the three P3b-deferred markets (equipment, labor, land) are live', () => {
-    // A fresh state has only the 5 P3b markets (water, fertilizer, seeds, food,
-    // energy). clearMarkets adds equipment, labor, land on first encounter.
+  it('ensures the three P13-A markets (equipment, labor, land) are live', () => {
+    // P13-A / GAP-22: the three formerly-deferred markets (equipment, labor,
+    // land) now seed into the fresh state from ALL_MARKETS (8 GDD §8.5 markets
+    // total). clearMarkets keeps them live + their accounts are registered.
     const state = freshState();
-    expect(state.economy.markets.find((m) => m.id === 'market:equipment')).toBeUndefined();
+    expect(state.economy.markets.find((m) => m.id === 'market:equipment')).toBeDefined();
     const result = clearMarkets(state, 100);
     const ids = result.state.economy.markets.map((m) => m.id);
     expect(ids).toContain('market:equipment');
@@ -249,7 +250,7 @@ describe('clearMarkets — price drift toward supply/demand equilibrium', () => 
     expect(ids).toContain('market:land');
     // Total 8 GDD §8.5 markets.
     expect(result.state.economy.markets.length).toBe(8);
-    // The deferred market accounts were registered.
+    // The market accounts were registered.
     expect(
       result.state.economy.accounts.find((a) => a.id === 'market:equipment'),
     ).toBeDefined();

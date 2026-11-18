@@ -81,6 +81,7 @@ import {
   stepFreshwater,
   stepSoil,
   stepBiodiversity,
+  stepIndicators,
   deriveEnergyCapacity,
   applyBaselineEnergyConsumption,
   PROVISIONAL_ENV_BASELINE_TEMP_C,
@@ -374,6 +375,17 @@ export const environmentSystem: System = {
       capacity: deriveEnergyCapacity(batteryCount),
       stored: applyBaselineEnergyConsumption(env, dtSeconds),
     };
+
+    // 10c. P13-A / GAP-21 additional indicators (airQuality, oceanHealth,
+    //      wetlandCoverage, nutrientRunoff). Reads atmosphere (step 3),
+    //      temperature (step 5), soil nutrients (step 8), + landUse (set by
+    //      the AutomationSystem #9 this tick). Relaxes toward driver-derived
+    //      targets; nutrientRunoff accumulates + decays.
+    const indicators = stepIndicators(env, dtSeconds);
+    env.airQuality = indicators.airQuality;
+    env.oceanHealth = indicators.oceanHealth;
+    env.wetlandCoverage = indicators.wetlandCoverage;
+    env.nutrientRunoff = indicators.nutrientRunoff;
 
     // 11. Threshold notifications (GDD §10.3 environmental feedback).
     // P11 (W15): pass before + after so notifications fire only on threshold

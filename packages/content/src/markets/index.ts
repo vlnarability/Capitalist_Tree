@@ -7,11 +7,11 @@
  * appending to `ALL_MARKETS`.
  *
  * The 5 P3b markets match GDD §8.5's "Initial markets" subset (water,
- * fertilizer, seeds, food, energy). Equipment / Labor / Land are also in
- * GDD §8.5 but are deferred — P3b focuses on the commodity basket needed
- * to make the inflation index meaningful. Adding them later is purely
- * additive: define the data, append to `ALL_MARKETS`, and the pricing +
- * index update automatically.
+ * fertilizer, seeds, food, energy). P13-A / GAP-22 adds the three deferred
+ * markets (equipment, labor, land) — purely additive: the pricing + inflation
+ * pipeline auto-includes them. Category-specific pricing models (depreciation,
+ * wage index, location multiplier) remain future extensions; P13-A uses the
+ * uniform supply/demand model.
  *
  * PROVISIONAL: every `basePrice` is provisional per GDD §17 ("Exact
  * inflation model"). They are tuned for a starter $500 cash player so
@@ -22,12 +22,18 @@ import { FERTILIZER_MARKET } from './fertilizer.js';
 import { SEEDS_MARKET } from './seeds.js';
 import { FOOD_MARKET } from './food.js';
 import { ENERGY_MARKET } from './energy.js';
+import { EQUIPMENT_MARKET } from './equipment.js';
+import { LABOR_MARKET } from './labor.js';
+import { LAND_MARKET } from './land.js';
 
 export { WATER_MARKET } from './water.js';
 export { FERTILIZER_MARKET } from './fertilizer.js';
 export { SEEDS_MARKET } from './seeds.js';
 export { FOOD_MARKET } from './food.js';
 export { ENERGY_MARKET } from './energy.js';
+export { EQUIPMENT_MARKET } from './equipment.js';
+export { LABOR_MARKET } from './labor.js';
+export { LAND_MARKET } from './land.js';
 
 /**
  * Market definition — pure data (TDD §10.6, GDD §8.5).
@@ -68,6 +74,12 @@ export const ALL_MARKETS: readonly MarketDefinition[] = [
   SEEDS_MARKET,
   FOOD_MARKET,
   ENERGY_MARKET,
+  // P13-A / GAP-22: the three GDD §8.5 markets P3b deferred. The pricing +
+  // inflation pipeline auto-includes them; category-specific pricing models
+  // (depreciation / wage-index / location-multiplier) are future extensions.
+  EQUIPMENT_MARKET,
+  LABOR_MARKET,
+  LAND_MARKET,
 ];
 
 /** Look up a market by id. Returns the market or `undefined` if unknown. */

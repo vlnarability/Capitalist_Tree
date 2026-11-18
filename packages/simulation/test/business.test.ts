@@ -1099,6 +1099,77 @@ describe('actions — set-business-status', () => {
   });
 });
 
+describe('actions — restructure-ownership (P13-A / GAP-23)', () => {
+  it('changes the ownership structure + emits events', () => {
+    let state = freshState();
+    state = engine.executeAction(state, {
+      type: 'purchase-business',
+      payload: { businessTypeId: WATER_EXTRACTION_PLANT.id },
+    }).state;
+    const businessId = state.businesses[0]!.id;
+    expect(state.businesses[0]!.ownership.structure).toBe('sole-proprietorship');
+
+    const result = engine.executeAction(state, {
+      type: 'restructure-ownership',
+      payload: { businessId, structure: 'corporation' },
+    });
+    expect(result.state.businesses[0]!.ownership.structure).toBe('corporation');
+    // share preserved.
+    expect(result.state.businesses[0]!.ownership.share).toBe(1);
+    // system + notification events.
+    expect(result.events.some((e) => e.type === 'system')).toBe(true);
+    expect(result.events.some((e) => e.type === 'notification')).toBe(true);
+  });
+
+  it('is idempotent (no event when restructuring to the current structure)', () => {
+    let state = freshState();
+    state = engine.executeAction(state, {
+      type: 'purchase-business',
+      payload: { businessTypeId: WATER_EXTRACTION_PLANT.id },
+    }).state;
+    const businessId = state.businesses[0]!.id;
+    const result = engine.executeAction(state, {
+      type: 'restructure-ownership',
+      payload: { businessId, structure: 'sole-proprietorship' }, // already sole-prop
+    });
+    expect(result.events).toHaveLength(0);
+  });
+
+  it('cycles through all six GDD §8.3 structures', () => {
+    let state = freshState();
+    state = engine.executeAction(state, {
+      type: 'purchase-business',
+      payload: { businessTypeId: WATER_EXTRACTION_PLANT.id },
+    }).state;
+    const businessId = state.businesses[0]!.id;
+    const structures = [
+      'corporation',
+      'cooperative',
+      'sustainable-enterprise',
+      'non-profit',
+      'state-owned',
+      'sole-proprietorship',
+    ] as const;
+    for (const structure of structures) {
+      state = engine.executeAction(state, {
+        type: 'restructure-ownership',
+        payload: { businessId, structure },
+      }).state;
+      expect(state.businesses[0]!.ownership.structure).toBe(structure);
+    }
+  });
+
+  it('throws UnknownBusinessError for an unknown business id', () => {
+    const state = freshState();
+    expect(() =>
+      engine.executeAction(state, {
+        type: 'restructure-ownership',
+        payload: { businessId: 'no-such-business', structure: 'corporation' },
+      }),
+    ).toThrow(UnknownBusinessError);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // originalTree guard (GDD §16.1 / §16.2)
 // ---------------------------------------------------------------------------

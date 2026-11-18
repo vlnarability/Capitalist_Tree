@@ -266,9 +266,30 @@ describe('applyShareholderExpectations — corporations underperforming', () => 
     expect(shareholderEvent(result.events)).toBeUndefined();
   });
 
-  it('does NOT affect non-corporation ownership structures', () => {
-    // A sole-proprietorship with the same unprofitable profile — no
-    // shareholder pressure (only corporations have shareholders).
+  it('does NOT affect non-profit ownership (growthPressureMultiplier = 0)', () => {
+    // P13-A / GAP-23: growth pressure is now scaled per org type. Non-profits
+    // have growthPressureMultiplier 0 (mission-driven, no profit pressure) so
+    // they're skipped entirely — no valuation penalty, no event.
+    const nonProfit = makeBusiness({
+      revenue: '0',
+      expenses: '5000',
+      valuation: '75000',
+      status: 'operating',
+      ownership: {
+        ownerId: 'player:personal',
+        structure: 'non-profit',
+        share: 1,
+      },
+    });
+    const result = applyShareholderExpectations([nonProfit], SECONDS_PER_DAY, 100);
+    expect(result.businesses[0]!.valuation).toBe('75000'); // unchanged
+    expect(shareholderEvent(result.events)).toBeUndefined();
+  });
+
+  it('affects sole-proprietorship at the scaled rate (growthPressureMultiplier = 0.5)', () => {
+    // P13-A / GAP-23: a sole-prop with the same unprofitable profile as a
+    // corporation IS now affected, but the penalty is scaled by 0.5 (half the
+    // corporation's). Compare against a corporation with the same numbers.
     const soleProp = makeBusiness({
       revenue: '0',
       expenses: '5000',
@@ -281,8 +302,9 @@ describe('applyShareholderExpectations — corporations underperforming', () => 
       },
     });
     const result = applyShareholderExpectations([soleProp], SECONDS_PER_DAY, 100);
-    expect(result.businesses[0]!.valuation).toBe('75000'); // unchanged
-    expect(shareholderEvent(result.events)).toBeUndefined();
+    // Sole-prop IS affected now (multiplier 0.5 > 0).
+    expect(shareholderEvent(result.events)).toBeDefined();
+    expect(result.businesses[0]!.valuation).not.toBe('75000');
   });
 
   it('skips non-operating corporations (a bankrupt corporation has no active shareholders)', () => {

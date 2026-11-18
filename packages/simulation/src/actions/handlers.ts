@@ -69,6 +69,7 @@ import {
   hireEmployeesHandler,
   layOffEmployeesHandler,
   setBusinessStatusHandler,
+  restructureOwnershipHandler,
 } from '../business/actions.js';
 import { applyPlayerEnvironmentalImpact } from '../environment/player-impact.js';
 import {
@@ -452,6 +453,7 @@ export const actionHandlers: Record<string, ActionListener> = {
   'hire-employees': hireEmployeesHandler as ActionListener,
   'lay-off-employees': layOffEmployeesHandler as ActionListener,
   'set-business-status': setBusinessStatusHandler as ActionListener,
+  'restructure-ownership': restructureOwnershipHandler as ActionListener,
   // P9b: progression actions (TDD §5.7 / §11, GDD §11 / §12).
   'unlock-research': unlockResearchHandler as ActionListener,
   'activate-trait': activateTraitHandler as ActionListener,

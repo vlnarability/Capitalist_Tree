@@ -78,8 +78,8 @@ function buy(state: GameState, marketId: string, quantity: number): GameState {
 }
 
 describe('content — market definitions (P3b — GDD §8.5)', () => {
-  it('registers exactly 5 commodity markets', () => {
-    expect(ALL_MARKETS).toHaveLength(5);
+  it('registers all 8 GDD §8.5 commodity markets', () => {
+    expect(ALL_MARKETS).toHaveLength(8);
     const ids = ALL_MARKETS.map((m) => m.id);
     expect(ids).toEqual([
       'market:water',
@@ -87,6 +87,10 @@ describe('content — market definitions (P3b — GDD §8.5)', () => {
       'market:seeds',
       'market:food',
       'market:energy',
+      // P13-A / GAP-22: the three formerly-deferred markets.
+      'market:equipment',
+      'market:labor',
+      'market:land',
     ]);
   });
 
@@ -119,9 +123,9 @@ describe('content — market definitions (P3b — GDD §8.5)', () => {
 });
 
 describe('initial state — markets + accounts seeded (P3b)', () => {
-  it('economy.markets has 5 entries with price === basePrice', () => {
+  it('economy.markets has 8 entries with price === basePrice', () => {
     const s = freshState();
-    expect(s.economy.markets).toHaveLength(5);
+    expect(s.economy.markets).toHaveLength(8);
     for (const m of s.economy.markets) {
       const def = findMarketById(m.id);
       expect(def).toBeDefined();
@@ -280,7 +284,7 @@ describe('pricing model — pure functions (TDD §10.6)', () => {
     });
 
     it('returns the average of per-market price/base ratios (uniform weights)', () => {
-      // 3 markets at 1.0x, 2 markets at 2.0x → (3 + 4) / 5 = 1.4
+      // 3 markets at 1.0x, 5 markets at 2.0x → (3 + 10) / 8 = 1.625
       const markets: MarketState[] = ALL_MARKETS.map((def, idx) => ({
         id: def.id,
         commodityId: def.commodityId,
@@ -293,7 +297,7 @@ describe('pricing model — pure functions (TDD §10.6)', () => {
         lastPriceUpdate: 0,
       }));
       const baseById = new Map(ALL_MARKETS.map((m) => [m.id, parseAmount(m.basePrice, '')]));
-      expect(computeInflationIndex(markets, baseById)).toBeCloseTo(1.4, 6);
+      expect(computeInflationIndex(markets, baseById)).toBeCloseTo(1.625, 6);
     });
 
     it('returns 1.0 for empty markets (defensive)', () => {

@@ -53,6 +53,7 @@ import {
   PROVISIONAL_BUSINESS_OPERATING_MARGIN,
 } from '@capitalist-tree/shared';
 import { accrueInterest, parseBusinessAmount } from './accounting.js';
+import { getOrgTypeIncentives } from '@capitalist-tree/content';
 
 /** SECONDS_PER_DAY — used to pro-rate per-day quantities to per-step. */
 const SECONDS_PER_DAY = 24 * 60 * 60;
@@ -188,7 +189,12 @@ export function applyShareholderExpectations(
   if (businesses.length === 0) return { businesses: [...businesses], events: [] };
   const events: SimulationEvent[] = [];
   const newBusinesses = businesses.map((b) => {
-    if (b.ownership.structure !== 'corporation') return b;
+    // P13-A / GAP-23: growth pressure applies to every org type, scaled by
+    // the per-type `growthPressureMultiplier` (corporation 1.0 = full
+    // shareholder pressure; non-profit 0.0 = no profit pressure; cooperative
+    // 0.3 = gentler member pressure). A multiplier of 0 skips entirely.
+    const orgType = getOrgTypeIncentives(b.ownership.structure);
+    if (orgType.growthPressureMultiplier <= 0) return b;
     if (b.status !== 'operating') return b;
     const revenue = parseBusinessAmount(b.revenue, 'revenue');
     const expenses = parseBusinessAmount(b.expenses, 'expenses');
@@ -205,7 +211,8 @@ export function applyShareholderExpectations(
         Number(valuation) *
           shortfall *
           PROVISIONAL_BUSINESS_SHAREHOLDER_VALUATION_PENALTY *
-          PROVISIONAL_BUSINESS_OPERATING_MARGIN,
+          PROVISIONAL_BUSINESS_OPERATING_MARGIN *
+          orgType.growthPressureMultiplier,
       ),
     );
     if (penalty <= 0n) return b;
@@ -215,7 +222,7 @@ export function applyShareholderExpectations(
       at: now,
       payload: {
         severity: 'warning',
-        message: `Shareholder pressure: corporation ${b.id} underperformed (growth proxy ${growthProxy.toFixed(4)} < expected ${expected}). Valuation reduced by ${penalty.toString(10)}.`,
+        message: `Growth pressure: ${b.ownership.structure} ${b.id} underperformed (growth proxy ${growthProxy.toFixed(4)} < expected ${expected}). Valuation reduced by ${penalty.toString(10)}.`,
         code: 'shareholder-pressure',
       },
     });
