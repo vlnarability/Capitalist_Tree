@@ -83,6 +83,7 @@ import {
   PROVISIONAL_PERSONAL_EXPENSE_HOUSING_MINOR,
   PROVISIONAL_PERSONAL_EXPENSE_UTILITIES_MINOR,
   PROVISIONAL_SIMULATION_STEP_SECONDS as STEP,
+  PROVISIONAL_BIOLOGY_DEFAULT_LEAF_DENOMINATION_MINOR as LEAF_DENOM,
 } from '@capitalist-tree/shared';
 import { DEFAULT_ISSUANCE_POLICY } from '@capitalist-tree/content';
 
@@ -769,28 +770,31 @@ describe('idempotency (TDD §10.3 — currency production must be accounted for 
       },
     };
     const harvestAmount = 5; // small harvests to keep the tree alive
+    // P12-C follow-up #3 raised leafDenominationMinor 100→1000 ($10/leaf), so
+    // each 5-leaf harvest issues 5 × LEAF_DENOM minor units.
+    const perHarvest = BigInt(harvestAmount) * BigInt(LEAF_DENOM);
     let totalIssuedSoFar = 0n;
     for (let i = 0; i < 5; i++) {
       const afterHarvest = engine.executeAction(s, {
         type: 'harvest-leaves',
         payload: { treeId: 'original', requestedLeaves: harvestAmount },
       });
-      // 5 leaves × $1 (100 minor) = 500 minor per harvest.
+      // harvestAmount leaves × leafDenominationMinor = perHarvest minor units.
       const req = afterHarvest.state.originalTree.pendingIssuances[0];
       expect(req).toBeDefined();
-      expect(req!.amount).toBe('500');
+      expect(req!.amount).toBe(String(perHarvest));
       // Advance one step to drain the queue.
       const afterStep = engine.advance(afterHarvest.state, STEP);
-      // Sanity: totalIssued grew by exactly 500 this tick.
+      // Sanity: totalIssued grew by exactly perHarvest this tick.
       const afterIssued = parseAmount(afterStep.state.economy.totalIssued, 'issued');
-      expect(afterIssued - totalIssuedSoFar).toBe(500n);
+      expect(afterIssued - totalIssuedSoFar).toBe(perHarvest);
       totalIssuedSoFar = afterIssued;
       // Conservation holds at every step.
       expect(conservationDiscrepancy(afterStep.state, INITIAL_SUPPLY)).toBe(0n);
       s = afterStep.state;
     }
-    // After 5 harvests × $5 each, totalIssued = 2500.
-    expect(s.economy.totalIssued).toBe('2500');
+    // After 5 harvests, totalIssued = 5 × perHarvest.
+    expect(s.economy.totalIssued).toBe(String(BigInt(5) * perHarvest));
   });
 });
 

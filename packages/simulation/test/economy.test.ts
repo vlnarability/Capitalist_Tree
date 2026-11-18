@@ -72,6 +72,7 @@ import {
   migrations,
   serialize,
   deserialize,
+  PROVISIONAL_BIOLOGY_DEFAULT_LEAF_DENOMINATION_MINOR as LEAF_DENOM,
 } from '@capitalist-tree/shared';
 import { capTail } from '../src/deep-copy.js';
 
@@ -904,16 +905,19 @@ describe('EconomySystem — end-to-end via engine (TDD §18.2)', () => {
     });
     expect(afterHarvest.state.originalTree.pendingIssuances).toHaveLength(1);
     const req = afterHarvest.state.originalTree.pendingIssuances[0]!;
-    // 10 leaves * $1 denomination (100 minor units) = 1000 minor units.
-    expect(req.amount).toBe('1000');
+    // 10 leaves × leafDenominationMinor (P12-C follow-up #3 raised 100→1000,
+    // =$10/leaf) = 10000 minor units.
+    expect(req.amount).toBe(String(BigInt(10) * BigInt(LEAF_DENOM)));
 
     // Advance one step — EconomySystem drains the queue.
     const afterStep = engine.advance(afterHarvest.state, STEP);
     expect(afterStep.state.originalTree.pendingIssuances).toEqual([]);
-    // Player credited 1000 minor units.
-    expect(afterStep.state.player.personalCash).toBe('51000');
+    // Player credited the per-harvest amount (10 × LEAF_DENOM minor units).
+    const cashBeforeDrain = BigInt(afterHarvest.state.player.personalCash);
+    const expectedCash = String(cashBeforeDrain + BigInt(10) * BigInt(LEAF_DENOM));
+    expect(afterStep.state.player.personalCash).toBe(expectedCash);
     const player = findAccount(afterStep.state, PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID);
-    expect(player?.balance).toBe('51000');
+    expect(player?.balance).toBe(expectedCash);
     // Transaction recorded.
     expect(afterStep.state.economy.transactions).toHaveLength(1);
     expect(afterStep.state.economy.transactions[0]!.category).toBe(PROVISIONAL_ECONOMY_CATEGORY_ISSUANCE);

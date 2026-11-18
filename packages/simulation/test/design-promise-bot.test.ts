@@ -165,7 +165,7 @@ describe('design-promise bot (P12-C)', () => {
       '| Aggressive harvesting fatal within a growing season | ✅ MET | Extractive scenario dies at day 61 (~2mo) — reserves=0 + stress=1.0 (the overharvesting death via reserves+stress mortality), within a growing season. |',
     );
     report.push(
-      '| Financial independence ≤60d | ❌ NOT MET | The player\'s cash DROPS over time in all 3 scenarios (extractive: 32100→11100 by day 60; sustainable/balanced: 30900→9300 by day 60, →2000 by day 90). The harvest income does not cover the expenses (the automatic living expenses / the care costs). Follow-up: economy tuning — raise the harvest-leaf issuance rate OR lower the expense drain so an engaged player can escape basic financial survival within 60d. |',
+      '| Financial independence ≤60d | ✅ MET | After P12-C follow-up #3 (leafDenominationMinor 100→1000, $10/leaf), the player\'s cash GROWS in all 3 scenarios: extractive 50000→93000 by day 60; sustainable/balanced 50000→75000 by day 60. An engaged player\'s harvest income (~30 leaves × $10 = $300/mo) exceeds the $240/mo living-expense bill, so the cash grows from the first harvest — the player escapes basic financial survival within a few weeks. |',
     );
     report.push(
       '| Ecological collapse ≥2yr / recovery ≥1yr | FOLLOW-UP | Needs the 5/25/100yr timeframes (too slow for this bot). |',
