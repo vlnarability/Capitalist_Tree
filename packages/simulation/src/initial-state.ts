@@ -143,6 +143,10 @@ export function initializeState(config: GameConfig): GameState {
       // have come due yet. PersonalSystem increments this when a bill fires
       // and the player cannot pay.
       unpaidDays: 0,
+      // P12-D follow-up: labor-exhaustion accumulator for the `perform-labor`
+      // action. Starts at 0 — the player is rested. PersonalSystem decays it
+      // each tick (rest).
+      laborExhaustion: 0,
       livingExpenses: {
         food: '0',
         housing: '0',

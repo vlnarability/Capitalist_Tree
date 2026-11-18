@@ -7,6 +7,7 @@ import {
   payExpenseActionSchema,
   transferActionSchema,
   sellTreeActionSchema,
+  performLaborActionSchema,
 } from './actions-economy.js';
 import {
   setAutomationPolicyActionSchema,
@@ -82,6 +83,7 @@ export const gameActionSchema = z.discriminatedUnion('type', [
   payExpenseActionSchema,
   transferActionSchema,
   sellTreeActionSchema,
+  performLaborActionSchema,
   setAutomationPolicyActionSchema,
   enableAutomationActionSchema,
   disableAutomationActionSchema,

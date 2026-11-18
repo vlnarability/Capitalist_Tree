@@ -84,6 +84,7 @@ import {
   PROVISIONAL_WELL_BEING_UNPAID_HEALTH_PENALTY_MAX,
   PROVISIONAL_WELL_BEING_UNPAID_HEALTH_PENALTY_PER_DAY,
   PROVISIONAL_WELL_BEING_WEALTH_SCALE_MINOR,
+  PROVISIONAL_LABOR_HEALTH_PENALTY_MAX,
 } from '@capitalist-tree/shared';
 import { parseAmount, getBalance } from '../economy/ledger.js';
 
@@ -128,25 +129,45 @@ export function wealthToSecurity(
 }
 
 /**
- * Derive the player's physical health from the `unpaidDays` counter.
+ * Derive the player's physical health from the `unpaidDays` counter + the
+ * `laborExhaustion` accumulator.
  *
- * `1 - clamp(unpaidDays × PENALTY_PER_DAY, 0, MAX_PENALTY)`.
+ *   health = 1 − unpaidPenalty − laborPenalty   (clamped to [0, 1])
  *
- * Each unpaid day removes PENALTY_PER_DAY from health; the total penalty is
- * clamped at MAX_PENALTY (default 0.5) so health never drops below 0.5 from
- * unpaid bills alone. Other health drivers (P6 EnvironmentSystem, future
- * social systems) will add their own penalties on top.
+ *   unpaidPenalty = clamp(unpaidDays × PENALTY_PER_DAY, 0, UNPAID_MAX)
+ *   laborPenalty  = clamp(laborExhaustion × LABOR_HEALTH_PENALTY_MAX, 0,
+ *                         LABOR_HEALTH_PENALTY_MAX)
  *
- * Pure: deterministic given `unpaidDays`.
+ * Each unpaid day removes PENALTY_PER_DAY from health; the unpaid penalty is
+ * clamped at UNPAID_MAX (default 0.5) so health never drops below 0.5 from
+ * unpaid bills alone. The labor-exhaustion penalty is a SEPARATE term: at
+ * full exhaustion (`laborExhaustion = 1`), health drops by up to
+ * LABOR_HEALTH_PENALTY_MAX (default 0.5). The two penalties ADD — a player
+ * who both skips bills AND overworks can drop to 0 health. Other health
+ * drivers (P6 EnvironmentSystem, future social systems) will add their own
+ * penalties on top.
+ *
+ * The `laborExhaustion` argument defaults to 0 so callers that don't track
+ * labor (e.g. pre-P12-D test states) get the legacy behaviour.
+ *
+ * Pure: deterministic given the inputs.
  */
-export function derivePhysicalHealth(unpaidDays: number): number {
-  if (unpaidDays <= 0) return 1;
-  const penalty = clamp(
+export function derivePhysicalHealth(
+  unpaidDays: number,
+  laborExhaustion: number = 0,
+): number {
+  if (unpaidDays <= 0 && laborExhaustion <= 0) return 1;
+  const unpaidPenalty = clamp(
     unpaidDays * PROVISIONAL_WELL_BEING_UNPAID_HEALTH_PENALTY_PER_DAY,
     0,
     PROVISIONAL_WELL_BEING_UNPAID_HEALTH_PENALTY_MAX,
   );
-  return clamp(1 - penalty, 0, 1);
+  const laborPenalty = clamp(
+    laborExhaustion * PROVISIONAL_LABOR_HEALTH_PENALTY_MAX,
+    0,
+    PROVISIONAL_LABOR_HEALTH_PENALTY_MAX,
+  );
+  return clamp(1 - unpaidPenalty - laborPenalty, 0, 1);
 }
 
 /**
@@ -205,6 +226,9 @@ export interface WellBeing {
   inflationIndex: number;
   /** `player.unpaidDays` at the time of derivation. Mirrored for the UI. */
   unpaidDays: number;
+  /** `player.laborExhaustion` at the time of derivation ([0, 1]). Mirrored
+   *  for the UI + so callers can see the labor-health driver. */
+  laborExhaustion: number;
 }
 
 /**
@@ -249,8 +273,12 @@ export function deriveWellBeing(state: GameState): WellBeing {
     scaleMinor,
   );
 
-  // Physical health from the unpaidDays counter.
-  const physicalHealth = derivePhysicalHealth(state.player.unpaidDays);
+  // Physical health from the unpaidDays counter + labor-exhaustion
+  // accumulator (P12-D follow-up).
+  const physicalHealth = derivePhysicalHealth(
+    state.player.unpaidDays,
+    state.player.laborExhaustion,
+  );
 
   // Happiness from security + health + baseline.
   const happiness = deriveHappiness(financialSecurity, physicalHealth);
@@ -263,6 +291,7 @@ export function deriveWellBeing(state: GameState): WellBeing {
     realPurchasingPowerMinor: realPurchasingPowerMinor.toString(10),
     inflationIndex,
     unpaidDays: state.player.unpaidDays,
+    laborExhaustion: state.player.laborExhaustion,
   };
 }
 

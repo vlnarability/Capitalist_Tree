@@ -52,6 +52,7 @@ import {
   payExpenseHandler,
   transferHandler,
   sellTreeHandler,
+  performLaborHandler,
 } from '../economy/index.js';
 import {
   setAutomationPolicyHandler,
@@ -437,6 +438,7 @@ export const actionHandlers: Record<string, ActionListener> = {
   'pay-expense': payExpenseHandler as ActionListener,
   'transfer': transferHandler as ActionListener,
   'sell-tree': sellTreeHandler as ActionListener,
+  'perform-labor': performLaborHandler as ActionListener,
   'set-automation-policy': setAutomationPolicyHandler as ActionListener,
   'enable-automation': enableAutomationHandler as ActionListener,
   'disable-automation': disableAutomationHandler as ActionListener,

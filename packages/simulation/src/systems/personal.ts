@@ -55,6 +55,7 @@ import {
   PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID,
   PROVISIONAL_PERSONAL_LOW_FUNDS_THRESHOLD_MINOR,
   PROVISIONAL_WELL_BEING_UNPAID_RECOVERY_PER_TICK,
+  PROVISIONAL_LABOR_EXHAUSTION_RECOVERY_PER_TICK,
 } from '@capitalist-tree/shared';
 import type { System, SystemResult, SystemContext } from './system.js';
 import {
@@ -109,6 +110,26 @@ export const personalSystem: System = {
         next = {
           ...next,
           player: { ...next.player, unpaidDays: nextUnpaid },
+        };
+      }
+    }
+
+    // 3b. Decay laborExhaustion (recovery via rest — P12-D follow-up). The
+    //     `perform-labor` action accrues exhaustion; the PersonalSystem
+    //     decays it asymptotically toward 0 each tick so the player recovers
+    //     from overworking as sim time passes. NOT floored (unlike unpaidDays)
+    //     because laborExhaustion is a continuous [0,1] value — floor() would
+    //     stall recovery at low levels. Always decays (labor is an
+    //     instantaneous action, not a per-tick state, so every tick is "rest").
+    if (next.player.laborExhaustion > 0) {
+      const decayedExhaustion = Math.max(
+        0,
+        next.player.laborExhaustion * (1 - PROVISIONAL_LABOR_EXHAUSTION_RECOVERY_PER_TICK),
+      );
+      if (decayedExhaustion !== next.player.laborExhaustion) {
+        next = {
+          ...next,
+          player: { ...next.player, laborExhaustion: decayedExhaustion },
         };
       }
     }

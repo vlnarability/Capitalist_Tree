@@ -20,6 +20,7 @@ import {
   marketPriceChangedEventSchema,
   expenseDueEventSchema,
   transferCompletedEventSchema,
+  laborCompletedEventSchema,
 } from './events-economy.js';
 import {
   offlineCatchUpStartedEventSchema,
@@ -158,6 +159,7 @@ export const simulationEventSchema = z.discriminatedUnion('type', [
   marketPriceChangedEventSchema,
   expenseDueEventSchema,
   transferCompletedEventSchema,
+  laborCompletedEventSchema,
   // P6a: offline catch-up events emitted by the catch-up processor
   // (NOT by engine.advance — the engine is offline-agnostic). See
   // packages/simulation/src/offline/catch-up.ts.
