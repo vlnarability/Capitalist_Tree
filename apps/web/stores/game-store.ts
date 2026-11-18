@@ -85,6 +85,7 @@ import type {
   OfflineSummary,
   SimulationEvent,
 } from '@capitalist-tree/shared';
+import { Locale, DEFAULT_LOCALE } from '@capitalist-tree/content';
 import {
   PROVISIONAL_UI_DEFAULT_CURRENCY_VISUAL_ID,
   PROVISIONAL_UI_DEFAULT_TAB,
@@ -163,6 +164,14 @@ export interface GameUiState {
    */
   readonly reducedMotionOverride: 'auto' | 'on' | 'off';
   /**
+   * P13-C — the selected UI locale (BCP-47 tag). Resolved by the
+   * `@capitalist-tree/content` i18n table via `t(key, locale)`. Defaults to
+   * `DEFAULT_LOCALE` ('en'); the `setLocale` mutator changes it. UI-only — NOT
+   * part of the saved GameState (a locale switch re-renders, it doesn't mutate
+   * simState). See `packages/content/src/i18n/index.ts`.
+   */
+  readonly locale: Locale;
+  /**
    * P6d2 — the "while you were away" summary parked by the catch-up-on-load
    * trigger (`lib/persistence/offline-catch-up-trigger.ts`) when a stale save
    * is loaded and `runOfflineCatchUp` produced a non-zero-chunk summary. The
@@ -212,6 +221,8 @@ export interface GameStoreState {
   setAdvancedView: (enabled: boolean) => void;
   setSelectedTab: (tab: string) => void;
   setCurrencyCosmetic: (currencyId: string) => void;
+  /** P13-C — set the UI locale (re-renders the UI in the chosen language). */
+  setLocale: (locale: Locale) => void;
   /**
    * P5d — set the in-game reduced-motion override. `'auto'` follows the OS
    * `prefers-reduced-motion` setting; `'on'` / `'off'` force the value.
@@ -347,6 +358,7 @@ export function initialGameUiState(): GameUiState {
     notifications: [],
     selectedCurrencyId: PROVISIONAL_UI_DEFAULT_CURRENCY_VISUAL_ID,
     reducedMotionOverride: 'auto',
+    locale: DEFAULT_LOCALE,
     pendingOfflineSummary: null,
     catchUpProgress: null,
   };
@@ -444,6 +456,10 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
 
   setCurrencyCosmetic: (currencyId) =>
     set((s) => ({ ui: { ...s.ui, selectedCurrencyId: currencyId } })),
+
+  /** P13-C — set the UI locale. UI mutator only; `simState` unchanged (rule 6). */
+  setLocale: (locale) =>
+    set((s) => ({ ui: { ...s.ui, locale } })),
 
   /**
    * P5d — set the in-game reduced-motion override. `'auto'` follows the OS
