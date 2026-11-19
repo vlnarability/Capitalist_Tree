@@ -509,22 +509,29 @@ subdivisions; NatGeo all-about-climate).
 
 **Decision (design).** Extend `ClimateBaseline` → `ClimateZone` with the Köppen
 code/class, a realistic **precipitation profile** (annual mm + pattern + driest
-month — the axis the current type lacks), seasonality, and frost/heat risk.
-Expand `ALL_CLIMATES` from 1 to **17 curated zones** covering every Köppen class
-where trees grow (Af/Am/Aw, BWh/BWk/BSh/BSk, Cfa/Cfb/Csa/Csb/Cwa, Dfa/Dfb/Dfc/
-Dwa, ET) + an H highland elevation modifier (6.5 °C/km lapse rate). Exclude EF
-(ice cap — no trees). The existing temperate baseline becomes the Dfb entry — no
-behavior change for current saves.
+month — the axis the current type lacks), seasonality, frost/heat risk, and a
+`supportsTrees` flag. Expand `ALL_CLIMATES` from 1 to **all 31 Köppen-Geiger
+climate types + the H highland modifier** (A: Af/Am/As/Aw; B: BWh/BWk/BSh/BSk; C:
+Cfa/Cfb/Cfc/Csa/Csb/Csc/Cwa/Cwb/Cwc; D: Dfa/Dfb/Dfc/Dfd/Dsa/Dsb/Dsc/Dsd/Dwa/Dwb/
+Dwc/Dwd; E: ET/EF) — every zone represented per the "all zones" direction, even
+EF (flagged `supportsTrees: false`). H overlays any base zone with a 6.5 °C/km
+lapse rate. **At least one real tree species per tree-supporting zone** (e.g.
+kapok for Af, baobab for Aw, date palm for BWh, olive for Csa, white oak for
+Dfa/Dfb, Dahurian larch for Dwd, Arctic willow for ET) — expanding the species
+catalog around the existing White Oak + Eastern Hemlock, both already native to
+Dfa/Dfb. The existing temperate baseline becomes the Dfb entry — no behavior
+change for current saves.
 
 **Realism principle.** Climate affects the sim **only through existing channels**
-(temperature-response growth curve, precipitation-vs-evapotranspiration water
-balance, season pattern, weather-event weighting, cold-winter dormancy). No new
-"climate multiplier" — a desert is hard because of low water + heat, not a
-hardcoded penalty. Climate data is content (rule 5); the sim reads it through
-existing systems (rule 6).
+(species-dependent temperature-response growth curve, precipitation-vs-
+evapotranspiration water balance, season pattern, weather-event weighting,
+cold-winter dormancy). No new "climate multiplier" — a desert is hard because of
+low water + heat, not a hardcoded penalty. Climate + species data are content
+(rule 5); the sim reads them through existing systems (rule 6).
 
-Full design (data model, the 17-zone catalog with realistic temp/precip/season
-profiles, effect mapping, UX, 4-phase implementation, realism citations):
+Full design (data model, the full 31-zone + H catalog with realistic
+temp/precip/season profiles, the ≥1-species-per-zone table, effect mapping, UX,
+5-phase implementation, realism citations):
 [`docs/reviews/GAP-17-climate-design.md`](GAP-17-climate-design.md).
 Implementation phases follow; Phase 1 (schema extension + zone data + tests) is
 the next step once the zone list is confirmed.
@@ -577,6 +584,49 @@ reduced-motion scope, boundary guardrail table, phased plan, Forest Collection
 spec): [`docs/reviews/GAP-28-cosmetics.md`](GAP-28-cosmetics.md) §"Approved
 direction (DR-12)". **GAP-28 is sufficiently designed to close as a design-
 direction GAP; implementation tasks remain open. Focus stays on GAP-17.**
+
+---
+
+## DR-13: Analytics — local-only, on-device (approved direction)
+
+**Context.** GAP-31 needed a sink decision. User approved **local-only
+analytics**: events, aggregated metrics, performance measurements, and caught
+errors persist on-device (IndexedDB) + surface through an in-game observability
+panel. No external analytics service, endpoint, account, or third-party telemetry
+SDK. Matches the local-first architecture (DR-2: single-player, no server, no
+accounts).
+
+**Decision (direction).** Four event categories — gameplay, simulation,
+performance, error — as a structured, versioned `AnalyticsEvent`
+(`{ id, schemaVersion, timestamp, simulationTime, category, event, data? }`).
+**Do not retain every tick** — record meaningful gameplay events individually,
+aggregate recurring sim metrics periodically (e.g. a growth summary per sim-day,
+not every height/diameter increment), sample performance, record all errors, with
+configurable retention + clear/reset controls.
+
+**Architecture.** Analytics is independent of the simulation engine: sim → event
+emitter (fire-and-forget, the sim never awaits) → analytics collector → IndexedDB
+/ observability panel / JSON export. The simulation imports only the emitter
+interface; the collector owns schema-versioning, aggregation/sampling, + writes
+(wrapped so an IndexedDB failure degrades only analytics, not gameplay). New
+`packages/analytics` + an `AnalyticsPanel` in `apps/web/components/dev/`; a
+separate IndexedDB object store so analytics storage never risks the save blob.
+The panel (dev-gated) shows event counts by category, recent events, tree
+health/growth + economic/env summaries, tick performance, error history,
+IndexedDB storage usage, JSON export, + clear history.
+
+**Privacy boundary.** Local-only avoids third-party transmission + external
+consent, but does not eliminate every privacy obligation — keep diagnostics
+local, avoid unnecessary personal information (the game has no accounts / PII),
+provide a clear/reset control. **Future migration:** an optional external
+analytics adapter is possible only if the game is commercially released +
+cross-user analytics become necessary; that requires a separate decision
+(consent, data minimization, retention, privacy disclosures, hosting). Do not
+build that infrastructure now.
+
+Full design: [`docs/reviews/GAP-31-analytics-design.md`](GAP-31-analytics-design.md).
+**GAP-31 is sufficiently designed to close as a design-direction GAP;
+implementation tasks move to the development roadmap.**
 
 ---
 
