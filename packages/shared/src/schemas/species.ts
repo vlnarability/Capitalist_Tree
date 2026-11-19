@@ -66,6 +66,15 @@ export const treeSpeciesSchema = z.object({
   scientificName: z.string().optional(),
   /** Whether the species sheds leaves seasonally (GDD §4.4). */
   deciduous: z.boolean(),
+  /**
+   * GAP-17 (DR-11): the Köppen-Geiger codes this species is native to in the
+   * real world (e.g. `['Dfa','Dfb']` for White Oak, `['Dfb','Dfc']` for Eastern
+   * Hemlock). Drives "right tree for the right climate" — a species is offered
+   * for a zone only if the zone's `koppenCode` is in this list. Non-empty:
+   * every species has at least one native zone. Codes match the
+   * `koppenCode` values in `packages/content/src/weather/koppen-zones.ts`.
+   */
+  nativeKoppenCodes: z.array(z.string().min(1)).min(1),
   /** General growth-rate multiplier (dimensionless, ~1.0 baseline). */
   growthRate: z.number().positive(),
   /** Age in days at which the tree is considered mature (GDD §5.5). */

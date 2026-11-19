@@ -38,6 +38,11 @@ export const EASTERN_HEMLOCK: TreeSpecies = {
   name: 'Eastern Hemlock',
   scientificName: 'Tsuga canadensis',
   deciduous: false,
+  // GAP-17 (DR-11): Eastern Hemlock is native to the cool-temperate /
+  // boreal transition of eastern North America — Dfb (warm-summer
+  // continental) + Dfc (subarctic/taiga margins). Already climate-correct for
+  // the default `climate:temperate` (warm-Dfb).
+  nativeKoppenCodes: ['Dfb', 'Dfc'],
 
   // Hemlocks are slow-growing, shade-tolerant understory/conifer species.
   // Slower than oak (0.5). PROVISIONAL: tune against maximumHeight/matureAgeDays.

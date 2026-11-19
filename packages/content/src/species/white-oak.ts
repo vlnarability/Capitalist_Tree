@@ -31,6 +31,11 @@ export const WHITE_OAK: TreeSpecies = {
   name: 'White Oak',
   scientificName: 'Quercus alba',
   deciduous: true,
+  // GAP-17 (DR-11): White Oak is native to humid-continental North America
+  // (US Midwest = Dfa; New England / central Europe = Dfb). This is the
+  // existing default starting species + already climate-correct for the
+  // default `climate:temperate` (warm-Dfb).
+  nativeKoppenCodes: ['Dfa', 'Dfb'],
 
   // Growth rate (dimensionless). Oak is slow-growing; this is a sapling-relative
   // baseline. PROVISIONAL: tune against maximumHeight/matureAgeDays.

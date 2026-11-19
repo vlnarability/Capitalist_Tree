@@ -332,10 +332,24 @@ hostile one shows stress.
   distinction + the Csa 3:1 winter:summer precip ratio need **monthly** means
   (the schema stores 4 seasonal means) — deferred to Phase 3 when the effect
   wiring needs them. No WeatherSystem changes.
-- **Phase 2 — species catalog expansion.** Add the species entries from §5b
-  (keeping the existing White Oak + Eastern Hemlock); each species carries its
-  native Köppen band. Tests verify every `supportsTrees: true` zone has ≥1
-  species, and that no species is offered for EF.
+- **Phase 2 — species catalog expansion (DONE).** Added a `nativeKoppenCodes`
+  field (required, non-empty array) to `treeSpeciesSchema`; tagged the existing
+  White Oak (Dfa/Dfb) + Eastern Hemlock (Dfb/Dfc) with their native bands; added
+  25 new real species covering every tree-supporting Köppen zone, built via an
+  allometric `makeSpecies` factory (`packages/content/src/species/make-species.ts`)
+  that derives the tuning constants from each species' real-world essence (max
+  height, growth rate, maturity age, deciduousness, climate-derived temperature
+  range, growth form). Species are split across `tropical.ts` / `arid.ts` /
+  `temperate.ts` / `continental.ts` / `polar.ts`; `findSpeciesByKoppenCode(code)`
+  returns the species offered for a zone. Phase 2 ships 1 species per zone
+  (coverage) rather than the full 3-per-zone richness in §5b — the additional
+  species can be appended later without engine changes. Tests
+  (`packages/simulation/test/species-zones.test.ts`, 17 tests): every
+  `supportsTrees: true` zone has ≥1 species; no species for EF; every species
+  parses `treeSpeciesSchema` + has valid non-empty `nativeKoppenCodes`; cold-zone
+  species tolerate sub-zero minimums, hot-zone ≥40 °C, tropical ≥10 °C; the
+  existing White Oak / Eastern Hemlock bands are climate-correct; multi-zone
+  species (Ponderosa pine BSk/Dsa/Dsb, black spruce Dfc/ET) cover their full band.
 - **Phase 3 — effect wiring.** Wire the new fields into the existing systems:
   precipitation → drought weighting (WaterSystem / the drought hook);
   seasonality → season pattern; frost/heat risk → weather-event transition
