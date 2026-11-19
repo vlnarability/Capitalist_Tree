@@ -209,13 +209,27 @@ const harvestLeavesHandler: ActionListener<HarvestLeavesAction> = (state, action
   // Apply immediate stress (GDD §5.4: harvesting induces stress).
   tree.stress = Math.min(1, tree.stress + result.stressInduced);
 
-  // Record a severe-defoliation damage entry if >= 50% of foliage was removed.
-  // The BiologySystem prunes old damage records and counts these for mortality.
+  // Record a severe-defoliation damage entry if the harvest intended to remove
+  // >= SEVERE_DEFOLIATION_FRACTION of foliage. We use the INTENDED fraction
+  // (min(requested, maximumHarvestFraction)) — NOT the floor-rounded actual
+  // leavesHarvested/foliageBefore — so that a genuine max-rate harvest on a
+  // non-even foliage count (e.g. 56/112.33 = 0.4987 after Math.floor, or
+  // 1500/3001 = 0.4998 on an odd integer) still registers as severe. Otherwise
+  // the repeated-defoliation mortality counter under-counts + a tree harvested
+  // at the maximum rate 8× can survive (TDD §21 #6 regression). The
+  // leavesHarvested > 0 guard avoids recording severe for the degenerate
+  // 1-leaf case where floor rounds the removal to 0.
   const fractionRemoved =
     result.foliageBefore > 0 ? result.leavesHarvested / result.foliageBefore : 0;
+  const requestedFraction =
+    result.foliageBefore > 0 ? action.payload.requestedLeaves / result.foliageBefore : 0;
+  const intendedFraction = Math.min(requestedFraction, ctx.species.maximumHarvestFraction);
+  const effectiveFraction = Math.max(fractionRemoved, intendedFraction);
+  const isSevere =
+    result.leavesHarvested > 0 && intendedFraction >= SEVERE_DEFOLIATION_FRACTION;
   const damage: TreeDamageState[] = [...tree.damage];
-  if (fractionRemoved >= SEVERE_DEFOLIATION_FRACTION) {
-    const sev = Math.min(1, fractionRemoved);
+  if (isSevere) {
+    const sev = Math.min(1, effectiveFraction);
     damage.push({
       type: 'severe-defoliation',
       severity: sev,
@@ -245,7 +259,7 @@ const harvestLeavesHandler: ActionListener<HarvestLeavesAction> = (state, action
       },
     },
   ];
-  if (fractionRemoved >= SEVERE_DEFOLIATION_FRACTION) {
+  if (isSevere) {
     // Count prior severe defoliations within the window to flag "repeated".
     const windowSeconds =
       PROVISIONAL_BIOLOGY_DEATH_DEFOLIATION_WINDOW_DAYS * 24 * 60 * 60;
@@ -258,7 +272,7 @@ const harvestLeavesHandler: ActionListener<HarvestLeavesAction> = (state, action
       at: state.clock.elapsedSeconds,
       payload: {
         treeId: tree.id,
-        fractionRemoved,
+        fractionRemoved: effectiveFraction,
         repeated: priorCount >= 1,
       },
     });
