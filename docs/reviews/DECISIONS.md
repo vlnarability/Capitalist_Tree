@@ -470,6 +470,35 @@ Verified: simulation suite 1020/1020 (43 files, excluding biology-system.test.ts
 
 ---
 
+## DR-10: Concurrent-tab protection — BLOCK approach (review later)
+
+**Context.** RV5-F4 / W21: two tabs of the same origin both running the
+simulation can race on the shared IndexedDB save (last-write-wins clobbers the
+newer tab's state). The local-first architecture has no server authority to
+serialize them, so the protection must be client-side.
+
+**Decision (now).** **Block** — the second tab does not mount the game. A
+`useConcurrentTabLock` hook acquires an exclusive, `ifAvailable` Web Lock
+(`navigator.locks`, name `ct-active-tab`) on mount + holds it for the tab's
+lifetime. `ConcurrentTabGate` (in `app/layout.tsx`, wrapping `{children}`) renders
+a "paused — another tab is open, reload this one" screen instead of the children
+when the lock isn't acquired. Because the gate is above `page.tsx`, the second
+tab never calls `useSimulationLoop` → never loads the save → never writes
+IndexedDB. Graceful fallback: if `navigator.locks` is unavailable (older
+browser / SSR / a failed request), the game proceeds without cross-tab
+protection (the same default the local-first app has always had) rather than
+breaking.
+
+**Review later (warn vs block).** The block approach is the safest for saves but
+the most disruptive UX (the second tab is fully unusable). The alternative is
+**warn**: both tabs run + a banner surfaces the conflict risk (the player
+chooses to close one). The swap is localized to `useConcurrentTabLock` +
+`ConcurrentTabGate` (the gate becomes a banner that always renders children).
+Re-review before launch — likely after observing how often players actually open
+a second tab.
+
+---
+
 ## Architectural observation
 
 These decisions establish a clear direction: **the game is a single-player,
