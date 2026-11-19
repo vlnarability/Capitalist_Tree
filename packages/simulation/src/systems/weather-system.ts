@@ -42,6 +42,7 @@ import {
   PROVISIONAL_WEATHER_DAMAGE_LEAF_LOSS_FRACTION,
 } from '@capitalist-tree/shared';
 import {
+  applyHighlandModifier,
   findClimateById,
   findTransitionMatrix,
   WEATHER_EVENT_MAP,
@@ -97,11 +98,19 @@ export const weatherSystem: System = {
     // `seasonalBaseTemp` (→ temperature → growth curve) reflect the player's
     // chosen Köppen zone. Falls back to the default for pre-GAP-17 states.
     const climateId = next.world.climateId ?? PROVISIONAL_WEATHER_DEFAULT_CLIMATE_ID;
-    const climate = findClimateById(climateId);
-    if (!climate) {
+    const baseClimate = findClimateById(climateId);
+    if (!baseClimate) {
       // Defensive — content package should always ship the default climate.
       return { state: next, events };
     }
+    // GAP-17 (DR-11) Phase 4: apply the highland elevation modifier (lapse
+    // rate 6.5 °C/km) when > 0 — a highland game is colder at altitude. The
+    // modifier returns a new ClimateZone (base untouched) with shifted
+    // seasonalBaseTemp + bumped frostRisk; the shifted temps feed
+    // computeLocalTemperature → the temperature→growth curve. (The transition
+    // matrix stays per-base-zone — runtime frost-risk re-derivation is Phase 5.)
+    const elevationM = next.world.elevationM ?? 0;
+    const climate = elevationM > 0 ? applyHighlandModifier(baseClimate, elevationM) : baseClimate;
     const matrix = findTransitionMatrix(climateId, next.clock.season);
     if (!matrix) {
       return { state: next, events };

@@ -259,5 +259,12 @@ export const worldStateSchema = z.object({
    * zone for back-compat with pre-GAP-17 saves (which have no climateId).
    */
   climateId: z.string().min(1).default(PROVISIONAL_WEATHER_DEFAULT_CLIMATE_ID),
+  /**
+   * GAP-17 (DR-11) Phase 4: highland elevation (m). Stamped at initialize from
+   * `config.elevationM`; the WeatherSystem applies the lapse rate
+   * (`applyHighlandModifier`) to the climate's `seasonalBaseTemp` when > 0.
+   * Defaults to 0 for back-compat.
+   */
+  elevationM: z.number().nonnegative().max(4000).default(0),
 });
 export type WorldState = z.infer<typeof worldStateSchema>;

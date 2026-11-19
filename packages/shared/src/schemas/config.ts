@@ -31,6 +31,15 @@ export const gameConfigSchema = z.object({
    * saves + the existing default starting experience.
    */
   climateId: z.string().min(1).default(PROVISIONAL_WEATHER_DEFAULT_CLIMATE_ID),
+  /**
+   * GAP-17 (DR-11) Phase 4: highland elevation modifier (metres above sea
+   * level). When > 0, the WeatherSystem applies the environmental lapse rate
+   * (6.5 °C/km) to the climate's `seasonalBaseTemp`, so a highland game is
+   * colder at altitude (a Cfb at 2000 m ≈ a subarctic climate). 0 = sea level
+   * (the default). Range [0, 4000] — the highest tree-line zones in §5.
+   * Defaults to 0 for back-compat with pre-GAP-17 saves.
+   */
+  elevationM: z.number().nonnegative().max(4000).default(0),
   currencyId: z.string().min(1).default(PROVISIONAL_DEFAULT_CURRENCY_ID),
   // Optional wall-clock createdAt timestamp (ms). Tests pass an explicit
   // value to stay deterministic; production reads Date.now() ONCE here.

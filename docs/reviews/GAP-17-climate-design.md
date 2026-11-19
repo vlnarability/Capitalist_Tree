@@ -389,14 +389,39 @@ hostile one shows stress.
     (spring/summer/autumn/winter) is still fixed; tropical wet-dry + polar
     short-growing-window patterns are not yet modeled (the 4-season calendar
     suffices for the realistic-outcome tests).
-- **Phase 4 — zone + species selection UX.** The climate + species picker (start
-  screen or region panel), grouped by Köppen class, with the profile display +
-  native-species list. Highland elevation slider with live temperature preview +
-  species-survival check.
-- **Phase 5 — highland + cross-zone dynamics** (optional / later). The H modifier
-  interacting with the lapse rate across a full elevation gradient; per-species
-  climate-suitability scoring for the "right tree for the right climate" as a
-  gameplay lever.
+- **Phase 4 — zone + species selection UX (DONE).** The `ClimatePicker` modal
+  (`apps/web/components/common/ClimatePicker.tsx`), opened from the New Game
+  button (replacing the hardcoded `DEFAULT_GAME_CONFIG` boot). The catalog is
+  **grouped by Köppen class** (Tropical / Arid / Temperate / Continental /
+  Polar), each entry showing the code + name, exemplar region (from the
+  `description`), seasonal temp range, annual precipitation + pattern,
+  seasonality, frost/heat risk, + `treeSuitabilityNote`. Selecting a climate
+  filters the species list to its natives (`findSpeciesByKoppenCode` — the
+  "right tree for the right climate" query from §5b); EF (no trees) is marked
+  unplayable + disables Start. The selection is persisted as `climateId` +
+  `speciesId` (+ `elevationM`) in the save via `loop.newGame`. The default
+  remains Dfb + White Oak.
+  - **Highland elevation slider (DONE + wired):** an optional 0–4000 m slider
+    overlays the lapse-rate modifier (`applyHighlandModifier`, 6.5 °C/km) with a
+    **live preview** of the adjusted seasonal temperatures + which native
+    species survive the shifted climate (survival badges per species). The
+    elevation is persisted as `config.elevationM` + stamped on
+    `state.world.elevationM`; the WeatherSystem applies `applyHighlandModifier`
+    when `elevationM > 0`, so a highland game is genuinely colder at altitude
+    (not a cosmetic preview — the §7 "must not lie" rule). Runtime frost-risk
+    re-derivation of the transition matrix (more frost events at altitude) +
+    the broader cross-zone dynamics remain Phase 5.
+  - Tests: `apps/web/components/common/__tests__/ClimatePicker.test.tsx`
+    (10 tests — open/close, climate+species selection, BWh→date-palm, EF
+    unplayable + Start disabled, highland preview −13 °C at 2000 m, elevationM
+    in submit payload, survival badges) + the highland lapse-rate sim tests in
+    `climate-effect-wiring.test.ts` (3 tests — elevationM stamped, ~13 °C
+    colder at 2000 m, elevationM 0 identical to sea level).
+- **Phase 5 — highland + cross-zone dynamics** (optional / later). Runtime
+  frost-risk re-derivation of the transition matrix at altitude (more frost/snow
+  events, not just colder temps); the H modifier interacting with the lapse
+  rate across a full elevation gradient; per-species climate-suitability scoring
+  for the "right tree for the right climate" as a gameplay lever.
 
 ## 9. Realism summary
 

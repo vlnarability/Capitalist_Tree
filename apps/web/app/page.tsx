@@ -55,7 +55,7 @@
  *     `simState` reference is untouched, rule 6). The page re-renders to
  *     mount / unmount the advanced Panels.
  */
-import { useCallback, useMemo, type ReactElement } from 'react';
+import { useCallback, useMemo, useState, type ReactElement } from 'react';
 import {
   DEFAULT_GAME_CONFIG,
   estimateSustainableHarvest,
@@ -74,7 +74,7 @@ import { useGameStore } from '../stores/game-store';
 import { createBrowserStorage } from '../lib/persistence';
 import { harvest } from '../lib/actions';
 import { TreeView } from '../components/tree';
-import { Panel, Button } from '../components/common';
+import { Panel, Button, ClimatePicker, type ClimatePickerSelection } from '../components/common';
 import {
   MoneyDisplay,
   TreeConditionSummary,
@@ -197,12 +197,32 @@ export default function HomePage(): ReactElement {
     dispatch(harvest(tree.id, requested));
   }, [treeState, clockState, worldState, dispatch]);
 
-  // New-Game handler: wraps `loop.newGame` with a fresh `GameConfig` stamped
-  // with the current wall-clock. (`Date.now()` here is the spec-allowed
-  // single read at game-creation time — TDD §18.1.)
+  // GAP-17 (DR-11) Phase 4: the New Game button opens the climate + species
+  // picker modal instead of booting the default config directly. The player
+  // picks a Köppen zone + a native species (+ optional highland elevation),
+  // and `onPickerSubmit` routes the selection through `loop.newGame`.
+  const [pickerOpen, setPickerOpen] = useState(false);
+
   const onNewGame = useCallback(() => {
-    loop.newGame({ ...DEFAULT_GAME_CONFIG, createdAt: Date.now() });
-  }, [loop]);
+    setPickerOpen(true);
+  }, []);
+
+  // Start the game with the picker's selection (climateId + speciesId +
+  // elevationM), stamped with the current wall-clock (the spec-allowed single
+  // read at game-creation time — TDD §18.1).
+  const onPickerSubmit = useCallback(
+    (selection: ClimatePickerSelection) => {
+      setPickerOpen(false);
+      loop.newGame({
+        ...DEFAULT_GAME_CONFIG,
+        climateId: selection.climateId,
+        speciesId: selection.speciesId,
+        elevationM: selection.elevationM,
+        createdAt: Date.now(),
+      });
+    },
+    [loop],
+  );
 
   // Loading state — boot hasn't published a non-null `simState` yet.
   if (!loop.ready || !treeRenderData || !environmentRenderData) {
@@ -248,6 +268,14 @@ export default function HomePage(): ReactElement {
           null when no summary is parked, so this mount is a no-op most of
           the time. */}
       <OfflineModal />
+      {/* GAP-17 (DR-11) Phase 4: the climate + species picker, opened from the
+          New Game button. Returns null when `pickerOpen` is false, so this
+          mount is a no-op most of the time. */}
+      <ClimatePicker
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        onSubmit={onPickerSubmit}
+      />
       {/* GAP-36 (GDD §12 endings): celebratory modal surfaced when an objective
           newly completes. Renders null when no ending is parked, so this mount
           is a no-op most of the time. */}

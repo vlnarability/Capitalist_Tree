@@ -48,6 +48,8 @@ export const DEFAULT_GAME_CONFIG: GameConfig = {
   // GAP-17 (DR-11) Phase 3: default to the warm-Dfb temperate zone (the
   // existing default starting experience — back-compat).
   climateId: PROVISIONAL_WEATHER_DEFAULT_CLIMATE_ID,
+  // GAP-17 (DR-11) Phase 4: default sea-level (no highland modifier).
+  elevationM: 0,
   currencyId: PROVISIONAL_DEFAULT_CURRENCY_ID,
 };
 
@@ -303,6 +305,9 @@ export function initializeState(config: GameConfig): GameState {
       // GAP-17 (DR-11) Phase 3: the selected Köppen zone — WeatherSystem reads
       // this instead of the hardwired default.
       climateId: config.climateId,
+      // GAP-17 (DR-11) Phase 4: highland elevation (m) — WeatherSystem applies
+      // the lapse rate when > 0.
+      elevationM: config.elevationM,
     },
     economy: {
       monetarySupply: config.startingPersonalCash,

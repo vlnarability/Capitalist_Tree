@@ -171,3 +171,30 @@ describe('GAP-17 Phase 3 — realistic outcome: Dfa white oak thrives', () => {
     expect(temperatureFactor(summerTemp, WHITE_OAK.temperatureRange)).toBeGreaterThan(0);
   });
 });
+
+describe('GAP-17 Phase 4 — highland elevation modifier (lapse rate)', () => {
+  it('elevationM is stamped on state.world from config.elevationM', () => {
+    const s = engine.initialize({ ...cfg('climate:temperate', 'species:white-oak'), elevationM: 1500 });
+    expect(s.world.elevationM).toBe(1500);
+  });
+
+  it('elevationM > 0 makes the weather ~13 °C colder than sea level at 2000 m (same climate + seed)', () => {
+    const sea = engine.initialize(cfg('climate:temperate', 'species:white-oak'));
+    const high = engine.initialize({ ...cfg('climate:temperate', 'species:white-oak'), elevationM: 2000 });
+    // Advance both a few steps into spring. Same seed + same step count → same
+    // condition + intensity sequence; only the base temp differs (lapse rate).
+    const seaAfter = engine.advance(sea, 3 * SECONDS_PER_DAY).state;
+    const highAfter = engine.advance(high, 3 * SECONDS_PER_DAY).state;
+    // 2000 m × 6.5 °C/km = 13 °C drop.
+    expect(highAfter.world.weather.temperature).toBeLessThan(seaAfter.world.weather.temperature);
+    expect(seaAfter.world.weather.temperature - highAfter.world.weather.temperature).toBeCloseTo(13, 0);
+  });
+
+  it('elevationM 0 (the default) leaves the weather identical to a sea-level game', () => {
+    const a = engine.initialize(cfg('climate:temperate', 'species:white-oak'));
+    const b = engine.initialize({ ...cfg('climate:temperate', 'species:white-oak'), elevationM: 0 });
+    const aAfter = engine.advance(a, 3 * SECONDS_PER_DAY).state;
+    const bAfter = engine.advance(b, 3 * SECONDS_PER_DAY).state;
+    expect(bAfter.world.weather.temperature).toBe(aAfter.world.weather.temperature);
+  });
+});

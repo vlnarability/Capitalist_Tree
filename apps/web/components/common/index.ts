@@ -12,3 +12,4 @@ export { Button, type ButtonProps, type ButtonTone } from './Button';
 export { Stat, type StatProps } from './Stat';
 export { ProgressBar, type ProgressBarProps } from './ProgressBar';
 export { ErrorBoundary } from './ErrorBoundary';
+export { ClimatePicker, type ClimatePickerProps, type ClimatePickerSelection } from './ClimatePicker';
