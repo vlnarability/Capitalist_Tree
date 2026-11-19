@@ -1,15 +1,17 @@
 /**
- * Weather content registry (P2 — TDD §9, GDD §4.3).
+ * Weather content registry (P2 — TDD §9, GDD §4.3; extended by GAP-17 / DR-11).
  *
- * Exposes the climate baselines, transition matrices, and event definitions
- * to the simulation engine. The WeatherSystem looks up the active climate +
- * transition matrix per step by id.
+ * Exposes the climate zones (default + the 31 Köppen-Geiger exemplars + the H
+ * highland modifier), transition matrices, and event definitions to the
+ * simulation engine. The WeatherSystem looks up the active climate + transition
+ * matrix per step by id.
  *
- * All content lives here — never hardcoded in engine logic (rule 5). Adding
- * a new climate or weather condition means appending to the relevant arrays
- * in this directory; the engine code stays fixed.
+ * All content lives here — never hardcoded in engine logic (rule 5). Adding a
+ * new climate or weather condition means appending to the relevant arrays in
+ * this directory; the engine code stays fixed.
  *
- * PROVISIONAL per GDD §17 ("detailed climate model").
+ * PROVISIONAL per GDD §17 ("detailed climate model"); Köppen grounding per
+ * GAP-17 / DR-11.
  */
 export {
   ALL_WEATHER_EVENTS,
@@ -17,6 +19,8 @@ export {
   findWeatherEvent,
 } from './event-definitions.js';
 export { TEMPERATE_CLIMATE, ALL_CLIMATES, findClimateById } from './climate-baselines.js';
+export { KOPPEN_ZONES } from './koppen-zones.js';
+export { applyHighlandModifier, HIGHLAND_LAPSE_RATE_C_PER_KM } from './highland.js';
 export {
   ALL_TRANSITION_MATRICES,
   findTransitionMatrix,

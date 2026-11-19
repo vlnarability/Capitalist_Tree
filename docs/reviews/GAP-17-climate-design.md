@@ -75,8 +75,12 @@ Köppen-Geiger climate-zone catalog, by (a) extending `ClimateBaseline` with the
 Köppen classification + a precipitation profile + seasonality + frost/heat risk,
 (b) expanding `ALL_CLIMATES` from 1 zone to **all 31 Köppen-Geiger climate types
 + the H highland modifier**, and (c) expanding the species catalog so every
-tree-supporting zone has ≥1 real species. The existing temperate baseline becomes
-the Dfb entry (its real Köppen identity) — no behavior change for current saves.
+tree-supporting zone has ≥1 real species. The existing temperate baseline
+(`climate:temperate`) is classified **Dfb (warm)** — kept byte-identical for
+back-compat (its winter 0 °C sits at the Köppen C/D boundary; documented as a
+gameplay-tuned warm default) — and a **pure Dfb exemplar** (`climate:dfb`,
+7/19/7/-5) is added separately so all 31 Köppen types have a strict-criteria-
+matching exemplar. No behavior change for current saves.
 
 ## 3. Data model — extend `ClimateBaseline` → `ClimateZone`
 
@@ -165,15 +169,15 @@ zone's real-world exemplars, consistent with the NOAA criteria in §1.
 | **Cwa** | Humid subtropical (dry winter) | 17 | 27 | 18 | 8 | 1000 | dry-winter | wet-dry | occasional | occasional | India / China subtropical |
 | **Cwb** | Subtropical highland (dry winter) | 16 | 21 | 16 | 9 | 900 | dry-winter | wet-dry | occasional | none | Mexican highlands / Harare |
 | **Cwc** | Subtropical highland (cool summer) | 11 | 14 | 11 | 7 | 500 | dry-winter | wet-dry | occasional | none | High Andes (La Paz) |
-| **Dfa** | Humid continental (hot summer) | 9 | 22 | 9 | −4 | 850 | year-round | four-season | regular-winter | occasional | US Midwest |
-| **Dfb** | Humid continental (warm summer) | 7 | 19 | 7 | −5 | 750 | year-round | four-season | severe | none | New England / central Europe *(existing temperate baseline)* |
+| **Dfa** | Humid continental (hot summer) | 9 | 23 | 9 | −4 | 850 | year-round | four-season | regular-winter | occasional | US Midwest |
+| **Dfb** | Humid continental (warm summer) | 7 | 19 | 7 | −5 | 750 | year-round | four-season | severe | none | New England / central Europe *(pure exemplar; the warm default is `climate:temperate`)* |
 | **Dfc** | Subarctic | 2 | 14 | 1 | −12 | 450 | year-round | four-season | severe | none | Taiga / Siberia |
 | **Dfd** | Subarctic (extreme winter) | −4 | 14 | −3 | −25 | 300 | year-round | four-season | severe | none | Verkhoyansk / Yakutia |
-| **Dsa** | Continental (dry summer, hot) | 12 | 22 | 12 | 0 | 400 | dry-summer | four-season | regular-winter | occasional | Interior NW US (Walla Walla) |
-| **Dsb** | Continental (dry summer, warm) | 9 | 19 | 9 | −2 | 500 | dry-summer | four-season | severe | none | Interior Pacific NW |
+| **Dsa** | Continental (dry summer, hot) | 12 | 24 | 12 | −4 | 400 | dry-summer | four-season | regular-winter | occasional | Interior NW US valleys |
+| **Dsb** | Continental (dry summer, warm) | 9 | 19 | 9 | −4 | 500 | dry-summer | four-season | severe | none | Interior Pacific NW |
 | **Dsc** | Continental (dry summer, cool) | 3 | 14 | 2 | −10 | 350 | dry-summer | four-season | severe | none | High interior NW / subarctic |
 | **Dsd** | Continental (dry summer, extreme) | −3 | 12 | −2 | −22 | 150 | dry-summer | four-season | severe | none | Interior Yukon / BC rainshadow (rare) |
-| **Dwa** | Continental (dry winter, hot) | 8 | 22 | 8 | −6 | 550 | dry-winter | four-season | severe | occasional | Beijing / Korea |
+| **Dwa** | Continental (dry winter, hot) | 8 | 26 | 8 | −6 | 550 | dry-winter | four-season | severe | occasional | Beijing / Korea |
 | **Dwb** | Continental (dry winter, warm) | 5 | 19 | 5 | −9 | 400 | dry-winter | four-season | severe | none | Vladivostok / Manchuria |
 | **Dwc** | Subarctic (dry winter) | −3 | 14 | −2 | −22 | 250 | dry-winter | four-season | severe | none | Yakutsk |
 | **Dwd** | Subarctic (dry winter, extreme) | −15 | 14 | −13 | −40 | 150 | dry-winter | four-season | severe | none | Oymyakon (coldest inhabited) |
@@ -311,13 +315,23 @@ hostile one shows stress.
 
 ## 8. Phased implementation
 
-- **Phase 1 — climate catalog + schema (no sim behavior change).** Extend
-  `ClimateBaseline` → `ClimateZone` (additive fields incl. `supportsTrees`); add
-  all 31 zone data entries; update `ALL_CLIMATES` + `findClimateById`; the
-  existing `climate:temperate` becomes the Dfb entry. Tests assert each zone's
-  profile matches its Köppen criteria (e.g. Af's driest month ≥ 60 mm, all monthly
-  means > 18 °C; Csa's winter:summer precip ≥ 3:1; ET/EF's warmest month < 10 °C;
-  EF flagged `supportsTrees: false`). No WeatherSystem changes yet.
+- **Phase 1 — climate catalog + schema (DONE; no sim behavior change).** Extended
+  `ClimateBaseline` → `ClimateZone` (additive fields incl. `supportsTrees`);
+  added all 31 Köppen zone data entries in `packages/content/src/weather/koppen-zones.ts`
+  + the H highland modifier function (`applyHighlandModifier`, 6.5 °C/km lapse
+  rate) in `highland.ts`; updated `ALL_CLIMATES` + `findClimateById` +
+  `weather/index.ts` exports. The existing `climate:temperate` is kept
+  byte-identical (temps + hook unchanged) + classified warm-Dfb; a pure Dfb
+  exemplar (`climate:dfb`) is added separately. Tests
+  (`packages/simulation/test/climate-zones.test.ts`) assert: all 31 Köppen codes
+  present + unique ids + koppenCode↔class + `supportsTrees=false` only for EF;
+  each pure exemplar satisfies its class + precipitation-qualifier + third-letter
+  (a/b/c, h/k) criteria; the default's id/temps/hook are unchanged; the H modifier
+  applies the lapse rate + bumps frost risk + does not mutate the base. The 'd'
+  qualifier (coldest month < −38 °C) + the 'b'-vs-'c' months-over-10 °C
+  distinction + the Csa 3:1 winter:summer precip ratio need **monthly** means
+  (the schema stores 4 seasonal means) — deferred to Phase 3 when the effect
+  wiring needs them. No WeatherSystem changes.
 - **Phase 2 — species catalog expansion.** Add the species entries from §5b
   (keeping the existing White Oak + Eastern Hemlock); each species carries its
   native Köppen band. Tests verify every `supportsTrees: true` zone has ≥1
