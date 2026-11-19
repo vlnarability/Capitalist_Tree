@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { PROVISIONAL_DEFAULT_CURRENCY_ID, PROVISIONAL_DEFAULT_SPECIES_ID, PROVISIONAL_STARTING_PERSONAL_CASH_MINOR } from '../constants/provisional.js';
+import { PROVISIONAL_WEATHER_DEFAULT_CLIMATE_ID } from '../constants/resources.js';
 
 /**
  * Game configuration passed to `SimulationEngine.initialize` (TDD §4.1).
@@ -20,6 +21,16 @@ export const gameConfigSchema = z.object({
   // Starting personal cash, in minor currency units (bigint-as-string).
   startingPersonalCash: z.string().default(String(PROVISIONAL_STARTING_PERSONAL_CASH_MINOR)),
   speciesId: z.string().min(1).default(PROVISIONAL_DEFAULT_SPECIES_ID),
+  /**
+   * GAP-17 (DR-11) Phase 3: the Köppen climate zone the player starts in
+   * (e.g. `climate:temperate` warm-Dfb, `climate:bwh` hot desert,
+   * `climate:dwd` ultra-continental). The WeatherSystem reads this from
+   * `state.world.climateId` (stamped at initialize) to pick the transition
+   * matrix + the zone's `seasonalBaseTemp` feeds the temperature→growth curve.
+   * Defaults to the warm-Dfb temperate zone for back-compat with pre-GAP-17
+   * saves + the existing default starting experience.
+   */
+  climateId: z.string().min(1).default(PROVISIONAL_WEATHER_DEFAULT_CLIMATE_ID),
   currencyId: z.string().min(1).default(PROVISIONAL_DEFAULT_CURRENCY_ID),
   // Optional wall-clock createdAt timestamp (ms). Tests pass an explicit
   // value to stay deterministic; production reads Date.now() ONCE here.

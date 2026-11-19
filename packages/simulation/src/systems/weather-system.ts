@@ -91,7 +91,12 @@ export const weatherSystem: System = {
     }
 
     // 2. Look up the active climate + transition matrix.
-    const climateId = PROVISIONAL_WEATHER_DEFAULT_CLIMATE_ID;
+    // GAP-17 (DR-11) Phase 3: read the selected climate from state (stamped at
+    // initialize from `config.climateId`) instead of the hardwired default, so
+    // the per-zone transition matrix (weather-event weighting) + the zone's
+    // `seasonalBaseTemp` (→ temperature → growth curve) reflect the player's
+    // chosen Köppen zone. Falls back to the default for pre-GAP-17 states.
+    const climateId = next.world.climateId ?? PROVISIONAL_WEATHER_DEFAULT_CLIMATE_ID;
     const climate = findClimateById(climateId);
     if (!climate) {
       // Defensive — content package should always ship the default climate.

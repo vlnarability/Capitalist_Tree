@@ -35,7 +35,7 @@ import {
   PROVISIONAL_ECONOMY_MARKET_INITIAL_SUPPLY,
   PROVISIONAL_ENERGY_BATTERY_CAPACITY_DEFAULT,
 } from '@capitalist-tree/shared';
-import { findSpeciesById, ALL_MARKETS } from '@capitalist-tree/content';
+import { findSpeciesById, findClimateById, ALL_MARKETS } from '@capitalist-tree/content';
 import { seasonFromDay, SECONDS_PER_DAY } from './systems/time-system.js';
 import { Rng } from './rng.js';
 
@@ -45,6 +45,9 @@ export const DEFAULT_GAME_CONFIG: GameConfig = {
   startingDay: 0,
   startingPersonalCash: '50000', // $500.00 in minor units
   speciesId: 'species:white-oak',
+  // GAP-17 (DR-11) Phase 3: default to the warm-Dfb temperate zone (the
+  // existing default starting experience — back-compat).
+  climateId: PROVISIONAL_WEATHER_DEFAULT_CLIMATE_ID,
   currencyId: PROVISIONAL_DEFAULT_CURRENCY_ID,
 };
 
@@ -75,6 +78,18 @@ export function initializeState(config: GameConfig): GameState {
   }
   const initialBio = species.initial;
 
+  // GAP-17 (DR-11) Phase 3: validate + resolve the selected climate zone. The
+  // WeatherSystem reads `state.world.climateId` to pick the per-zone transition
+  // matrix (per-zone weather-event weighting); the zone's `seasonalBaseTemp`
+  // feeds the temperature→growth curve. Defaults to climate:temperate.
+  const climate = findClimateById(config.climateId);
+  if (!climate) {
+    throw new Error(
+      `initializeState: unknown climate id "${config.climateId}". ` +
+        `Register the climate in packages/content/src/weather/climate-baselines.ts.`,
+    );
+  }
+
   // Fork a child RNG for the WeatherSystem at game start. Persisted on
   // `state.rngStreams.weather` so the Markov sequence survives save/load
   // (TDD §18.3 — see docs/simulation.md §6 note).
@@ -85,7 +100,6 @@ export function initializeState(config: GameConfig): GameState {
   // P1 baseline; WeatherSystem will overwrite this each tick with the
   // local-temperature derivation.
   const startTempC = 18;
-  void PROVISIONAL_WEATHER_DEFAULT_CLIMATE_ID;
 
   // P3b: seed the 5 commodity markets from content definitions
   // (water, fertilizer, seeds, food, energy — GDD §8.5). Each market starts
@@ -286,6 +300,9 @@ export function initializeState(config: GameConfig): GameState {
         daysInCondition: 0,
       },
       regionId: 'region:starting-plot',
+      // GAP-17 (DR-11) Phase 3: the selected Köppen zone — WeatherSystem reads
+      // this instead of the hardwired default.
+      climateId: config.climateId,
     },
     economy: {
       monetarySupply: config.startingPersonalCash,

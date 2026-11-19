@@ -350,13 +350,45 @@ hostile one shows stress.
   species tolerate sub-zero minimums, hot-zone ≥40 °C, tropical ≥10 °C; the
   existing White Oak / Eastern Hemlock bands are climate-correct; multi-zone
   species (Ponderosa pine BSk/Dsa/Dsb, black spruce Dfc/ET) cover their full band.
-- **Phase 3 — effect wiring.** Wire the new fields into the existing systems:
-  precipitation → drought weighting (WaterSystem / the drought hook);
-  seasonality → season pattern; frost/heat risk → weather-event transition
-  weighting; the **species-dependent** temperature-response growth curve. Each is
-  a focused change to an existing system, tested against the realistic outcome (a
-  BWh date palm should drought-stress without irrigation; a Dwd Dahurian larch
-  should survive extreme cold + go dormant; a Dfa white oak should thrive).
+- **Phase 3 — effect wiring (DONE).** Wired the selected climate into the
+  existing channels so a non-default Köppen zone actually drives the sim:
+  - **Climate selection:** added `climateId` to `gameConfigSchema` +
+    `worldStateSchema` (defaults `climate:temperate`, non-breaking for saves);
+    `initializeState` validates + stamps `state.world.climateId`; the
+    WeatherSystem reads `state.world.climateId` instead of the hardwired
+    default. The default game's weather is unchanged (the hand-tuned
+    `climate:temperate` base is preserved).
+  - **Weather events (frost/heat/precipitation weighting):** a content-side
+    factory (`buildAllTransitionMatrices` in `transition-matrices.ts`) derives
+    a 4-season transition matrix for every Köppen zone from the hand-tuned
+    temperate base + additive per-condition biases drawn from the zone's
+    Köppen code + `frostRisk` + `heatStressRisk` — arid → drought/heat,
+    tropical → rain/storms, severe-winter → frost, polar → frost year-round,
+    Mediterranean → dry-summer/wet-winter. The sim is unchanged (still calls
+    `findTransitionMatrix`); all 31 zones now have stochastic matrices.
+  - **Species-dependent temperature-response growth curve:** already wired
+    (verified) — the zone's `seasonalBaseTemp[season]` → `weather.temperature`
+    (WeatherSystem) → `photosynthesisForStep` reads `weather.temperature` →
+    `temperatureFactor(temp, species.temperatureRange)` (bell curve, optimum is
+    species-specific). Dormancy emerges from the curve (growth → 0 below the
+    species' minimum), not a flag.
+  - Tests (`packages/simulation/test/climate-effect-wiring.test.ts`, 11 tests):
+    climateId stamped + validated; every zone has a stochastic matrix; the
+    WeatherSystem produces weather for a non-default climate; **realistic
+    outcomes** — a Dwd Dahurian larch survives extreme cold + goes dormant
+    (winter temp < its −15 °C minimum, temperatureFactor → 0); a Dfa white oak
+    thrives (alive + healthy + growing, summer temp in its productive range);
+    a BWh date palm's freshwater supply is drawn down below an Af rainforest's
+    (the desert drought, via the matrix-driven rainfall).
+  - **Deferred follow-ups:** (a) the precipitation → **tree-water-uptake**
+    channel — the tree's `water.stored` is not yet capped by the regional
+    freshwater supply, so a drought-tolerant species (the date palm) fills to
+    near-capacity even in BWh + doesn't show tree-level stress (the drought
+    shows at the freshwater level, not yet the stress flag); (b) the
+    `seasonality` → **season-calendar** channel — the 4-season calendar
+    (spring/summer/autumn/winter) is still fixed; tropical wet-dry + polar
+    short-growing-window patterns are not yet modeled (the 4-season calendar
+    suffices for the realistic-outcome tests).
 - **Phase 4 — zone + species selection UX.** The climate + species picker (start
   screen or region panel), grouped by Köppen class, with the profile display +
   native-species list. Highland elevation slider with live temperature preview +

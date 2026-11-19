@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { nutrientStateSchema } from './tree.js';
 import { weatherStateSchema } from './weather.js';
 import { PROVISIONAL_ENERGY_BATTERY_CAPACITY_DEFAULT } from '../constants/environment.js';
+import { PROVISIONAL_WEATHER_DEFAULT_CLIMATE_ID } from '../constants/resources.js';
 
 export const speciesPopulationSchema = z.object({
   speciesId: z.string(),
@@ -249,5 +250,14 @@ export const worldStateSchema = z.object({
   // PROVISIONAL: regional granularity is unresolved (GDD §17). P0 has one
   // implicit region. P6/P9 will expand this into a region map.
   regionId: z.string().min(1),
+  /**
+   * GAP-17 (DR-11) Phase 3: the active Köppen climate zone id
+   * (e.g. `climate:temperate`, `climate:bwh`). Stamped at initialize from
+   * `config.climateId`; the WeatherSystem reads it to pick the transition
+   * matrix (per-zone weather-event weighting) + the zone's `seasonalBaseTemp`
+   * feeds the temperature→growth curve. Defaults to the warm-Dfb temperate
+   * zone for back-compat with pre-GAP-17 saves (which have no climateId).
+   */
+  climateId: z.string().min(1).default(PROVISIONAL_WEATHER_DEFAULT_CLIMATE_ID),
 });
 export type WorldState = z.infer<typeof worldStateSchema>;
