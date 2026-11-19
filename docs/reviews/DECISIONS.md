@@ -499,6 +499,87 @@ a second tab.
 
 ---
 
+## DR-11: Climate zones — realistic Köppen-Geiger model (design)
+
+**Context.** GAP-17: the climate system is currently a single provisional
+baseline (`TEMPERATE_CLIMATE`, a Dfb stand-in). User direction: make climate
+zones as realistic as possible, grounded in the Köppen-Geiger classification
+(Kottek et al. 2006 — the attached world map; NOAA Jetstream Köppen
+subdivisions; NatGeo all-about-climate).
+
+**Decision (design).** Extend `ClimateBaseline` → `ClimateZone` with the Köppen
+code/class, a realistic **precipitation profile** (annual mm + pattern + driest
+month — the axis the current type lacks), seasonality, and frost/heat risk.
+Expand `ALL_CLIMATES` from 1 to **17 curated zones** covering every Köppen class
+where trees grow (Af/Am/Aw, BWh/BWk/BSh/BSk, Cfa/Cfb/Csa/Csb/Cwa, Dfa/Dfb/Dfc/
+Dwa, ET) + an H highland elevation modifier (6.5 °C/km lapse rate). Exclude EF
+(ice cap — no trees). The existing temperate baseline becomes the Dfb entry — no
+behavior change for current saves.
+
+**Realism principle.** Climate affects the sim **only through existing channels**
+(temperature-response growth curve, precipitation-vs-evapotranspiration water
+balance, season pattern, weather-event weighting, cold-winter dormancy). No new
+"climate multiplier" — a desert is hard because of low water + heat, not a
+hardcoded penalty. Climate data is content (rule 5); the sim reads it through
+existing systems (rule 6).
+
+Full design (data model, the 17-zone catalog with realistic temp/precip/season
+profiles, effect mapping, UX, 4-phase implementation, realism citations):
+[`docs/reviews/GAP-17-climate-design.md`](GAP-17-climate-design.md).
+Implementation phases follow; Phase 1 (schema extension + zone data + tests) is
+the next step once the zone list is confirmed.
+
+---
+
+## DR-12: Cosmetic monetization — catalog-based, cosmetic-only (approved direction)
+
+**Context.** GAP-28: the cosmetic ideas list (DR-3 cosmetic-only) is approved as
+a **design direction** — implementation tasks remain open. User approved the
+first pack ("The Forest Collection": Botanical Engraving currency + Woodland UI
+theme + Forest Morning audio) with one adjustment: build a **small Cosmetic
+Catalog** rather than scattered individual implementations.
+
+**Decision (direction).** Cosmetics are strictly appearance / presentation /
+sound — no gameplay advantage, no time-skips (DR-3). Implemented through a
+**catalog system independent of the simulation engine**: stable cosmetic IDs,
+`CosmeticDefinition` (category, name, description, assets, unlock method,
+accessibility metadata) + `CosmeticState` (selections + owned IDs as references,
+never properties embedded in simulation). Cosmetics are never imported into the
+simulation package — a clean guarantee that changing selections cannot change
+simulation outcomes.
+
+**Accessibility is free, not monetized.** Default / dark / light / high-contrast
+themes, reduced-motion, and font scaling/readability are free. Decorative
+textures + alternate palettes may be cosmetic content. Audio packs have
+independent volume controls (music / ambient / SFX) and replace assets without
+affecting event timing. Reduced-motion governs ALL cosmetic animation systems
+(currency shimmer, particles, wildlife, animated backgrounds, UI transitions) —
+replacing animations with static indicators where appropriate, not just
+disabling feedback.
+
+**Boundary guardrails.** The visual representation of the simulated tree must
+never lie — a cosmetic may stylize the tree but must not hide whether it is
+unhealthy, depleted, dying, or dead. Cosmetic weather must never alter water /
+growth / environmental values. (Full guardrail table in GAP-28-cosmetics.md.)
+
+**Phasing.** Phase 1: cosmetic infrastructure (catalog, ownership/unlock,
+selection persistence, settings panel, sim-disconnection). Phase 2: first pack
+(Forest Collection — 3 currency visuals + 1 UI theme + 1 ambient track, with
+reduced-motion + audio controls). Phase 3: free achievement/ending unlocks. Phase
+4: premium packs only if commercially released (no paywalled objectives /
+endings / progression / accessibility; no purchase requirement for core visual
+identity). No real storefront / payment / entitlement verification at this stage
+— the catalog supports the *concept* of paid cosmetics without processing
+purchases.
+
+Full direction (catalog interfaces, accessibility policy, audio controls,
+reduced-motion scope, boundary guardrail table, phased plan, Forest Collection
+spec): [`docs/reviews/GAP-28-cosmetics.md`](GAP-28-cosmetics.md) §"Approved
+direction (DR-12)". **GAP-28 is sufficiently designed to close as a design-
+direction GAP; implementation tasks remain open. Focus stays on GAP-17.**
+
+---
+
 ## Architectural observation
 
 These decisions establish a clear direction: **the game is a single-player,
