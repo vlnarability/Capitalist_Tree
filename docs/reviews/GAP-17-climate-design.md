@@ -381,14 +381,22 @@ hostile one shows stress.
     a BWh date palm's freshwater supply is drawn down below an Af rainforest's
     (the desert drought, via the matrix-driven rainfall).
   - **Deferred follow-ups:** (a) the precipitation → **tree-water-uptake**
-    channel — the tree's `water.stored` is not yet capped by the regional
-    freshwater supply, so a drought-tolerant species (the date palm) fills to
-    near-capacity even in BWh + doesn't show tree-level stress (the drought
-    shows at the freshwater level, not yet the stress flag); (b) the
-    `seasonality` → **season-calendar** channel — the 4-season calendar
-    (spring/summer/autumn/winter) is still fixed; tropical wet-dry + polar
-    short-growing-window patterns are not yet modeled (the 4-season calendar
-    suffices for the realistic-outcome tests).
+    channel — the tree's `water.stored` refills from the per-plot SOIL pool
+    (Liebig-limited by soil water + rainfall in `resources/water.ts
+    computeWaterBalance`), which is decoupled from the regional freshwater
+    reserve by the soil-water capacity cap; so a drought-tolerant species (the
+    date palm) fills to near-capacity even in BWh + doesn't show tree-level
+    stress (the drought shows at the regional freshwater level, not the tree's
+    stress flag — verified: a mature date palm's `water.stored` is ~identical in
+    BWh vs Af after several summer days). Coupling the tree's uptake to the
+    regional freshwater, OR adding a climate-level precipitation-vs-
+    evapotranspiration stress factor (§6 bullet 2: "when demand > supply, the
+    tree experiences drought stress"), is a Phase-5 water-balance refinement
+    that must preserve the mass-conservation invariant the resource tests
+    assert; (b) the `seasonality` → **season-calendar** channel — the 4-season
+    calendar (spring/summer/autumn/winter) is still fixed; tropical wet-dry +
+    polar short-growing-window patterns are not yet modeled (the 4-season
+    calendar suffices for the realistic-outcome tests).
 - **Phase 4 — zone + species selection UX (DONE).** The `ClimatePicker` modal
   (`apps/web/components/common/ClimatePicker.tsx`), opened from the New Game
   button (replacing the hardcoded `DEFAULT_GAME_CONFIG` boot). The catalog is
