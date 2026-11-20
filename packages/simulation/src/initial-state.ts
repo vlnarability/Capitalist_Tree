@@ -68,7 +68,18 @@ export function initializeState(config: GameConfig): GameState {
   // recomputation `day = floor(elapsedSeconds / SECONDS_PER_DAY)` is stable
   // across the first step.
   const startElapsedSeconds = day * SECONDS_PER_DAY;
-  const season = seasonFromDay(day);
+  // Resolve the climate up front: the initial season (below) + the environment
+  // setup (later) both need it. GAP-17 follow-up (b): the season follows the
+  // climate's seasonality (wet-dry / polar / four-season day-count profiles —
+  // see time-system.ts `seasonFromDay`).
+  const climate = findClimateById(config.climateId);
+  if (!climate) {
+    throw new Error(
+      `initializeState: unknown climate id "${config.climateId}". ` +
+        `Register the climate in packages/content/src/weather/climate-baselines.ts.`,
+    );
+  }
+  const season = seasonFromDay(day, climate.seasonality);
   const createdAt = config.createdAt ?? 0;
 
   const species = findSpeciesById(config.speciesId);
@@ -83,14 +94,8 @@ export function initializeState(config: GameConfig): GameState {
   // GAP-17 (DR-11) Phase 3: validate + resolve the selected climate zone. The
   // WeatherSystem reads `state.world.climateId` to pick the per-zone transition
   // matrix (per-zone weather-event weighting); the zone's `seasonalBaseTemp`
-  // feeds the temperature→growth curve. Defaults to climate:temperate.
-  const climate = findClimateById(config.climateId);
-  if (!climate) {
-    throw new Error(
-      `initializeState: unknown climate id "${config.climateId}". ` +
-        `Register the climate in packages/content/src/weather/climate-baselines.ts.`,
-    );
-  }
+  // feeds the temperature→growth curve. Defaults to climate:temperate. (The
+  // climate was resolved above, before the initial season.)
 
   // Fork a child RNG for the WeatherSystem at game start. Persisted on
   // `state.rngStreams.weather` so the Markov sequence survives save/load

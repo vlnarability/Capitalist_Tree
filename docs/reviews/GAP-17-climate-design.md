@@ -409,10 +409,32 @@ hostile one shows stress.
     water). Tests: `climate-water-stress.test.ts` (7 — default factor 1, BWh
     < 1, Af = 1, BWh < Af, native discount, sapling < mature, zero-demand
     guard) + the resource-conservation tests still pass (invariant preserved).
-  - **Follow-up (b) deferred — `seasonality` → season-calendar channel:** the
-    4-season calendar (spring/summer/autumn/winter) is still fixed; tropical
-    wet-dry + polar short-growing-window patterns are not yet modeled (the
-    4-season calendar suffices for the realistic-outcome tests).
+  - **Follow-up (b) DONE — `seasonality` → season-calendar channel.** The
+    season calendar was previously a fixed 4-season quarterly cycle
+    (spring/summer/autumn/winter, 30 days each) regardless of the climate's
+    `seasonality` field (which was data-only). Closed by making `seasonFromDay(day,
+    seasonality)` climate-aware (`systems/time-system.ts`): a per-seasonality
+    day-count profile (`SEASON_DURATIONS_BY_SEASONALITY`, [spring, summer, autumn,
+    winter] summing to `PROVISIONAL_DAYS_PER_YEAR` = 120):
+      - **four-season** `[30,30,30,30]` — equal quarters (the historical calendar,
+        preserved exactly; the default + backward-compat fallback).
+      - **wet-dry** `[20,30,20,50]` — a wet season (spring onset + summer peak) +
+        a dry season (autumn onset + winter peak), dry LONGER — models the
+        tropical savanna / desert asymmetry; drought-deciduous trees dormant in
+        the long winter (= dry peak).
+      - **polar** `[15,30,15,60]` — a short growing window (brief spring + short
+        summer + brief autumn = 60 days) + a long dormant winter (60 days).
+    The Season type stays the 4 temperate names (consumers — deciduous winter
+    dormancy `season === 'winter'`, seasonal foliage condition — read `clock.season`
+    unchanged). Threaded via `seasonalityOf(state)` (looks up the climate via
+    `findClimateById(state.world.climateId)` in the TimeSystem tick) +
+    `initial-state.ts` (passes `climate.seasonality` at init). The
+    `events/random.ts` local `seasonFromDay` (a pre-existing 365-day-year copy,
+    inconsistent with the 120-day game year) is left for a future cleanup.
+    Tests: `seasonality-calendar.test.ts` (10 — four-season default preserved,
+    wet-dry/polar profiles + durations, winter-length comparisons, sim-level
+    polar/wet-dry vs temperate season at day 60/70, advancing polar long winter).
+    GAP-17 is now fully closed (both Phase-3 deferred follow-ups done).
 - **Phase 4 — zone + species selection UX (DONE).** The `ClimatePicker` modal
   (`apps/web/components/common/ClimatePicker.tsx`), opened from the New Game
   button (replacing the hardcoded `DEFAULT_GAME_CONFIG` boot). The catalog is
