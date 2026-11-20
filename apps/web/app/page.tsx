@@ -90,6 +90,7 @@ import { BiologyPanel, EnvironmentPanel } from '../components/environment';
 import {
   TransactionsPanel,
   HarvestControls,
+  SeedControls,
   PurchaseControls,
   CurrencyCosmeticPicker,
 } from '../components/economy';
@@ -396,6 +397,9 @@ export default function HomePage(): ReactElement {
           </Panel>
           <Panel title="Harvest" icon="🍃" tone="emerald" hint="GDD §5.4">
             <HarvestControls />
+          </Panel>
+          <Panel title="Genetic Legacy" icon="🌰" tone="amber" hint="GDD §11.2">
+            <SeedControls />
           </Panel>
           <Panel title="Markets" icon="🛒" hint="GDD §8.5">
             <PurchaseControls />

@@ -47,6 +47,7 @@ import type {
   HarvestLeavesAction,
   HireEmployeesAction,
   LayOffEmployeesAction,
+  PlantSeedAction,
   LivingExpenseCategory,
   OperateBusinessAction,
   PayExpenseAction,
@@ -143,6 +144,27 @@ export function harvest(treeId: string, requestedLeaves: number): HarvestLeavesA
   return {
     type: 'harvest-leaves',
     payload: { treeId, requestedLeaves },
+  };
+}
+
+/**
+ * Build a `plant-seed` action (GAP-19 / GDD §11.2 — Genetic Legacy: the seed
+ * production → planting loop). `treeId` MUST match the original tree's id
+ * (`'original'`) in P1. `tick` is the simulation second at which the planting
+ * runs (the event `at` stamp — pass `clock.elapsedSeconds`). The handler
+ * consumes one seed from `tree.seeds` + credits genetic-legacy points; throws
+ * `InsufficientSeedsError` (surfaced to the player) if the tree has no seeds.
+ */
+export function plantSeed(treeId: string, tick: number): PlantSeedAction {
+  if (!treeId) {
+    throw new Error('plantSeed: treeId must be a non-empty string.');
+  }
+  if (!Number.isInteger(tick) || tick < 0) {
+    throw new Error(`plantSeed: tick must be a non-negative integer (got ${tick}).`);
+  }
+  return {
+    type: 'plant-seed',
+    payload: { treeId, tick },
   };
 }
 
