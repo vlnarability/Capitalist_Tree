@@ -371,6 +371,24 @@ Per RV7's P11/P12/P13 phasing. Titles and one-paragraph scope only; full prompts
 >   sudo to apt-install them; CI's `--with-deps` provisions them on the runner.
 >   The smoke spec uses only standard `getByTestId`/`click`/`fill`/`reload` APIs
 >   — no browser-specific code — so it's expected to pass on all three.)
+>   **UPDATE (this turn): the smoke spec now PASSES locally (chromium, ~13s).**
+>   It had been failing since P11 (W21) — four latent blockers all masked by the
+>   first: (1) `useSimulationLoop.boot()` AWAITED `navigator.locks.request`,
+>   whose callback returns a never-resolving Promise to "hold the lock for the
+>   session" → the await blocked forever → `simState` never published → stuck on
+>   "Booting engine…". Fix: fire the lock request WITHOUT awaiting (background),
+>   hold via a `releaseLock` callback, release on cleanup. (2) The GAP-33
+>   WelcomePanel (one-time tutorial modal) overlayed the game-screen + intercepted
+>   clicks — pre-dismissed via `addInitScript(localStorage 'ct-welcome-dismissed')`
+>   in the spec. (3) The OfflineModal ("While You Were Away") popped on every
+>   reload even with a 0-chunk catch-up ("Simulated 0 sim days") — now parked
+>   only when `summary.chunksRun > 0` (real UX bug). (4) Step 9's
+>   `notifications-panel-container` `toBeVisible()` was a false negative (RV6-5:
+>   the container intentionally collapses to 0-height when empty) → `toBeAttached()`.
+>   Plus a proactive `ConcurrentTabGate` initializer fix (always `'acquiring'` —
+>   reading `navigator` in `useState` caused an SSR/client hydration mismatch on
+>   Node 20 CI) + the CI Node 20→22 bump below. Local firefox/webkit still can't
+>   run here (missing system libs) — CI's `--with-deps` provisions them.
 > - **14 (P13-D): REVISED.** Multiplayer removed (DR-2); monetization scoped
 >   cosmetic-only (DR-3). Remaining P13-D work is cosmetic-content plumbing.
 > - **NEW prompts added by the decisions:** DR-6 (RNG fork versioning +

@@ -142,6 +142,7 @@ export function useSimulationLoop(
   // --------------------------------------------------------------------------
   useEffect(() => {
     let cancelled = false;
+    let releaseLock: (() => void) | null = null;
     const store = useGameStore.getState();
 
     async function boot(): Promise<void> {
@@ -151,28 +152,42 @@ export function useSimulationLoop(
       // other's saves. If the lock is unavailable (another tab holds it),
       // surface a notification but continue booting read-only-ish (the player
       // can still see the state; saving will be the losing tab's problem).
+      //
+      // The lock is held for the session lifetime by keeping the callback's
+      // Promise pending until cleanup calls `releaseLock()`. CRITICALLY, the
+      // request is NOT awaited — awaiting a never-resolving Promise would
+      // block the boot forever (simState would never publish + the page would
+      // stay on "Booting engine…"). Fire the request in the background +
+      // let the boot proceed to load/initialize/publish.
       if (typeof navigator !== 'undefined' && navigator.locks) {
         try {
-          await navigator.locks.request(
-            'capitalist-tree-session',
-            { mode: 'exclusive', ifAvailable: true },
-            async (lock) => {
-              if (lock === null) {
-                useGameStore.getState().pushNotification({
-                  severity: 'warning',
-                  code: 'concurrent-tab-detected',
-                  message:
-                    'Another tab is already running this game. Progress here may be overwritten. Close the other tab to avoid conflicts.',
-                  at: 0,
+          navigator.locks
+            .request(
+              'capitalist-tree-session',
+              { mode: 'exclusive', ifAvailable: true },
+              async (lock) => {
+                if (lock === null) {
+                  useGameStore.getState().pushNotification({
+                    severity: 'warning',
+                    code: 'concurrent-tab-detected',
+                    message:
+                      'Another tab is already running this game. Progress here may be overwritten. Close the other tab to avoid conflicts.',
+                    at: 0,
+                  });
+                  return; // no lock held — nothing to release.
+                }
+                if (cancelled) return; // unmounted before the lock was granted.
+                // Hold the lock until cleanup resolves this Promise.
+                await new Promise<void>((resolve) => {
+                  releaseLock = resolve;
                 });
-              }
-              // Hold the lock for the session lifetime — the Promise stays
-              // pending until the tab closes / the effect tears down.
-              return new Promise<void>(() => {});
-            },
-          );
+              },
+            )
+            .catch(() => {
+              // Lock API threw (permissions, aborted) — non-fatal, continue.
+            });
         } catch {
-          // Lock API unavailable or blocked — non-fatal, continue.
+          // Lock API unavailable — non-fatal, continue.
         }
       }
       let state: GameState | null = null;
@@ -207,7 +222,12 @@ export function useSimulationLoop(
         );
         useGameStore.getState().setCatchUpProgress(null); // clear on completion
         state = catchUpResult.state;
-        if (catchUpResult.summary !== null) {
+        // P6d2: only surface the "While You Were Away" modal when the catch-up
+        // actually simulated something (chunksRun > 0). A fresh save reloaded
+        // within the chunk threshold produces a 0-chunk summary — popping a
+        // "Simulated 0 sim days in 0 chunks" modal on every save/reload is
+        // noise (and it blocks the e2e smoke test's post-reload assertions).
+        if (catchUpResult.summary !== null && catchUpResult.summary.chunksRun > 0) {
           useGameStore.getState().setPendingOfflineSummary(catchUpResult.summary);
         }
       }
@@ -223,6 +243,7 @@ export function useSimulationLoop(
     void boot();
     return () => {
       cancelled = true;
+      releaseLock?.(); // release the held session lock on unmount.
     };
   }, []);
 

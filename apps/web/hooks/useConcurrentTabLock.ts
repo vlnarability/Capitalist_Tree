@@ -45,10 +45,14 @@ export type ConcurrentTabLockState =
 const LOCK_NAME = 'ct-active-tab';
 
 export function useConcurrentTabLock(): ConcurrentTabLockState {
-  const [state, setState] = useState<ConcurrentTabLockState>(() => {
-    if (typeof navigator === 'undefined' || !navigator.locks) return 'unsupported';
-    return 'acquiring';
-  });
+  // Initial state is always 'acquiring' (the loading screen). The navigator
+  // check is deferred to the useEffect below — reading `navigator` in the
+  // initializer would SSR-render 'unsupported' (Node has no navigator.locks)
+  // while the client hydrates as 'acquiring', a hydration mismatch (React
+  // warns + re-renders, which can delay the lock-acquisition useEffect + made
+  // the e2e flaky on Node 20 CI). The useEffect transitions to 'unsupported'
+  // / 'active' / 'blocked' on mount.
+  const [state, setState] = useState<ConcurrentTabLockState>('acquiring');
 
   useEffect(() => {
     if (typeof navigator === 'undefined' || !navigator.locks) {

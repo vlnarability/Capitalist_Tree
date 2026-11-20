@@ -49,7 +49,15 @@ test.describe('P5d smoke — gameplay loop', () => {
   test('new game → buy water → apply → advance time → harvest → save → reload → restore', async ({
     page,
   }) => {
-    // 1. Boot.
+    // 1. Boot. Pre-dismiss the one-time GAP-33 "Getting Started" welcome
+    //    modal (localStorage `ct-welcome-dismissed`) so it doesn't overlay
+    //    the game-screen + intercept clicks — this smoke test exercises the
+    //    gameplay loop, not the tutorial. `addInitScript` runs before each
+    //    navigation's scripts, so the flag is set before the page boots (and
+    //    re-applied on the reload step below).
+    await page.addInitScript(() =>
+      window.localStorage.setItem('ct-welcome-dismissed', '1'),
+    );
     await page.goto('/');
     await expect(page.getByTestId('game-screen')).toBeVisible({ timeout: 30_000 });
 
@@ -138,8 +146,12 @@ test.describe('P5d smoke — gameplay loop', () => {
 
     // 9. Notifications panel doesn't render by default (no actionable
     //    notifications on a healthy save). Sanity-check the container is
-    //    in the DOM but the panel itself is collapsed (null).
-    await expect(page.getByTestId('notifications-panel-container')).toBeVisible();
+    //    in the DOM (attached) but the panel itself is collapsed (null).
+    //    The container intentionally collapses to 0-height when empty
+    //    (page.tsx: "no reserved space, no empty UI"), so we assert
+    //    `toBeAttached` (in the DOM), not `toBeVisible` (a 0-height empty
+    //    wrapper is not "visible" to Playwright).
+    await expect(page.getByTestId('notifications-panel-container')).toBeAttached();
     await expect(page.getByTestId('notifications-panel')).toHaveCount(0);
   });
 });
