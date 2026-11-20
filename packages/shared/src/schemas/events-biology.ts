@@ -121,3 +121,33 @@ export const seedDispersedEventSchema = z.object({
   }),
 });
 export type SeedDispersedEvent = z.infer<typeof seedDispersedEventSchema>;
+
+/**
+ * `seed-planted` event (GAP-19 / GDD §11.2 — Genetic Legacy: the seed production
+ * → planting loop).
+ *
+ * Emitted by the `plant-seed` action handler when the player plants a seed: the
+ * tree's `seeds` count is decremented by 1 + `PROVISIONAL_PROGRESSION_LEGACY_
+ * POINTS_PER_SEED` genetic-legacy points are credited to
+ * `prestige.geneticLegacyPoints`. Carries the seeds consumed (always 1), the
+ * tree's remaining seed count, the points gained, + the resulting genetic-legacy
+ * balance (bigint minor-units string — TDD §10.1, same precision discipline as
+ * `research-unlocked` / `generation-established`).
+ */
+export const seedPlantedEventSchema = z.object({
+  type: z.literal('seed-planted'),
+  at: z.number().int().nonnegative(),
+  payload: z.object({
+    /** The tree that planted the seed (consumed it from its `seeds` accumulator). */
+    treeId: z.string().min(1),
+    /** Seeds consumed by THIS planting (always 1 — one seed per action). */
+    seedsConsumed: z.number().int().positive(),
+    /** The tree's remaining seed count after this action. */
+    seedsRemaining: z.number().int().nonnegative(),
+    /** Genetic-legacy points gained this action (the per-seed reward). */
+    legacyPointsGained: z.number().int().nonnegative(),
+    /** The prestige balance after the credit (bigint minor-units string). */
+    geneticLegacyPointsAfter: z.string(),
+  }),
+});
+export type SeedPlantedEvent = z.infer<typeof seedPlantedEventSchema>;

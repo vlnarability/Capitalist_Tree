@@ -17,6 +17,7 @@ import type {
   GameState,
   GameAction,
   HarvestLeavesAction,
+  PlantSeedAction,
   HarvestResult,
   SimulationEvent,
   SetSpeedAction,
@@ -35,6 +36,7 @@ import {
   PROVISIONAL_BIOLOGY_DEATH_DEFOLIATION_WINDOW_DAYS,
   PROVISIONAL_BIOLOGY_WEAR_PER_DAMAGE,
   PROVISIONAL_RESOURCE_SOIL_WATER_CAPACITY,
+  PROVISIONAL_PROGRESSION_LEGACY_POINTS_PER_SEED,
   UnknownActionError,
 } from '@capitalist-tree/shared';
 import type { SystemResult } from '../systems/system.js';
@@ -84,6 +86,7 @@ import {
   prestigeResetHandler,
   recordHistoricalEventHandler,
 } from '../progression/actions.js';
+import { InsufficientSeedsError } from '../progression/errors.js';
 import {
   scheduleEventHandler,
   cancelEventHandler,
@@ -301,6 +304,75 @@ const harvestLeavesHandler: ActionListener<HarvestLeavesAction> = (state, action
 };
 
 /**
+ * `plant-seed` action handler (GAP-19 / GDD §11.2 — Genetic Legacy: the seed
+ * production → planting loop). Consumes ONE seed from the tree's `seeds`
+ * accumulator + credits `PROVISIONAL_PROGRESSION_LEGACY_POINTS_PER_SEED`
+ * genetic-legacy points to `prestige.geneticLegacyPoints` (the prestige currency
+ * that funds `unlock-research`). A mid-generation earning mechanism that
+ * supplements the generation-end prestige bonus — gives the player a reason to
+ * accumulate + plant seeds between prestige resets.
+ *
+ *   1. Resolves the tree (P1: only the original tree — rejects if `treeId`
+ *      doesn't match `originalTree.id`).
+ *   2. Verifies `tree.seeds >= 1` (rejects with `InsufficientSeedsError` if 0 —
+ *      the tree has produced no seeds to plant yet).
+ *   3. Decrements `tree.seeds` by 1.
+ *   4. Credits the per-seed points to `geneticLegacyPoints` (bigint string
+ *      arithmetic — TDD §10.1, same precision discipline as unlock-research).
+ *   5. Emits a `seed-planted` event carrying the seeds consumed, the seeds
+ *      remaining, the points gained, + the resulting balance.
+ *
+ * A dead tree's stored seeds remain plantable (the genetic legacy persists after
+ * death — GDD §16.3: tree death does not end the game; the lineage continues).
+ *
+ * Pure: returns a new state + events. Deterministic given (state, action).
+ */
+const plantSeedHandler: ActionListener<PlantSeedAction> = (state, action) => {
+  const next: GameState = {
+    ...state,
+    originalTree: { ...state.originalTree },
+    progression: {
+      ...state.progression,
+      prestige: { ...state.progression.prestige },
+    },
+  };
+  const tree = next.originalTree as TreeState;
+
+  // Resolve the tree (P1: only the original tree can plant a seed).
+  if (action.payload.treeId !== tree.id) {
+    throw new Error(
+      `plant-seed: unknown treeId "${action.payload.treeId}". P1 only supports the original tree ("${tree.id}").`,
+    );
+  }
+  // Gate: the tree must have produced at least one seed (the BiologySystem
+  // seed-dispersed flow, fed by alloc.reproduction, gated on the fruiting age).
+  if (tree.seeds < 1) {
+    throw new InsufficientSeedsError(tree.id, tree.seeds);
+  }
+
+  // Consume one seed + credit the per-seed genetic-legacy points (bigint string
+  // arithmetic — TDD §10.1). The points fund unlock-research (GDD §11.2).
+  const seedsRemaining = tree.seeds - 1;
+  tree.seeds = seedsRemaining;
+  const gained = PROVISIONAL_PROGRESSION_LEGACY_POINTS_PER_SEED;
+  const balanceAfter = BigInt(next.progression.prestige.geneticLegacyPoints) + BigInt(gained);
+  next.progression.prestige.geneticLegacyPoints = balanceAfter.toString(10);
+
+  const event: SimulationEvent = {
+    type: 'seed-planted',
+    at: action.payload.tick,
+    payload: {
+      treeId: tree.id,
+      seedsConsumed: 1,
+      seedsRemaining,
+      legacyPointsGained: gained,
+      geneticLegacyPointsAfter: next.progression.prestige.geneticLegacyPoints,
+    },
+  };
+  return { state: next, events: [event] };
+};
+
+/**
  * `apply-water` action handler (P2 — TDD §8.1).
  *
  * Adds water to the soil water pool (capped at soil water capacity; excess
@@ -476,6 +548,7 @@ export const actionHandlers: Record<string, ActionListener> = {
   'no-op': noOp,
   'set-speed': setSpeed as ActionListener,
   'harvest-leaves': harvestLeavesHandler as ActionListener,
+  'plant-seed': plantSeedHandler as ActionListener,
   'apply-water': applyWaterHandler as ActionListener,
   'apply-fertilizer': applyFertilizerHandler as ActionListener,
   'purchase': purchaseHandler as ActionListener,

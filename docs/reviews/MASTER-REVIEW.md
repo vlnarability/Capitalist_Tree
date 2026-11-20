@@ -268,12 +268,21 @@ Per RV7's P11/P12/P13 phasing. Titles and one-paragraph scope only; full prompts
 >   girth-heavy 0.40).
 > - **8 (P12-B pests/disease/reproduction): PARTIAL.** Pests + disease
 >   infestations (GAP-18) done (b6ffa61) — they drive the P12-C wear path.
->   Reproduction/seeding (GAP-19) remains: a large feature (seed production +
->   planting flow + new action surface), and gated on `matureAgeDays` (24000 for
->   White Oak, ~66yr) — the tree never reaches maturity in a typical sim
->   (~1-2yr), so reproduction needs a design decision on the maturity threshold
->   (e.g. fruiting at a fraction of matureAge, or vegetative reproduction)
->   before implementation is useful.
+>   Reproduction/seeding (GAP-19) substantially complete. Seed PRODUCTION done
+>   (the BiologySystem fills `seedGrowthProgress` from `alloc.reproduction`,
+>   emits `seed-dispersed` when it reaches 1.0 past the fruiting gate
+>   `matureAgeDays × PROVISIONAL_BIOLOGY_REPRODUCTION_FRUITING_AGE_FRACTION` (0.1)
+>   ≈ 6.6 sim-yr for White Oak — the design decision on the maturity threshold,
+>   documented in `constants/biology.ts`; tested in `reproduction.test.ts`). The
+>   PLANTING flow + new action surface done: the `plant-seed` action consumes a
+>   seed → credits `PROVISIONAL_PROGRESSION_LEGACY_POINTS_PER_SEED` genetic-legacy
+>   points (the prestige currency funding `unlock-research`), a mid-generation
+>   earning mechanism supplementing the generation-end prestige bonus; emits
+>   `seed-planted`; throws `InsufficientSeedsError` when the tree has no seeds;
+>   tested in `plant-seed-action.test.ts`. The full "offspring tree" (multi-tree)
+>   concept is handled by `prestige-reset` (establishes a new generation). The
+>   `seasonality` → season-calendar refinement (tropical wet-dry / polar
+>   short-growing-window) remains deferred (the 4-season calendar suffices).
 > - **9 (P12-C balance re-tuning): PARTIAL.** The chronic-neglect mortality
 >   path is done + meets the DR-1 6-12mo neglect-death target: P12-C
 >   weather→defoliation (739d4df) + the wear redesign (deaf446: monotonic wear
