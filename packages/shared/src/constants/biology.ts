@@ -293,9 +293,16 @@ export type AllocationWeights = typeof PROVISIONAL_BIOLOGY_ALLOCATION_WEIGHTS;
 // When it reaches 1.0 AND the tree is past its fruiting age, the BiologySystem
 // emits a `seed-dispersed` event, increments `tree.seeds` by SEED_YIELD, and
 // resets the accumulator to 0. The fruiting gate is a fraction of the species'
-// `matureAgeDays` (White Oak's 24000 d ≈ 66 sim-yr is unreachable in normal
-// play, so fruiting at 0.1× ≈ 6.6 sim-yr makes the mechanic reachable — a
-// documented design decision; tunable).
+// `matureAgeDays`. NOTE: `matureAgeDays = matureAgeYears × 120` (SIM days, not
+// calendar), so White Oak's 24000 d = 200 sim-yr (the original "≈ 66 sim-yr"
+// comment confused calendar + sim years). At 0.1× the gate was 2400 d = 20
+// sim-yr — UNREACHABLE in any normal sim (the dr1-long-run is 5 sim-yr), so the
+// seed production never fired + the plant-seed action had nothing to plant.
+// Lowered to 0.01× → 240 d = 2 sim-yr for White Oak (date palm 60 d, saxaul 96 d
+// — fast-maturing species fruit earlier), reachable in a typical long play
+// session + the dr1-long-run. Still a late-game mechanic (GDD §11.2 Genetic
+// Legacy: saplings have little surplus, so they barely invest until established).
+// Tunable.
 //
 // Balance: a mature tree with ~50 eu/tick surplus × 0.05 weight = 2.5 eu/tick
 // into reproduction → 500 / 2.5 = 200 ticks to a seed (≈200 d at 1-day steps,
@@ -305,8 +312,9 @@ export type AllocationWeights = typeof PROVISIONAL_BIOLOGY_ALLOCATION_WEIGHTS;
 /** Energy (eu) required to fill `seedGrowthProgress` from 0 to 1 (one seed).
  * @provisional. */
 export const PROVISIONAL_BIOLOGY_REPRODUCTION_SEED_ENERGY_COST_EU = 500;
-/** Fruitng age = species.matureAgeDays × this fraction. @provisional. */
-export const PROVISIONAL_BIOLOGY_REPRODUCTION_FRUITING_AGE_FRACTION = 0.1;
+/** Fruiting age = species.matureAgeDays × this fraction. @provisional.
+ *  0.01 → White Oak 240 d (2 sim-yr), reachable in normal play (was 0.1 → 20 sim-yr, unreachable). */
+export const PROVISIONAL_BIOLOGY_REPRODUCTION_FRUITING_AGE_FRACTION = 0.01;
 /** Seeds produced per dispersal event. @provisional. */
 export const PROVISIONAL_BIOLOGY_REPRODUCTION_SEED_YIELD = 1;
 

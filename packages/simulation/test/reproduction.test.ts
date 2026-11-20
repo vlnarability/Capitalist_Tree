@@ -130,4 +130,19 @@ describe('reproduction / seeding (GAP-19)', () => {
     expect(a.seeds).toBe(b.seeds);
     expect(a.progress).toBeCloseTo(b.progress, 10);
   });
+
+  it('the fruiting gate is reachable in a normal sim (GAP-19 usability)', () => {
+    // The fruiting gate = matureAgeDays × FRUITING_AGE_FRACTION. Pre-fix this was
+    // 0.1 × 24000 = 2400 d = 20 sim-yr (matureAgeDays uses SIM days = matureAgeYears
+    // × 120, so 24000 d = 200 sim-yr, not 66 calendar-yr as the old comment said) —
+    // unreachable in any normal sim (the dr1-long-run is 5 sim-yr), so seed
+    // production never fired + the plant-seed action had nothing to plant.
+    // Now 0.01 × 24000 = 240 d = 2 sim-yr for White Oak — reachable in a typical
+    // long play session + the dr1-long-run. Assert the gate is ≤ 1 sim-year of
+    // 365-day-equivalent sim-days (well within a normal sim's reach).
+    const gate = WHITE_OAK.matureAgeDays * PROVISIONAL_BIOLOGY_REPRODUCTION_FRUITING_AGE_FRACTION;
+    expect(gate).toBeLessThanOrEqual(365);
+    // And specifically the lowered fraction (was 0.1).
+    expect(PROVISIONAL_BIOLOGY_REPRODUCTION_FRUITING_AGE_FRACTION).toBe(0.01);
+  });
 });
