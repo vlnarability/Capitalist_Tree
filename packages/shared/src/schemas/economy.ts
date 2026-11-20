@@ -199,5 +199,21 @@ export const economyStateSchema = z.object({
    *  non-decreasing. Conservation invariant:
    *  `sum(accounts.balance) + totalSinks === initialSupply + totalIssued`. */
   totalSinks: z.string().default('0'),
+  /**
+   * P11 (W14 / RV3-3): the money supply at game start — the starting
+   * `monetarySupply` set from `config.startingPersonalCash` at initialization.
+   * Persisted so `conservationDiscrepancy()` is computable on a LOADED save
+   * (the caller no longer needs the original config) and so non-default starts
+   * compute correct monetary-conditions (the market `monetaryConditionsFactor`
+   * divides `monetarySupply / initialSupply`).
+   *
+   * Pre-v14 saves did not persist this; the v13→v14 migration backfills it
+   * from the conservation invariant
+   * `initialSupply = sum(accounts.balance) + totalSinks - totalIssued` (exact
+   * for any conservation-correct save) and falls back to the default
+   * `'50000'` when the ledger is absent/empty. Defaults to `'50000'` so
+   * hand-built/legacy states parse cleanly.
+   */
+  initialSupply: z.string().default('50000'),
 });
 export type EconomyState = z.infer<typeof economyStateSchema>;

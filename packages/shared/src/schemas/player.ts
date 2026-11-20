@@ -72,5 +72,13 @@ export const playerStateSchema = z.object({
   /** P3c: cumulative unpaid living-expense days (health driver). Defaults to
    *  0 for fresh saves + backfilled to 0 by the v6 → v7 migration. */
   unpaidDays: z.number().int().nonnegative().default(0),
+  /** Labor-exhaustion accumulator in [0, 1] (P12-D follow-up — the
+   *  `perform-labor` action's health cost). Each `perform-labor` action adds
+   *  `hours × PROVISIONAL_LABOR_EXHAUSTION_PER_HOUR`; the PersonalSystem
+   *  decays it asymptotically each tick (rest). Drives a physical-health
+   *  penalty in `derivePhysicalHealth` alongside `unpaidDays`. Defaults to 0
+   *  — `deserialize`'s `gameStateSchema.safeParse` fills this for pre-existing
+   *  saves, so no schema-version bump is required. */
+  laborExhaustion: z.number().min(0).max(1).default(0),
 });
 export type PlayerState = z.infer<typeof playerStateSchema>;

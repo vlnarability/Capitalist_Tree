@@ -62,16 +62,20 @@ export const economySystem: System = {
     }
 
     // 2. Update market prices + inflation index (P3b).
-    //    initialSupply is the player's starting cash — a constant for a
-    //    given save. PROVISIONAL_STARTING_PERSONAL_CASH_MINOR is the
-    //    default (50_000 minor units = $500.00). For saves with a different
-    //    starting cash, this should ideally be persisted on EconomyState;
-    //    P3b uses the constant default which matches
-    //    DEFAULT_GAME_CONFIG.startingPersonalCash. A future refactor will
-    //    add an `initialSupply` field to EconomyState.
+    //    P11 (W14 / RV3-3): read `initialSupply` from the persisted
+    //    `state.economy.initialSupply` (set at init from
+    //    `config.startingPersonalCash`, survives save/load via the v13→v14
+    //    migration). Falls back to the default constant for pre-v14 saves /
+    //    hand-built states that haven't migrated. Pre-P11 this was always the
+    //    hardcoded default, which gave wrong monetary-conditions for non-
+    //    default starts (the `monetaryConditionsFactor` divides
+    //    `monetarySupply / initialSupply`).
+    const persistedInitialSupply = next.economy.initialSupply;
     const marketResult = updateMarkets(next, {
       now: ctx.now,
-      initialSupply: PROVISIONAL_STARTING_PERSONAL_CASH_MINOR.toString(10),
+      initialSupply:
+        persistedInitialSupply ??
+        PROVISIONAL_STARTING_PERSONAL_CASH_MINOR.toString(10),
     });
     next = marketResult.state;
     events.push(...marketResult.events);

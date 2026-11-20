@@ -182,3 +182,43 @@ export const PROVISIONAL_ENV_LAND_DEGRADATION_RATE = 0.0005; // per tick
 // level is a long-term consequence that only becomes visible across many sim
 // years of sustained warming (GDD §170 long-term climate patterns).
 export const PROVISIONAL_ENV_SEA_LEVEL_RISE_RATE = 3; // mm per sim year per °C above baseline
+
+// ---------------------------------------------------------------------------
+// P13-A / GAP-21 — ADDITIONAL ENVIRONMENTAL INDICATORS (GDD §10.1)
+//
+// airQuality / oceanHealth / wetlandCoverage relax toward a target derived
+// from their drivers (emissions, warming, land use); nutrientRunoff is a stock
+// that accumulates with soil-nutrient surplus + decays exponentially. All
+// @provisional — tuned for visible-but-slow response (indicators degrade over
+// sim months/years of pressure, not single ticks). See indicators.ts.
+// ---------------------------------------------------------------------------
+
+// Shared relaxation rate for the three [0,1] indicators (airQuality,
+// oceanHealth, wetlandCoverage): the fraction of the gap to the target closed
+// per sim day. 0.02/d → ~50d half-life (visible over a season, not a tick).
+export const PROVISIONAL_ENV_INDICATOR_RELAXATION_PER_DAY = 0.02;
+
+// airQuality: target = 1 - clamp(emissions × SENSITIVITY, 0, 1). Emissions are
+// the per-step atmosphere load (units of CO2-equivalent). 0.001 → 1000
+// emissions units fully degrade air quality.
+export const PROVISIONAL_ENV_AIR_QUALITY_EMISSION_SENSITIVITY = 0.001;
+
+// oceanHealth: target = 1 - clamp(tempAnomaly × TEMP_SENSITIVITY + co2Excess ×
+// CO2_SENSITIVITY, 0, 1). tempAnomaly = globalTemperature - baseline (°C);
+// co2Excess = co2Concentration - 410 (ppm). TEMP_SENSITIVITY 0.05/°C → 20°C
+// warming fully degrades; CO2_SENSITIVITY 0.0002/ppm → 5000 ppm excess degrades.
+export const PROVISIONAL_ENV_OCEAN_TEMP_SENSITIVITY = 0.05; // per °C above baseline
+export const PROVISIONAL_ENV_OCEAN_CO2_SENSITIVITY = 0.0002; // per ppm above 410
+
+// wetlandCoverage: target = clamp(protected × PROTECTED_FACTOR - developed ×
+// DEVELOPED_FACTOR, 0, 1). Protected land restores wetlands; developed land
+// drains them.
+export const PROVISIONAL_ENV_WETLAND_PROTECTED_FACTOR = 0.5;
+export const PROVISIONAL_ENV_WETLAND_DEVELOPED_FACTOR = 0.3;
+
+// nutrientRunoff: a stock (≥ 0) that accumulates when soil nutrients exceed
+// the holding capacity + decays exponentially. ACCUMULATION_RATE per unit of
+// surplus per day; DECAY_PER_DAY is the exponential decay rate (0.05 → ~5%/d,
+// ~14d half-life — biological uptake clears a spill in a few weeks).
+export const PROVISIONAL_ENV_NUTRIENT_RUNOFF_ACCUMULATION_RATE = 0.01;
+export const PROVISIONAL_ENV_NUTRIENT_RUNOFF_DECAY_PER_DAY = 0.05;

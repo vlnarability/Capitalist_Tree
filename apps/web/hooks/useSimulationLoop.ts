@@ -65,7 +65,8 @@ import {
   PROVISIONAL_UI_COMMIT_THROTTLE_MS,
   PROVISIONAL_UI_LOOP_FRAME_DT_MAX_MS,
 } from '../lib/constants';
-import { applyCatchUpOnLoad } from '../lib/persistence/offline-catch-up-trigger';
+import { applyCatchUpOnLoadAsync } from '../lib/persistence/offline-catch-up-async';
+import { SaveQuotaExceededError } from '../lib/persistence/indexed-db-storage';
 
 // ----------------------------------------------------------------------------
 // Public types.
@@ -145,6 +146,35 @@ export function useSimulationLoop(
 
     async function boot(): Promise<void> {
       store.setEngineStatus('booting');
+      // P11 (W21 / RV5-F4): concurrent-tab protection. Acquire an exclusive
+      // Web Lock so two tabs don't both run the simulation + clobber each
+      // other's saves. If the lock is unavailable (another tab holds it),
+      // surface a notification but continue booting read-only-ish (the player
+      // can still see the state; saving will be the losing tab's problem).
+      if (typeof navigator !== 'undefined' && navigator.locks) {
+        try {
+          await navigator.locks.request(
+            'capitalist-tree-session',
+            { mode: 'exclusive', ifAvailable: true },
+            async (lock) => {
+              if (lock === null) {
+                useGameStore.getState().pushNotification({
+                  severity: 'warning',
+                  code: 'concurrent-tab-detected',
+                  message:
+                    'Another tab is already running this game. Progress here may be overwritten. Close the other tab to avoid conflicts.',
+                  at: 0,
+                });
+              }
+              // Hold the lock for the session lifetime — the Promise stays
+              // pending until the tab closes / the effect tears down.
+              return new Promise<void>(() => {});
+            },
+          );
+        } catch {
+          // Lock API unavailable or blocked — non-fatal, continue.
+        }
+      }
       let state: GameState | null = null;
       const s = storageRef.current;
       if (s) {
@@ -165,7 +195,17 @@ export function useSimulationLoop(
         // `Date.now()` is the spec-allowed single read at save/load time
         // (TDD §18.1); the catch-up processor itself is pure + deterministic
         // given (state, nowMs). A tampered clock is routed to a notification.
-        const catchUpResult = applyCatchUpOnLoad(state, Date.now(), useGameStore.getState());
+        // P11 (W11 / RV5-F1): the catch-up runs in a Web Worker off the main
+        // thread with progress reporting so a long absence (30 days ≈ 1800
+        // chunks) doesn't freeze the UI. Falls back to synchronous if the
+        // Worker is unavailable.
+        const catchUpResult = await applyCatchUpOnLoadAsync(
+          state,
+          Date.now(),
+          useGameStore.getState(),
+          (completed, total) => useGameStore.getState().setCatchUpProgress({ completed, total }),
+        );
+        useGameStore.getState().setCatchUpProgress(null); // clear on completion
         state = catchUpResult.state;
         if (catchUpResult.summary !== null) {
           useGameStore.getState().setPendingOfflineSummary(catchUpResult.summary);
@@ -301,8 +341,32 @@ export function useSimulationLoop(
       },
     };
     stateRef.current = stamped;
-    useGameStore.getState().commitSimState(stamped, []);
-    await s.save(stamped);
+    // P11 (W20 / RV5-F3): commit-after-save. Await the save BEFORE committing
+    // to the store so a failed save (quota exhaustion) doesn't leave the UI
+    // showing a state that isn't persisted. Catch QuotaExceededError →
+    // notification (the player keeps playing from the in-memory state, but
+    // knows the save didn't land).
+    try {
+      await s.save(stamped);
+      useGameStore.getState().commitSimState(stamped, []);
+    } catch (err) {
+      if (err instanceof SaveQuotaExceededError) {
+        useGameStore.getState().pushNotification({
+          severity: 'critical',
+          code: 'save-quota-exceeded',
+          message: err.message,
+          at: stamped.clock.elapsedSeconds,
+        });
+      } else {
+        // Unknown save error — surface it so it isn't silently swallowed.
+        useGameStore.getState().pushNotification({
+          severity: 'critical',
+          code: 'save-failed',
+          message: `Save failed: ${(err as Error).message}`,
+          at: stamped.clock.elapsedSeconds,
+        });
+      }
+    }
   }, []);
 
   const load = useCallback(async () => {
@@ -313,8 +377,14 @@ export function useSimulationLoop(
     // P6d2 — re-run the offline catch-up on manual Load (same path as boot).
     // A stale save catches up; a tampered clock surfaces a notification; a
     // fresh save just resumes. The parked summary (if any) renders the
-    // OfflineModal.
-    const catchUpResult = applyCatchUpOnLoad(loaded, Date.now(), useGameStore.getState());
+    // OfflineModal. P11 (W11): runs in a Web Worker with progress reporting.
+    const catchUpResult = await applyCatchUpOnLoadAsync(
+      loaded,
+      Date.now(),
+      useGameStore.getState(),
+      (completed, total) => useGameStore.getState().setCatchUpProgress({ completed, total }),
+    );
+    useGameStore.getState().setCatchUpProgress(null); // clear on completion
     const state = catchUpResult.state;
     stateRef.current = state;
     accumulatorRef.current = 0;

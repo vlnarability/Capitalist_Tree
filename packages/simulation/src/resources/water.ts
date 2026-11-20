@@ -51,10 +51,12 @@ import {
   PROVISIONAL_RESOURCE_EVAPORATION_BASE_TEMP_C,
   PROVISIONAL_RESOURCE_EVAPORATION_RATE_PER_DAY,
   PROVISIONAL_RESOURCE_MAX_UPTAKE_FRACTION,
+  PROVISIONAL_RESOURCE_SOIL_PH_IDEAL,
   PROVISIONAL_RESOURCE_SOIL_WATER_CAPACITY,
 } from '@capitalist-tree/shared';
 import type { WeatherEventDefinition } from '@capitalist-tree/shared';
 import { computeEvaporationRate } from '../weather/effects.js';
+import { phFraction, compactionFraction, microbialFraction } from './soil.js';
 
 /** Water balance result — applied to env.soil.soilWater + tree.water.stored. */
 export interface WaterBalance {
@@ -105,6 +107,17 @@ export function computeWaterBalance(params: {
   evaporationRatePerDay: number;
   rootAbsorptionCapacity: number;
   stepDays: number;
+  /** Soil pH (0-14). Reduces uptake when far from the ideal (phFraction).
+   *  Optional — defaults to the ideal pH (factor 1.0) so callers that don't
+   *  track soil pH get the legacy no-constraint behaviour. The ResourceSystem
+   *  passes the real value. */
+  ph?: number;
+  /** Soil compaction (0-1, 0=loose). Reduces uptake linearly. Optional —
+   *  defaults to 0 (loose, factor 1.0). */
+  compaction?: number;
+  /** Soil microbial activity (>=0, 1=baseline). Scales uptake directly.
+   *  Optional — defaults to 1.0 (baseline, factor 1.0). */
+  microbialActivity?: number;
 }): WaterBalance {
   const {
     soilWater,
@@ -114,6 +127,11 @@ export function computeWaterBalance(params: {
     rainfall,
     rootAbsorptionCapacity,
     stepDays,
+    // Neutral defaults → envUptakeFactor = 1.0 (legacy behaviour) when the
+    // caller doesn't pass real soil values.
+    ph = PROVISIONAL_RESOURCE_SOIL_PH_IDEAL,
+    compaction = 0,
+    microbialActivity = 1.0,
   } = params;
 
   const evaporation = params.evaporationRatePerDay * stepDays;
@@ -137,8 +155,22 @@ export function computeWaterBalance(params: {
   // `dailyWaterNeed`), so rootCap scales with foliage too: a sapling with few
   // leaves needs little water and has a small root cap; a mature tree with full
   // canopy needs much more and has a larger cap.
+  //
+  // P12-D wiring (GAP-20): the root cap is further gated by the soil
+  // environment — pH far from ideal, compaction, + microbe-dead soil all
+  // reduce the rate the roots can actually take up water. The combined factor
+  // is the product of the three [0,1] fractions (reused from soil.ts). At the
+  // neutral default (ph 6.5, compaction 0, microbial 1.0) the product is 1.0
+  // so behaviour is unchanged; degraded soil lowers the cap, leaving the
+  // unclaimed water in the soil pool (→ runoff/drainage), which preserves the
+  // mass-conservation invariant the tests assert.
+  const envUptakeFactor =
+    phFraction(ph) * compactionFraction(compaction) * microbialFraction(microbialActivity);
   const rootCapPerDay =
-    dailyWaterNeedL * PROVISIONAL_RESOURCE_MAX_UPTAKE_FRACTION * rootAbsorptionCapacity;
+    dailyWaterNeedL *
+    PROVISIONAL_RESOURCE_MAX_UPTAKE_FRACTION *
+    rootAbsorptionCapacity *
+    envUptakeFactor;
   const rootCap = rootCapPerDay * stepDays;
 
   // Tree uptake is Liebig: min(root cap, available in soil, buffer room).

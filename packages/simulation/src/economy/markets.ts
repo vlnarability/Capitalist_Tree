@@ -112,6 +112,7 @@ import type {
 } from '@capitalist-tree/shared';
 import {
   PROVISIONAL_ECONOMY_AUTHORITY_ACCOUNT_ID,
+  PROVISIONAL_ECONOMY_EXTERNAL_ACCOUNT_ID,
   PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID,
   PROVISIONAL_ECONOMY_CATEGORY_PURCHASE,
   PROVISIONAL_ECONOMY_MARKET_ACCOUNT_PREFIX,
@@ -127,7 +128,7 @@ import {
   PROVISIONAL_ECONOMY_MONETARY_CONDITIONS_ELASTICITY,
   PROVISIONAL_ECONOMY_INFLATION_RATE_ANNUALIZATION,
 } from '@capitalist-tree/shared';
-import { findMarketById, type MarketDefinition } from '@capitalist-tree/content';
+import { findMarketById, getSubsidyRateForCommodity, type MarketDefinition } from '@capitalist-tree/content';
 import { transfer, parseAmount } from './ledger.js';
 
 /** Error thrown by `applyPurchase` when the market id is unknown. */
@@ -137,6 +138,25 @@ export class UnknownMarketError extends Error {
     super(`Unknown market "${marketId}". Register it in packages/content/src/markets/index.ts.`);
     this.name = 'UnknownMarketError';
     this.marketId = marketId;
+  }
+}
+
+/**
+ * Thrown by `applyExport` when the player's inventory doesn't hold enough of
+ * the commodity to fill the export order (P13-B / GAP-24).
+ */
+export class InsufficientInventoryError extends Error {
+  readonly resourceId: string;
+  readonly requested: number;
+  readonly available: number;
+  constructor(resourceId: string, requested: number, available: number) {
+    super(
+      `Insufficient inventory for "${resourceId}": requested ${requested}, available ${available}.`,
+    );
+    this.name = 'InsufficientInventoryError';
+    this.resourceId = resourceId;
+    this.requested = requested;
+    this.available = available;
   }
 }
 
@@ -492,7 +512,7 @@ export function applyPurchase(state: GameState, params: PurchaseParams): Purchas
   //    `id: 'market:water'`, the account id is also `'market:water'`
   //    (PROVISIONAL_ECONOMY_MARKET_ACCOUNT_PREFIX + 'water').
   const marketAccountId = deriveMarketAccountId(market.id);
-  const afterTransfer = transfer(state, {
+  let afterTransfer = transfer(state, {
     sourceAccount: PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID,
     destinationAccount: marketAccountId,
     amount: totalCost.toString(10),
@@ -505,6 +525,32 @@ export function applyPurchase(state: GameState, params: PurchaseParams): Purchas
   const transaction = afterTransfer.economy.transactions[
     afterTransfer.economy.transactions.length - 1
   ]!;
+
+  // 1b. P13-B / GAP-25 subsidy rebate: if an active subsidy targets this
+  //     commodity, issue the rebate (= totalCost × rate) from the authority
+  //     (mint) to the player. The government deficit-spends the subsidy — the
+  //     market stays whole (it was paid the full price in step 1), the player's
+  //     net cost drops by the rebate. Closes the dead-data gap: subsidies
+  //     written by updateGovernmentPolicy are now read back at purchase time.
+  const subsidyRate = getSubsidyRateForCommodity(
+    afterTransfer.eventState.global.governmentPolicy.subsidies,
+    market.commodityId,
+  );
+  let rebate = 0n;
+  if (subsidyRate > 0) {
+    rebate = BigInt(Math.floor(Number(totalCost) * subsidyRate));
+    if (rebate > 0n) {
+      afterTransfer = transfer(afterTransfer, {
+        sourceAccount: PROVISIONAL_ECONOMY_AUTHORITY_ACCOUNT_ID,
+        destinationAccount: PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID,
+        amount: rebate.toString(10),
+        category: 'subsidy',
+        description: `Subsidy rebate (${(subsidyRate * 100).toFixed(1)}%) on ${params.quantity} × ${market.commodityId}`,
+        timestamp: params.timestamp,
+      });
+    }
+  }
+
 
   // 2. Credit inventory: increment if exists, append otherwise.
   const items = afterTransfer.inventory.items;
@@ -581,6 +627,23 @@ export function applyPurchase(state: GameState, params: PurchaseParams): Purchas
     },
   ];
 
+  // P13-B / GAP-25: emit a transaction-recorded + notification for the rebate.
+  if (rebate > 0n) {
+    const rebateTx = newState.economy.transactions[newState.economy.transactions.length - 1]!;
+    events.push(
+      { type: 'transaction-recorded', at: params.timestamp, payload: { record: rebateTx } },
+      {
+        type: 'notification',
+        at: params.timestamp,
+        payload: {
+          severity: 'info',
+          message: `Subsidy rebate of ${rebate.toString(10)} minor (${(subsidyRate * 100).toFixed(1)}%) on ${params.quantity} × ${market.commodityId}. Net cost ${(totalCost - rebate).toString(10)}.`,
+          code: 'subsidy-rebate',
+        },
+      },
+    );
+  }
+
   return {
     state: newState,
     events,
@@ -590,6 +653,247 @@ export function applyPurchase(state: GameState, params: PurchaseParams): Purchas
   };
 }
 
+/**
+ * `import-commodity` params (P13-B / GAP-24 — international trade).
+ * The domestic market id anchors the foreign price; quantity credits inventory.
+ */
+export interface ImportParams {
+  marketId: string;
+  quantity: number;
+  timestamp: number;
+}
+
+export interface ImportResult {
+  state: GameState;
+  events: SimulationEvent[];
+  baseCost: string;
+  tariff: string;
+  totalCost: string;
+}
+
+/**
+ * Apply an `import-commodity` action (P13-B / GAP-24 — GDD §15 international
+ * trade). Buys `quantity` of the market's commodity from the foreign/external
+ * counterparty at the current domestic market price, plus a tariff surcharge
+ * (= baseCost × `governmentPolicy.tariffRate`) sunk to the authority account.
+ *
+ *   - baseCost flows player:personal → external:default (the foreign seller).
+ *   - tariff flows player:personal → authority (the government), only if > 0.
+ *   - inventory is credited at the market's commodityId (like `purchase`).
+ *   - the domestic market's supply/demand is NOT adjusted (the good comes from
+ *     abroad, not the domestic market stock).
+ *
+ * Pure: returns a new state, never mutates input. Throws `UnknownMarketError`
+ * if the market id is unknown; `InsufficientFundsError` propagates from `transfer`.
+ */
+export function applyImport(state: GameState, params: ImportParams): ImportResult {
+  const market = state.economy.markets.find((m) => m.id === params.marketId);
+  if (!market) {
+    throw new UnknownMarketError(params.marketId);
+  }
+
+  const unitPrice = parseAmount(market.price, 'price');
+  const quantity = BigInt(params.quantity);
+  const baseCost = unitPrice * quantity;
+  const tariffRate = state.eventState.global.governmentPolicy.tariffRate;
+  const tariff = BigInt(Math.floor(Number(baseCost) * tariffRate));
+
+  // 1. Pay the foreign seller (base cost → external:default).
+  const afterBase = transfer(state, {
+    sourceAccount: PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID,
+    destinationAccount: PROVISIONAL_ECONOMY_EXTERNAL_ACCOUNT_ID,
+    amount: baseCost.toString(10),
+    category: 'import',
+    description: `Import ${params.quantity} × ${market.commodityId} from ${market.id} (foreign)`,
+    timestamp: params.timestamp,
+  });
+
+  // 2. Pay the tariff to the authority (only if non-zero).
+  let afterTariff = afterBase;
+  const events: SimulationEvent[] = [
+    {
+      type: 'transaction-recorded',
+      at: params.timestamp,
+      payload: {
+        record:
+          afterBase.economy.transactions[afterBase.economy.transactions.length - 1]!,
+      },
+    },
+  ];
+  if (tariff > 0n) {
+    afterTariff = transfer(afterBase, {
+      sourceAccount: PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID,
+      destinationAccount: PROVISIONAL_ECONOMY_AUTHORITY_ACCOUNT_ID,
+      amount: tariff.toString(10),
+      category: 'import-tariff',
+      description: `Import tariff (${(tariffRate * 100).toFixed(1)}%) on ${params.quantity} × ${market.commodityId}`,
+      timestamp: params.timestamp,
+    });
+    events.push({
+      type: 'transaction-recorded',
+      at: params.timestamp,
+      payload: {
+        record:
+          afterTariff.economy.transactions[afterTariff.economy.transactions.length - 1]!,
+      },
+    });
+  }
+
+  // 3. Credit inventory (mirror purchase — increment if exists, append otherwise).
+  const items = afterTariff.inventory.items;
+  const existingIdx = items.findIndex((i) => i.resourceId === market.commodityId);
+  const newItems =
+    existingIdx >= 0
+      ? items.map((item, idx) =>
+          idx === existingIdx ? { ...item, quantity: item.quantity + params.quantity } : item,
+        )
+      : [...items, { resourceId: market.commodityId, quantity: params.quantity }];
+
+  // 4. Mirror the new player balance to player.personalCash.
+  const playerAccount = afterTariff.economy.accounts.find(
+    (a) => a.id === PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID,
+  );
+  const playerBalanceAfter = playerAccount?.balance ?? afterTariff.player.personalCash;
+
+  const newState: GameState = {
+    ...afterTariff,
+    inventory: { items: newItems },
+    player:
+      playerBalanceAfter !== afterTariff.player.personalCash
+        ? { ...afterTariff.player, personalCash: playerBalanceAfter }
+        : afterTariff.player,
+  };
+
+  const totalCost = baseCost + tariff;
+  events.push({
+    type: 'system',
+    at: params.timestamp,
+    payload: {
+      systemId: 'EconomySystem',
+      message: `Imported ${params.quantity} × ${market.commodityId}: base ${baseCost.toString(10)} to foreign seller + tariff ${tariff.toString(10)} to authority.`,
+      data: {
+        marketId: market.id,
+        commodityId: market.commodityId,
+        quantity: params.quantity,
+        baseCost: baseCost.toString(10),
+        tariff: tariff.toString(10),
+        tariffRate,
+        totalCost: totalCost.toString(10),
+        playerBalanceAfter,
+      },
+    },
+  });
+
+  return {
+    state: newState,
+    events,
+    baseCost: baseCost.toString(10),
+    tariff: tariff.toString(10),
+    totalCost: totalCost.toString(10),
+  };
+}
+
+/**
+ * `export-commodity` params (P13-B / GAP-24 — international trade). The inverse
+ * of `import-commodity`: sell inventory abroad at the domestic market price.
+ */
+export interface ExportParams {
+  marketId: string;
+  quantity: number;
+  timestamp: number;
+}
+
+export interface ExportResult {
+  state: GameState;
+  events: SimulationEvent[];
+  revenue: string;
+}
+
+/**
+ * Apply an `export-commodity` action (P13-B / GAP-24 — GDD §15 international
+ * trade). Sells `quantity` of the market's commodity from the player's
+ * inventory to the foreign/external counterparty at the current domestic market
+ * price. The foreign buyer's payment enters the domestic economy (money
+ * creation) — `revenue` is issued from the authority (mint) → `player:personal`.
+ * Inventory is debited; the domestic market's supply/demand is NOT adjusted
+ * (the good flows abroad, not into the domestic market stock).
+ *
+ * Exports carry no tariff (the `tariffRate` lever applies to imports only); a
+ * future export-duty lever could be added symmetrically. Pure: returns a new
+ * state, never mutates input. Throws `UnknownMarketError` if the market id is
+ * unknown; `InsufficientInventoryError` if inventory lacks the quantity.
+ */
+export function applyExport(state: GameState, params: ExportParams): ExportResult {
+  const market = state.economy.markets.find((m) => m.id === params.marketId);
+  if (!market) {
+    throw new UnknownMarketError(params.marketId);
+  }
+
+  // 1. Verify inventory holds enough of the commodity to fill the export order.
+  const itemIdx = state.inventory.items.findIndex((i) => i.resourceId === market.commodityId);
+  const held = itemIdx >= 0 ? state.inventory.items[itemIdx]!.quantity : 0;
+  if (held < params.quantity) {
+    throw new InsufficientInventoryError(market.commodityId, params.quantity, held);
+  }
+
+  // 2. Issue the revenue from the authority (mint) → player (foreign buyer pays
+  //    into the domestic economy = money creation).
+  const unitPrice = parseAmount(market.price, 'price');
+  const quantity = BigInt(params.quantity);
+  const revenue = unitPrice * quantity;
+  const afterIssue = transfer(state, {
+    sourceAccount: PROVISIONAL_ECONOMY_AUTHORITY_ACCOUNT_ID,
+    destinationAccount: PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID,
+    amount: revenue.toString(10),
+    category: 'export',
+    description: `Export ${params.quantity} × ${market.commodityId} to foreign market @ ${market.price}`,
+    timestamp: params.timestamp,
+  });
+  const issueTx = afterIssue.economy.transactions[afterIssue.economy.transactions.length - 1]!;
+
+  // 3. Debit inventory (decrement; drop the item if it hits 0).
+  const newItems = afterIssue.inventory.items
+    .map((item, idx) =>
+      idx === itemIdx ? { ...item, quantity: item.quantity - params.quantity } : item,
+    )
+    .filter((item) => item.quantity > 0);
+
+  // 4. Mirror the new player balance to player.personalCash.
+  const playerAccount = afterIssue.economy.accounts.find(
+    (a) => a.id === PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID,
+  );
+  const playerBalanceAfter = playerAccount?.balance ?? afterIssue.player.personalCash;
+
+  const newState: GameState = {
+    ...afterIssue,
+    inventory: { items: newItems },
+    player:
+      playerBalanceAfter !== afterIssue.player.personalCash
+        ? { ...afterIssue.player, personalCash: playerBalanceAfter }
+        : afterIssue.player,
+  };
+
+  const events: SimulationEvent[] = [
+    { type: 'transaction-recorded', at: params.timestamp, payload: { record: issueTx } },
+    {
+      type: 'system',
+      at: params.timestamp,
+      payload: {
+        systemId: 'EconomySystem',
+        message: `Exported ${params.quantity} × ${market.commodityId}: revenue ${revenue.toString(10)} issued from foreign sale.`,
+        data: {
+          marketId: market.id,
+          commodityId: market.commodityId,
+          quantity: params.quantity,
+          revenue: revenue.toString(10),
+          playerBalanceAfter,
+        },
+      },
+    },
+  ];
+
+  return { state: newState, events, revenue: revenue.toString(10) };
+}
 /**
  * Derive the market account id from the market id.
  *

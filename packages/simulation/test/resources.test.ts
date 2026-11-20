@@ -33,6 +33,9 @@ import {
   nutrientFraction,
   moistureFraction,
   contaminationFraction,
+  phFraction,
+  compactionFraction,
+  microbialFraction,
 } from '../src/resources/soil.js';
 import {
   PROVISIONAL_RESOURCE_CONTAMINATION_FULL_DEGRADE,
@@ -41,6 +44,8 @@ import {
   PROVISIONAL_RESOURCE_SOIL_NUTRIENT_CAPACITY,
   PROVISIONAL_RESOURCE_SOIL_WATER_CAPACITY,
   PROVISIONAL_RESOURCE_IDEAL_SOIL_WATER_FRACTION,
+  PROVISIONAL_RESOURCE_SOIL_PH_IDEAL,
+  PROVISIONAL_RESOURCE_SOIL_PH_TOLERANCE,
 } from '@capitalist-tree/shared';
 import { WEATHER_EVENT_MAP, BALANCED_10_10_10, UREA_46_0_0, COMPOST, WHITE_OAK } from '@capitalist-tree/content';
 import type { EnvironmentState, TreeState, NutrientState } from '@capitalist-tree/shared';
@@ -475,6 +480,123 @@ describe('nutrient balance — conservation (TDD §18.4 invariant)', () => {
   });
 });
 
+describe('soil environment gates uptake (P12-D / GAP-20)', () => {
+  // The env uptake factor = phFraction(ph) × compactionFraction(compaction) ×
+  // microbialFraction(microbialActivity). At neutral defaults (ph 6.5,
+  // compaction 0, microbial 1.0) it's 1.0 (legacy behaviour); degraded soil
+  // lowers the root cap so the tree takes up less water + nutrients. The
+  // unclaimed mass stays in the soil pool (→ runoff/drainage for water, stays
+  // in soilPostLeach for nutrients), preserving the conservation invariant.
+  it('water uptake is reduced by degraded soil (low pH, high compaction, low microbial)', () => {
+    const tree = neutralTree({
+      water: { stored: 30, capacity: 50 },
+      roots: { development: 0.5, absorptionCapacity: 0.5 },
+    });
+    const evapRatePerDay = computeSoilEvaporationRate(WEATHER_EVENT_MAP.sunny, 22);
+    const baseArgs = {
+      soilWater: 80,
+      treeWater: tree.water.stored,
+      treeWaterCapacity: tree.water.capacity,
+      dailyWaterNeedL: 10,
+      rainfall: 5,
+      evaporationRatePerDay: evapRatePerDay,
+      rootAbsorptionCapacity: tree.roots.absorptionCapacity,
+      stepDays: STEP_DAYS,
+    };
+    const neutral = computeWaterBalance({
+      ...baseArgs,
+      ph: 6.5,
+      compaction: 0,
+      microbialActivity: 1.0,
+    });
+    const degraded = computeWaterBalance({
+      ...baseArgs,
+      ph: 5.5, // |5.5-6.5|=1.0 → phFraction 0.5 (suboptimal, not blocked)
+      compaction: 0.8, // → compactionFraction 0.2
+      microbialActivity: 0.1, // → microbialFraction 0.1
+    });
+    // Degraded soil → strictly less uptake than neutral, but still > 0
+    // (factor = 0.5 × 0.2 × 0.1 = 0.01).
+    expect(degraded.treeUptake).toBeLessThan(neutral.treeUptake);
+    expect(degraded.treeUptake).toBeGreaterThan(0);
+    // Conservation holds for both (unclaimed water → runoff/drainage).
+    const conserved = (b: typeof neutral) =>
+      b.soilWaterAfter + b.treeWaterAfter + b.evaporation + b.drainage + b.runoff + b.transpiration;
+    expect(conserved(degraded)).toBeCloseTo(80 + 30 + 5, 5);
+    expect(conserved(neutral)).toBeCloseTo(80 + 30 + 5, 5);
+  });
+
+  it('nutrient uptake is reduced by degraded soil', () => {
+    const treeNutrients = { nitrogen: 5, phosphorus: 2, potassium: 4 };
+    const soilNutrients = { nitrogen: 80, phosphorus: 70, potassium: 60 };
+    const baseArgs = {
+      soilNutrients,
+      treeNutrients,
+      speciesNutrientRequirement: WHITE_OAK.nutrientRequirement,
+      speciesMaxFoliage: 10050,
+      currentLeaves: 5000,
+      rootAbsorptionCapacity: 0.5,
+      soilWater: 100,
+      stepDays: STEP_DAYS,
+    };
+    const neutral = computeNutrientBalance({
+      ...baseArgs,
+      ph: 6.5,
+      compaction: 0,
+      microbialActivity: 1.0,
+    });
+    const degraded = computeNutrientBalance({
+      ...baseArgs,
+      ph: 5.5,
+      compaction: 0.8,
+      microbialActivity: 0.1,
+    });
+    // Degraded soil → strictly less nitrogen absorption + a lower tree buffer.
+    expect(degraded.nitrogen.absorbed).toBeLessThan(neutral.nitrogen.absorbed);
+    expect(degraded.nitrogen.treeAfter).toBeLessThan(neutral.nitrogen.treeAfter);
+  });
+
+  it('fully compacted soil blocks water uptake entirely (factor 0)', () => {
+    const tree = neutralTree({
+      water: { stored: 30, capacity: 50 },
+      roots: { development: 0.5, absorptionCapacity: 0.5 },
+    });
+    const evapRatePerDay = computeSoilEvaporationRate(WEATHER_EVENT_MAP.sunny, 22);
+    const blocked = computeWaterBalance({
+      soilWater: 80,
+      treeWater: tree.water.stored,
+      treeWaterCapacity: tree.water.capacity,
+      dailyWaterNeedL: 10,
+      rainfall: 5,
+      evaporationRatePerDay: evapRatePerDay,
+      rootAbsorptionCapacity: tree.roots.absorptionCapacity,
+      stepDays: STEP_DAYS,
+      compaction: 1.0, // fully compacted → compactionFraction = 0 → factor 0
+    });
+    expect(blocked.treeUptake).toBe(0);
+  });
+
+  it('extreme pH blocks water uptake entirely (factor 0)', () => {
+    const tree = neutralTree({
+      water: { stored: 30, capacity: 50 },
+      roots: { development: 0.5, absorptionCapacity: 0.5 },
+    });
+    const evapRatePerDay = computeSoilEvaporationRate(WEATHER_EVENT_MAP.sunny, 22);
+    const blocked = computeWaterBalance({
+      soilWater: 80,
+      treeWater: tree.water.stored,
+      treeWaterCapacity: tree.water.capacity,
+      dailyWaterNeedL: 10,
+      rainfall: 5,
+      evaporationRatePerDay: evapRatePerDay,
+      rootAbsorptionCapacity: tree.roots.absorptionCapacity,
+      stepDays: STEP_DAYS,
+      ph: 10.0, // ideal 6.5 ± tolerance 2.0 → 0 at pH 8.5+; 10.0 → phFraction 0
+    });
+    expect(blocked.treeUptake).toBe(0);
+  });
+});
+
 describe('fertilizer application (TDD §18.1: fertilizer changes nutrients)', () => {
   it('balanced 10-10-10 adds 10/10/10 per unit to soil', () => {
     const env = neutralEnv({ soil: { soilWater: 50, organicMatter: 50, contamination: 0, nutrients: { nitrogen: 30, phosphorus: 30, potassium: 30 }, health: 1, ph: 6.5, compaction: 0, microbialActivity: 1.0 } });
@@ -631,10 +753,11 @@ describe('soil health derivation (TDD §8.3, GDD §10.1)', () => {
     });
     expect(computeSoilHealth(fullEnv)).toBeCloseTo(1, 5);
 
-    // Fully degraded soil (in non-stub factors). The pH extension-point stub
-    // contributes its full weight (0.10) by design — the stubs always return
-    // 1.0 until P6+ models real pH/compaction/microbial dynamics. So the
-    // floor of soil health in P2 is `w.ph * 1.0 = 0.10`.
+    // Fully degraded soil (ALL seven factors bad). P12-D (GAP-20) promoted the
+    // pH, compaction, + microbial stubs into modeled dynamics, so a truly
+    // degraded soil — bad pH (far from the 6.5 ideal), full compaction, no
+    // microbial activity, no organic matter, no nutrients, no water, full
+    // contamination — collapses to health 0 (every fraction is 0).
     const degraded = neutralEnv({
       soil: {
         health: 1, // ignored — recomputed
@@ -642,13 +765,13 @@ describe('soil health derivation (TDD §8.3, GDD §10.1)', () => {
         contamination: PROVISIONAL_RESOURCE_CONTAMINATION_FULL_DEGRADE,
         nutrients: { nitrogen: 0, phosphorus: 0, potassium: 0 },
         soilWater: 0,
-        ph: 6.5,
-        compaction: 0,
-        microbialActivity: 1.0,
+        ph: 3.0, // far below ideal ± tolerance → phFrac 0
+        compaction: 1.0, // fully compacted → compactionFrac 0
+        microbialActivity: 0, // microbe-dead → microbialFrac 0
       },
     });
-    // The non-stub factors contribute 0; the ph stub contributes its 0.10 weight.
-    expect(computeSoilHealth(degraded)).toBeCloseTo(0.10, 5);
+    // Every factor contributes 0 → health 0.
+    expect(computeSoilHealth(degraded)).toBeCloseTo(0, 5);
   });
 
   it('soil health is in [0, 1] for arbitrary inputs', () => {
@@ -675,5 +798,69 @@ describe('soil health derivation (TDD §8.3, GDD §10.1)', () => {
     const clean = neutralEnv({ soil: { soilWater: 100, organicMatter: 50, contamination: 0, nutrients: { nitrogen: 50, phosphorus: 50, potassium: 50 }, health: 1, ph: 6.5, compaction: 0, microbialActivity: 1.0 } });
     const contaminated = neutralEnv({ soil: { soilWater: 100, organicMatter: 50, contamination: 50, nutrients: { nitrogen: 50, phosphorus: 50, potassium: 50 }, health: 1, ph: 6.5, compaction: 0, microbialActivity: 1.0 } });
     expect(computeSoilHealth(contaminated)).toBeLessThan(computeSoilHealth(clean));
+  });
+
+  // P12-D (GAP-20): pH / compaction / microbial factor unit + integration tests.
+
+  describe('phFraction (P12-D)', () => {
+    it('is 1.0 at the ideal pH', () => {
+      expect(phFraction(PROVISIONAL_RESOURCE_SOIL_PH_IDEAL)).toBeCloseTo(1, 5);
+    });
+    it('is 0 at the ideal ± tolerance (boundary)', () => {
+      expect(phFraction(PROVISIONAL_RESOURCE_SOIL_PH_IDEAL - PROVISIONAL_RESOURCE_SOIL_PH_TOLERANCE)).toBeCloseTo(0, 5);
+      expect(phFraction(PROVISIONAL_RESOURCE_SOIL_PH_IDEAL + PROVISIONAL_RESOURCE_SOIL_PH_TOLERANCE)).toBeCloseTo(0, 5);
+    });
+    it('is 0.5 at the midpoint between ideal + boundary', () => {
+      expect(phFraction(PROVISIONAL_RESOURCE_SOIL_PH_IDEAL - PROVISIONAL_RESOURCE_SOIL_PH_TOLERANCE / 2)).toBeCloseTo(0.5, 5);
+      expect(phFraction(PROVISIONAL_RESOURCE_SOIL_PH_IDEAL + PROVISIONAL_RESOURCE_SOIL_PH_TOLERANCE / 2)).toBeCloseTo(0.5, 5);
+    });
+    it('clamps to 0 far outside the tent (strongly acidic or alkaline)', () => {
+      expect(phFraction(3.0)).toBe(0);
+      expect(phFraction(10.0)).toBe(0);
+    });
+  });
+
+  describe('compactionFraction (P12-D)', () => {
+    it('is 1.0 at zero compaction (loose soil)', () => {
+      expect(compactionFraction(0)).toBeCloseTo(1, 5);
+    });
+    it('is 0 at full compaction', () => {
+      expect(compactionFraction(1)).toBeCloseTo(0, 5);
+    });
+    it('is 0.5 at half compaction (linear)', () => {
+      expect(compactionFraction(0.5)).toBeCloseTo(0.5, 5);
+    });
+  });
+
+  describe('microbialFraction (P12-D)', () => {
+    it('is 1.0 at thriving microbial activity', () => {
+      expect(microbialFraction(1)).toBeCloseTo(1, 5);
+    });
+    it('is 0 at microbe-dead soil', () => {
+      expect(microbialFraction(0)).toBeCloseTo(0, 5);
+    });
+    it('is 0.5 at half activity (direct)', () => {
+      expect(microbialFraction(0.5)).toBeCloseTo(0.5, 5);
+    });
+  });
+
+  it('bad pH reduces soil health (P12-D integration)', () => {
+    // Baseline: all factors good, pH at the ideal.
+    const good = neutralEnv({ soil: { soilWater: 100, organicMatter: 50, contamination: 0, nutrients: { nitrogen: 50, phosphorus: 50, potassium: 50 }, health: 1, ph: 6.5, compaction: 0, microbialActivity: 1.0 } });
+    // Same soil but strongly acidic (pH 4.0 — well outside the ideal ± tolerance).
+    const acidic = neutralEnv({ soil: { soilWater: 100, organicMatter: 50, contamination: 0, nutrients: { nitrogen: 50, phosphorus: 50, potassium: 50 }, health: 1, ph: 4.0, compaction: 0, microbialActivity: 1.0 } });
+    expect(computeSoilHealth(acidic)).toBeLessThan(computeSoilHealth(good));
+  });
+
+  it('high compaction reduces soil health (P12-D integration)', () => {
+    const good = neutralEnv({ soil: { soilWater: 100, organicMatter: 50, contamination: 0, nutrients: { nitrogen: 50, phosphorus: 50, potassium: 50 }, health: 1, ph: 6.5, compaction: 0, microbialActivity: 1.0 } });
+    const compacted = neutralEnv({ soil: { soilWater: 100, organicMatter: 50, contamination: 0, nutrients: { nitrogen: 50, phosphorus: 50, potassium: 50 }, health: 1, ph: 6.5, compaction: 0.8, microbialActivity: 1.0 } });
+    expect(computeSoilHealth(compacted)).toBeLessThan(computeSoilHealth(good));
+  });
+
+  it('low microbial activity reduces soil health (P12-D integration)', () => {
+    const good = neutralEnv({ soil: { soilWater: 100, organicMatter: 50, contamination: 0, nutrients: { nitrogen: 50, phosphorus: 50, potassium: 50 }, health: 1, ph: 6.5, compaction: 0, microbialActivity: 1.0 } });
+    const microbeDead = neutralEnv({ soil: { soilWater: 100, organicMatter: 50, contamination: 0, nutrients: { nitrogen: 50, phosphorus: 50, potassium: 50 }, health: 1, ph: 6.5, compaction: 0, microbialActivity: 0.1 } });
+    expect(computeSoilHealth(microbeDead)).toBeLessThan(computeSoilHealth(good));
   });
 });

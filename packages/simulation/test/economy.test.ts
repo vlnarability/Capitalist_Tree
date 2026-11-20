@@ -65,12 +65,16 @@ import {
   PROVISIONAL_ECONOMY_CATEGORY_ISSUANCE,
   PROVISIONAL_ECONOMY_CATEGORY_SINK,
   PROVISIONAL_ECONOMY_CATEGORY_TRANSFER,
+  PROVISIONAL_ECONOMY_MAX_TRANSACTIONS,
+  PROVISIONAL_ECONOMY_MAX_PROCESSED_REQUEST_IDS,
   PROVISIONAL_SIMULATION_STEP_SECONDS as STEP,
   CURRENT_SCHEMA_VERSION,
   migrations,
   serialize,
   deserialize,
+  PROVISIONAL_BIOLOGY_DEFAULT_LEAF_DENOMINATION_MINOR as LEAF_DENOM,
 } from '@capitalist-tree/shared';
+import { capTail } from '../src/deep-copy.js';
 
 function cfg(seed: number): GameConfig {
   return { ...DEFAULT_GAME_CONFIG, seed, createdAt: 0 };
@@ -205,6 +209,111 @@ describe('ledger — transfers (TDD §10.4)', () => {
     expect(next.economy.monetarySupply).toBe(s.economy.monetarySupply);
     expect(next.economy.totalIssued).toBe(s.economy.totalIssued);
     expect(next.economy.totalSinks).toBe(s.economy.totalSinks);
+  });
+
+  // --------------------------------------------------------------------------
+  // P11 — RV3-1 regression: transfer() idempotency. Pre-fix, `transfer()`
+  // marked the requestId as processed AFTER applying the transfer, with no
+  // pre-check. A replayed transfer with the same requestId re-moved the
+  // money AND re-recorded the transaction (double-spend). The fix adds a
+  // pre-check at the top: if the requestId is already processed, return the
+  // state unchanged.
+  // --------------------------------------------------------------------------
+  it('a replayed transfer with the same requestId is a no-op (RV3-1)', () => {
+    const s = freshState();
+    const playerBefore = getBalance(s, PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID);
+    const externalBefore = getBalance(s, PROVISIONAL_ECONOMY_EXTERNAL_ACCOUNT_ID);
+
+    // First transfer: moves 5000, records the requestId.
+    const first = transfer(s, {
+      sourceAccount: PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID,
+      destinationAccount: PROVISIONAL_ECONOMY_EXTERNAL_ACCOUNT_ID,
+      amount: '5000',
+      category: PROVISIONAL_ECONOMY_CATEGORY_TRANSFER,
+      description: 'first',
+      timestamp: 60,
+      requestId: 'req-replay-1',
+    });
+    expect(getBalance(first, PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID)).toBe(playerBefore - 5000n);
+    expect(getBalance(first, PROVISIONAL_ECONOMY_EXTERNAL_ACCOUNT_ID)).toBe(externalBefore + 5000n);
+    expect(first.economy.transactions).toHaveLength(s.economy.transactions.length + 1);
+    expect(isRequestProcessed(first, 'req-replay-1')).toBe(true);
+
+    // Replay: same requestId. MUST be a no-op — no money moves, no duplicate
+    // transaction, state returned unchanged.
+    const replay = transfer(first, {
+      sourceAccount: PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID,
+      destinationAccount: PROVISIONAL_ECONOMY_EXTERNAL_ACCOUNT_ID,
+      amount: '5000',
+      category: PROVISIONAL_ECONOMY_CATEGORY_TRANSFER,
+      description: 'replay',
+      timestamp: 120,
+      requestId: 'req-replay-1',
+    });
+    // Balances unchanged from `first` (the replay moved nothing).
+    expect(getBalance(replay, PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID)).toBe(playerBefore - 5000n);
+    expect(getBalance(replay, PROVISIONAL_ECONOMY_EXTERNAL_ACCOUNT_ID)).toBe(externalBefore + 5000n);
+    // No duplicate transaction record.
+    expect(replay.economy.transactions).toHaveLength(first.economy.transactions.length);
+    // Referentially identical (the no-op returns the same state object).
+    expect(replay).toBe(first);
+  });
+
+  it('a replayed issuance transfer with the same requestId does not double-issue (RV3-1)', () => {
+    const s = freshState();
+    const playerBefore = getBalance(s, PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID);
+    const supplyBefore = parseAmount(s.economy.monetarySupply);
+
+    const first = transfer(s, {
+      sourceAccount: PROVISIONAL_ECONOMY_AUTHORITY_ACCOUNT_ID,
+      destinationAccount: PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID,
+      amount: '1000',
+      category: PROVISIONAL_ECONOMY_CATEGORY_ISSUANCE,
+      description: 'issuance',
+      timestamp: 60,
+      requestId: 'req-issuance-replay',
+    });
+    expect(getBalance(first, PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID)).toBe(playerBefore + 1000n);
+    expect(parseAmount(first.economy.monetarySupply)).toBe(supplyBefore + 1000n);
+
+    // Replay the issuance — must NOT create another 1000.
+    const replay = transfer(first, {
+      sourceAccount: PROVISIONAL_ECONOMY_AUTHORITY_ACCOUNT_ID,
+      destinationAccount: PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID,
+      amount: '1000',
+      category: PROVISIONAL_ECONOMY_CATEGORY_ISSUANCE,
+      description: 'replay issuance',
+      timestamp: 120,
+      requestId: 'req-issuance-replay',
+    });
+    expect(getBalance(replay, PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID)).toBe(playerBefore + 1000n);
+    expect(parseAmount(replay.economy.monetarySupply)).toBe(supplyBefore + 1000n);
+    expect(replay).toBe(first);
+  });
+
+  it('transfers without a requestId are NOT deduplicated (no idempotency key)', () => {
+    const s = freshState();
+    // No requestId → both transfers apply. This is the documented contract:
+    // idempotency is opt-in via requestId.
+    const first = transfer(s, {
+      sourceAccount: PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID,
+      destinationAccount: PROVISIONAL_ECONOMY_EXTERNAL_ACCOUNT_ID,
+      amount: '5000',
+      category: PROVISIONAL_ECONOMY_CATEGORY_TRANSFER,
+      description: 'first',
+      timestamp: 60,
+    });
+    const second = transfer(first, {
+      sourceAccount: PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID,
+      destinationAccount: PROVISIONAL_ECONOMY_EXTERNAL_ACCOUNT_ID,
+      amount: '5000',
+      category: PROVISIONAL_ECONOMY_CATEGORY_TRANSFER,
+      description: 'second',
+      timestamp: 120,
+    });
+    const playerBefore = getBalance(s, PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID);
+    expect(getBalance(second, PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID)).toBe(playerBefore - 10000n);
+    expect(second.economy.transactions).toHaveLength(s.economy.transactions.length + 2);
   });
 });
 
@@ -796,16 +905,19 @@ describe('EconomySystem — end-to-end via engine (TDD §18.2)', () => {
     });
     expect(afterHarvest.state.originalTree.pendingIssuances).toHaveLength(1);
     const req = afterHarvest.state.originalTree.pendingIssuances[0]!;
-    // 10 leaves * $1 denomination (100 minor units) = 1000 minor units.
-    expect(req.amount).toBe('1000');
+    // 10 leaves × leafDenominationMinor (P12-C follow-up #3 raised 100→1000,
+    // =$10/leaf) = 10000 minor units.
+    expect(req.amount).toBe(String(BigInt(10) * BigInt(LEAF_DENOM)));
 
     // Advance one step — EconomySystem drains the queue.
     const afterStep = engine.advance(afterHarvest.state, STEP);
     expect(afterStep.state.originalTree.pendingIssuances).toEqual([]);
-    // Player credited 1000 minor units.
-    expect(afterStep.state.player.personalCash).toBe('51000');
+    // Player credited the per-harvest amount (10 × LEAF_DENOM minor units).
+    const cashBeforeDrain = BigInt(afterHarvest.state.player.personalCash);
+    const expectedCash = String(cashBeforeDrain + BigInt(10) * BigInt(LEAF_DENOM));
+    expect(afterStep.state.player.personalCash).toBe(expectedCash);
     const player = findAccount(afterStep.state, PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID);
-    expect(player?.balance).toBe('51000');
+    expect(player?.balance).toBe(expectedCash);
     // Transaction recorded.
     expect(afterStep.state.economy.transactions).toHaveLength(1);
     expect(afterStep.state.economy.transactions[0]!.category).toBe(PROVISIONAL_ECONOMY_CATEGORY_ISSUANCE);
@@ -989,5 +1101,67 @@ describe('ledger — helpers (TDD §10.4)', () => {
     expect(() => validateAmount('0')).toThrow(InvalidAmountError);
     expect(() => validateAmount('-5')).toThrow(InvalidAmountError);
     expect(validateAmount('100')).toBe(100n);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P11 (W12 / RV5-F2): bounded arrays. transactions, processedRequestIds, and
+// event history are capped to the most recent N entries to bound save size
+// on long runs (100-year run → millions of entries pre-cap).
+// ---------------------------------------------------------------------------
+describe('P11 W12 — bounded arrays (RV5-F2)', () => {
+  it('capTail keeps the most recent N entries', () => {
+    expect(capTail([1, 2, 3], 5)).toEqual([1, 2, 3]); // under cap → unchanged
+    expect(capTail([1, 2, 3], 3)).toEqual([1, 2, 3]); // at cap → unchanged
+    expect(capTail([1, 2, 3, 4, 5], 3)).toEqual([3, 4, 5]); // over → tail
+  });
+
+  it('capTail returns the same reference when under the cap', () => {
+    const arr = [1, 2, 3];
+    expect(capTail(arr, 5)).toBe(arr); // no copy
+  });
+
+  it('transfer caps the transactions array at PROVISIONAL_ECONOMY_MAX_TRANSACTIONS', () => {
+    // Build a state with transactions already at the cap, then do one more
+    // transfer. The oldest entry should be dropped (tail kept).
+    const s = freshState();
+    const cap = PROVISIONAL_ECONOMY_MAX_TRANSACTIONS;
+    // Pre-fill transactions to exactly the cap with synthetic records.
+    const filled: GameState = {
+      ...s,
+      economy: {
+        ...s.economy,
+        transactions: Array.from({ length: cap }, (_, i) => ({
+          id: `txn-stale-${i}`,
+          timestamp: i,
+          sourceAccount: PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID,
+          destinationAccount: PROVISIONAL_ECONOMY_EXTERNAL_ACCOUNT_ID,
+          amount: '1',
+          category: PROVISIONAL_ECONOMY_CATEGORY_TRANSFER,
+          description: `stale ${i}`,
+        })),
+      },
+    };
+    expect(filled.economy.transactions).toHaveLength(cap);
+
+    // One more transfer → cap enforced, oldest dropped.
+    const next = transfer(filled, {
+      sourceAccount: PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID,
+      destinationAccount: PROVISIONAL_ECONOMY_EXTERNAL_ACCOUNT_ID,
+      amount: '1',
+      category: PROVISIONAL_ECONOMY_CATEGORY_TRANSFER,
+      description: 'new',
+      timestamp: 999999,
+    });
+    expect(next.economy.transactions).toHaveLength(cap); // still at cap
+    // The oldest (txn-stale-0) is gone; the newest is 'new'.
+    expect(next.economy.transactions[0]!.id).toBe('txn-stale-1');
+    expect(next.economy.transactions[cap - 1]!.description).toBe('new');
+  });
+
+  it('the transaction cap constant is set (documented bound)', () => {
+    expect(PROVISIONAL_ECONOMY_MAX_TRANSACTIONS).toBeGreaterThan(0);
+    expect(PROVISIONAL_ECONOMY_MAX_TRANSACTIONS).toBeLessThanOrEqual(10000);
+    expect(PROVISIONAL_ECONOMY_MAX_PROCESSED_REQUEST_IDS).toBeGreaterThan(0);
   });
 });

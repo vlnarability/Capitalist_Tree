@@ -97,7 +97,7 @@ describe('P10c random rolling — SEEDED sub-RNG (R-P10-N resolved: zero root dr
     const tick = PROVISIONAL_EVENT_CHECK_INTERVAL_TICKS;
     // Constructing ctx.rng and drawing from it must NOT change the roll output
     // — the roll is a pure function of (rngState, tick), not of ctx.rng.
-    const rng = Rng.fromState(base.rngState);
+    const rng = Rng.fromState(base.rngState, base.rngVersion);
     rng.next(); // advance the transient ctx.rng position
     const a = rollRandomEvents(base, tick);
     const b = rollRandomEvents(base, tick);

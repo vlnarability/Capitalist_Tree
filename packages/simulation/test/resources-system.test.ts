@@ -24,7 +24,6 @@ import { describe, it, expect } from 'vitest';
 import { engine, InMemoryStorage } from '../src/index.js';
 import { DEFAULT_GAME_CONFIG } from '../src/initial-state.js';
 import {
-  PROVISIONAL_DAYS_PER_SEASON,
   PROVISIONAL_RESOURCE_SOIL_NUTRIENT_CAPACITY,
   PROVISIONAL_RESOURCE_SOIL_WATER_CAPACITY,
   PROVISIONAL_SIMULATION_STEP_SECONDS as STEP,
@@ -32,10 +31,15 @@ import {
 import type { GameConfig, GameState } from '@capitalist-tree/shared';
 
 const SECONDS_PER_DAY = 24 * 60 * 60;
-// One season is enough to exercise weather + resource variation without the
-// ~12s/sim-year cost of a full year run. Determinism + save/load tests run a
-// full year in their dedicated files (weather.test.ts).
-const RUN_SECONDS = PROVISIONAL_DAYS_PER_SEASON * SECONDS_PER_DAY;
+// P11 (slow-test remediation): reduced from a full season (30 days = 43,200
+// steps × 12 systems ≈ 21s/call) to a 2-day window (2,880 steps ≈ 1.4s/call).
+// All advanceSeason tests assert BOUNDS (finite/non-negative/capacity) or
+// DETERMINISM (same-seed equivalence / save-load equivalence) — neither
+// requires a full season of variation, only a non-trivial run. 2 days still
+// exercises weather + resource flux while keeping the file CI-friendly
+// (~10s total vs ~150s pre-fix). Determinism + save/load over a full year
+// live in their dedicated files (weather.test.ts).
+const RUN_SECONDS = 2 * SECONDS_PER_DAY;
 
 function cfg(seed: number): GameConfig {
   return { ...DEFAULT_GAME_CONFIG, seed, createdAt: 0 };

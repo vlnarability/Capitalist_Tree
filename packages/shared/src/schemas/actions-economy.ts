@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { LIVING_EXPENSE_CATEGORIES } from './player.js';
+import { PROVISIONAL_LABOR_MAX_HOURS_PER_SHIFT } from '../constants/economy.js';
 
 /**
  * Economy-related GameAction variants (P3b/P3c — TDD §10.5, §10.6, GDD §8.5).
@@ -181,3 +182,39 @@ export const sellTreeActionSchema = z.object({
   }),
 });
 export type SellTreeAction = z.infer<typeof sellTreeActionSchema>;
+
+/**
+ * `perform-labor` action (P12-D follow-up — a second income path that costs
+ * the player's health).
+ *
+ * The player works `hours` of wage labor. The handler issues wage cash from
+ * the monetary authority to `player:personal` (issuance — money enters
+ * circulation, like harvest issuance) and accrues exhaustion on
+ * `player.laborExhaustion` (`hours × PROVISIONAL_LABOR_EXHAUSTION_PER_HOUR`).
+ * The PersonalSystem then decays that exhaustion each tick (rest) and the
+ * well-being derivation turns it into a physical-health penalty, so
+ * overworking makes the player sick.
+ *
+ * This is deliberately distinct from `harvest-leaves`: labor income doesn't
+ * touch the tree at all (no defoliation, no stress, no wear) — the cost is
+ * borne by the player's body instead. The tradeoff is reliable labor income
+ * vs. the passive-but-finite income from a cared-for tree.
+ *
+ * The handler gracefully rejects (no cash, no exhaustion gain) when the
+ * player is too worn out to work (`player.health` below
+ * `PROVISIONAL_LABOR_MIN_HEALTH_TO_WORK`) or when the shift would push
+ * `laborExhaustion` past its cap — emitting a `notification` rather than
+ * throwing, matching the graceful-rejection pattern of `pay-expense`.
+ *
+ * `hours` is bounded `[1, PROVISIONAL_LABOR_MAX_HOURS_PER_SHIFT]`.
+ */
+export const performLaborActionSchema = z.object({
+  type: z.literal('perform-labor'),
+  payload: z.object({
+    /** Hours worked in this shift (1..PROVISIONAL_LABOR_MAX_HOURS_PER_SHIFT).
+     *  Wage = hours × PROVISIONAL_LABOR_WAGE_MINOR_PER_HOUR; exhaustion gain
+     *  = hours × PROVISIONAL_LABOR_EXHAUSTION_PER_HOUR. */
+    hours: z.number().int().min(1).max(PROVISIONAL_LABOR_MAX_HOURS_PER_SHIFT),
+  }),
+});
+export type PerformLaborAction = z.infer<typeof performLaborActionSchema>;

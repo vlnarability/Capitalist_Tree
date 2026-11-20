@@ -77,7 +77,7 @@
 
 **Root cause:** 8 full-state `deepCopy(state)` calls per tick (1 EventSystem + 7 other systems). Long-running tests (biology: 174K ticks, weather: 864K ticks) took minutes or hung.
 
-**Fix:** Replaced full-state `structuredClone(state)` with TARGETED clones across all 8 systems.
+**Fix:** Replaced full-state `structuredClone(state)` with TARGETED clones across 7 systems + the EventSystem wrapper (P11 W28 / RV1-8: corrected from "all 8 systems" — the EventSystem dropped its upfront clone in `2c9635d`; Economy/Personal rely on helper purity, so 7 systems actually got targeted clones).
 
 | Test | Before | After | Improvement |
 |---|---|---|---|
@@ -100,7 +100,7 @@ simulation.md, biology.md, resources-weather.md, economy.md, offline-automation.
 | Item | Status |
 |---|---|
 | R-P10-N: RNG fork | ✅ RESOLVED (seeded FNV-1a sub-RNG, zero root draws) |
-| R-P10-6: Perf fix | ✅ RESOLVED (targeted clones in all 8 systems) |
+| R-P10-6: Perf fix | ✅ RESOLVED (targeted clones in 7 systems + EventSystem wrapper — P11 W28 corrected from "all 8") |
 | R-P10-1/2: Regional/policy drift rates are local constants | Promotable to shared after tuning |
 | R-P10-3: Objectives NOT persisted (recomputed each tick) | Future schema addition |
 | R-P10-4/5: Climate/market local constants | Promotable after tuning |

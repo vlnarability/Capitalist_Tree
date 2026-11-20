@@ -58,6 +58,7 @@ import type {
   HireEmployeesAction,
   LayOffEmployeesAction,
   SetBusinessStatusAction,
+  RestructureOwnershipAction,
 } from '@capitalist-tree/shared';
 import {
   PROVISIONAL_BUSINESS_VALUATION_HAIRCUT,
@@ -65,7 +66,7 @@ import {
   PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID,
   PROVISIONAL_SIMULATION_STEP_SECONDS,
 } from '@capitalist-tree/shared';
-import { getBusinessTypeById } from '@capitalist-tree/content';
+import { getBusinessTypeById, getOrgTypeIncentives } from '@capitalist-tree/content';
 import type { ActionListener } from '../actions/handlers.js';
 import {
   transfer,
@@ -76,6 +77,7 @@ import {
 } from '../economy/ledger.js';
 import { operateBusiness } from './production.js';
 import { sumLiabilities, parseBusinessAmount } from './accounting.js';
+import { applyPlayerEnvironmentalImpact } from '../environment/player-impact.js';
 import {
   UnknownBusinessError,
   UnknownBusinessTypeError,
@@ -322,9 +324,16 @@ export const purchaseBusinessHandler: ActionListener<PurchaseBusinessAction> = (
  *
  * Delegates to the shared `operateBusiness` orchestration (the same one the
  * BusinessSystem uses every tick). The action runs ONE production cycle at
- * `payload.tick` with `dtSeconds = PROVISIONAL_SIMULATION_STEP_SECONDS` (one
- * tick of production). Content gate: the business type's `supportedActions`
- * must include `'operate-business'`.
+ * the engine's authoritative `now` (`state.clock.elapsedSeconds`) with
+ * `dtSeconds = PROVISIONAL_SIMULATION_STEP_SECONDS` (one tick of production).
+ * Content gate: the business type's `supportedActions` must include
+ * `'operate-business'`.
+ *
+ * P11 (RV3-2): the handler IGNORES any player-supplied `payload.tick` and uses
+ * `state.clock.elapsedSeconds` as `now`. This closes the infinite-money
+ * exploit where dispatching a forward-dated `operate-business` then
+ * `advance(STEP)` re-triggered demand-injection at the same engine `now`. The
+ * engine clock is the only source of truth for "when" an action runs.
  *
  * Pure: returns a new state + the `business-operated` event(s).
  */
@@ -332,16 +341,32 @@ export const operateBusinessHandler: ActionListener<OperateBusinessAction> = (
   state,
   action,
 ) => {
-  const { businessId, tick } = action.payload;
+  const { businessId } = action.payload;
   const business = requireBusiness(state, businessId);
   const definition = requireBusinessType(business.type);
   requireSupportedAction(definition, 'operate-business', businessId);
 
+  // P11 (RV3-2): use the engine's authoritative clock, NOT payload.tick.
+  // A player-supplied tick is ignored to prevent the demand-injection replay
+  // exploit.
+  const now = state.clock.elapsedSeconds;
   const result = operateBusiness(state, business, definition, {
-    now: tick,
+    now,
     dtSeconds: PROVISIONAL_SIMULATION_STEP_SECONDS,
   });
-  return { state: result.state, events: result.events };
+  // P11 (W6 / RV4-F-H3): bridge the business's environmental impact to the
+  // player's home region. Pre-fix, BusinessState.environmentalImpact was dead
+  // data (captured at purchase but never applied). Now each operation nudges
+  // the home region's industrialActivity/pollution/forestCoverage/
+  // biodiversity, which evolveRegions propagates + aggregateGlobalIndicators
+  // rolls into the global averages. This makes player extraction visibly move
+  // regional indicators (W6) and makes the last-tree objective reachable
+  // (W5 — aggregateActivity can now rise ≥ 0.6 without stochastic events).
+  const withImpact = applyPlayerEnvironmentalImpact(
+    result.state,
+    business.environmentalImpact,
+  );
+  return { state: withImpact, events: result.events };
 };
 
 /**
@@ -375,12 +400,13 @@ export const sellBusinessHandler: ActionListener<SellBusinessAction> = (
   state,
   action,
 ) => {
-  const { businessId, tick } = action.payload;
+  const { businessId } = action.payload;
   const business = requireBusiness(state, businessId);
   const definition = requireBusinessType(business.type);
   requireSupportedAction(definition, 'sell-business', businessId);
 
-  const timestamp = tick;
+  // P11 (RV3-2/RV3-6): use the engine's authoritative clock, NOT payload.tick.
+  const timestamp = state.clock.elapsedSeconds;
   const saveId = state.metadata.saveId;
   const valuation = parseBusinessAmount(business.valuation, 'valuation');
   // proceeds = floor(valuation × (1 − HAIRCUT)). The haircut reflects the
@@ -603,7 +629,7 @@ export const takeLoanHandler: ActionListener<TakeLoanAction> = (state, action) =
  * Pure: returns a new state, never mutates input.
  */
 export const repayLoanHandler: ActionListener<RepayLoanAction> = (state, action) => {
-  const { businessId, liabilityId, amount, tick } = action.payload;
+  const { businessId, liabilityId, amount } = action.payload;
   const business = requireBusiness(state, businessId);
   const definition = requireBusinessType(business.type);
   requireSupportedAction(definition, 'repay-loan', businessId);
@@ -613,7 +639,8 @@ export const repayLoanHandler: ActionListener<RepayLoanAction> = (state, action)
     throw new UnknownLiabilityError(businessId, liabilityId);
   }
 
-  const timestamp = tick;
+  // P11 (RV3-2/RV3-6): use the engine's authoritative clock, NOT payload.tick.
+  const timestamp = state.clock.elapsedSeconds;
   const saveId = state.metadata.saveId;
   const outstandingPrincipal = parseBusinessAmount(liability.principal, 'principal');
   const outstandingInterest = parseBusinessAmount(liability.accruedInterest, 'accruedInterest');
@@ -818,6 +845,81 @@ export const setBusinessStatusHandler: ActionListener<SetBusinessStatusAction> =
         systemId: 'BusinessSystem',
         message: `Business "${businessId}" status set to ${status}.`,
         data: { businessId, status },
+      },
+    },
+  ];
+  return { state: next, events };
+};
+
+/**
+ * `restructure-ownership` action handler (P13-A / GAP-23 — GDD §8.3).
+ *
+ * Changes a business's `ownership.structure` to one of the six GDD §8.3 types.
+ * This is the entry point for the per-type incentives
+ * (`packages/content/src/businesses/org-types.ts`): restructuring to a
+ * corporation exposes full shareholder growth pressure, to a non-profit
+ * removes it, to a sustainable-enterprise halves the env footprint, etc. The
+ * BusinessSystem picks up the new incentives on its next tick.
+ *
+ * Universal — any business can restructure (not gated on the business type's
+ * `supportedActions`, which are about production-specific actions). Free in
+ * this revision (a real implementation would charge a filing fee —
+ * PROVISIONAL). The `share` is preserved. Idempotent — restructuring to the
+ * current structure is a no-op.
+ *
+ * Pure: returns a new state, never mutates input.
+ */
+export const restructureOwnershipHandler: ActionListener<RestructureOwnershipAction> = (
+  state,
+  action,
+) => {
+  const { businessId, structure } = action.payload;
+  const business = requireBusiness(state, businessId);
+
+  // Idempotent — already in the requested structure.
+  if (business.ownership.structure === structure) {
+    return { state, events: [] };
+  }
+
+  const prevStructure = business.ownership.structure;
+  // P13-A / GAP-23: scale the valuation by the new org type's
+  // valuationMultiplier relative to the old (e.g. sole-prop 1.0 → corporation
+  // 1.2 = +20%; → non-profit 0.75 = -25%). Floor to minor units, clamp ≥ 0.
+  const prevMult = getOrgTypeIncentives(prevStructure).valuationMultiplier;
+  const newMult = getOrgTypeIncentives(structure).valuationMultiplier;
+  const prevValuation = parseAmount(business.valuation, 'valuation');
+  const newValuation = BigInt(
+    Math.floor((Number(prevValuation) * newMult) / prevMult),
+  );
+  const next: GameState = {
+    ...state,
+    businesses: state.businesses.map((b) =>
+      b.id === businessId
+        ? {
+            ...b,
+            ownership: { ...b.ownership, structure },
+            valuation: newValuation > 0n ? newValuation.toString(10) : '0',
+          }
+        : b,
+    ),
+  };
+  const events: SimulationEvent[] = [
+    {
+      type: 'system',
+      at: state.clock.elapsedSeconds,
+      payload: {
+        systemId: 'BusinessSystem',
+        message: `Business "${businessId}" restructured from ${prevStructure} to ${structure}.`,
+        data: { businessId, prevStructure, structure },
+      },
+    },
+    {
+      type: 'notification',
+      at: state.clock.elapsedSeconds,
+      payload: {
+        severity: 'info',
+        message: `Business "${businessId}" restructured to ${structure}. The new incentive profile applies on the next business tick.`,
+        code: 'business-restructured',
       },
     },
   ];

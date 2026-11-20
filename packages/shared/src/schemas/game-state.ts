@@ -64,6 +64,12 @@ export const gameStateSchema = z
     history: historicalStateSchema,
     // P0 additions beyond TDD §5.1 (documented in docs/simulation.md):
     rngState: rngStateSchema,
+    // DR-6 (docs/reviews/DECISIONS.md): which `Rng.fork()` behavior this save
+    // uses. v1 = legacy root-consuming (preserved for existing saves so their
+    // RNG sequence does not silently change); v2 = non-root-consuming (new
+    // sims initialize at v2). Default 1 so a legacy save missing the field
+    // parses as v1; the v16→v17 migration stamps it explicitly.
+    rngVersion: z.union([z.literal(1), z.literal(2)]).default(1),
     scheduler: schedulerStateSchema,
     // P2 addition: per-system RNG sub-streams that need to survive save/load
     // (TDD §18.3). Currently only WeatherSystem needs this.
@@ -101,6 +107,7 @@ export const gameStateSchema = z
         governmentPolicy: {
           environmentalRegulations: 0.3,
           carbonTaxRate: 0,
+          tariffRate: 0,
           subsidies: [],
         },
         monetaryPolicy: {
@@ -110,6 +117,13 @@ export const gameStateSchema = z
         },
         globalMarketIndices: {},
       },
+      // P11 (Zod 4 / DR-7): Zod 4 requires the parent .default() value to
+      // include every field the schema declares, even those with their own
+      // inner .default() (Zod 3 was lenient + filled them in). objectives +
+      // environment both have inner defaults in eventStateSchema; mirror them
+      // here so the default value matches the full EventState shape.
+      objectives: { completed: [] },
+      environment: { lastSoilHealthBand: 0 },
     })),
   })
   .superRefine((s, ctx) => {

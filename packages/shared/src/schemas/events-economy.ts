@@ -253,3 +253,43 @@ export const transferCompletedEventSchema = z.object({
   }),
 });
 export type TransferCompletedEvent = z.infer<typeof transferCompletedEventSchema>;
+
+/**
+ * `labor-completed` event (P12-D follow-up — the `perform-labor` action).
+ *
+ * Emitted by the `perform-labor` handler when the player works a shift and is
+ * credited wage cash. Carries the hours worked, the wage issued, the
+ * exhaustion level before + after, the marginal health cost the new
+ * exhaustion will impose (via the next PersonalSystem well-being derivation),
+ * the player's resulting balance, and the issuance transaction id. Pairs with
+ * the `transaction-recorded` event carrying the corresponding `labor`
+ * issuance transaction (authority → player:personal).
+ *
+ * The handler emits a `notification` (NOT `labor-completed`) when the shift is
+ * gracefully rejected (too exhausted / too unhealthy to work).
+ */
+export const laborCompletedEventSchema = z.object({
+  type: z.literal('labor-completed'),
+  at: z.number().int().nonnegative(),
+  payload: z.object({
+    /** Hours worked in the shift. */
+    hours: z.number().int().positive(),
+    /** Wage issued (bigint minor units as string) = hours × wage/hour. */
+    amountMinor: z.string(),
+    /** `player.laborExhaustion` before the shift ([0, 1]). */
+    exhaustionBefore: z.number().min(0).max(1),
+    /** `player.laborExhaustion` after the shift ([0, 1]). */
+    exhaustionAfter: z.number().min(0).max(1),
+    /** Marginal physical-health penalty the new exhaustion level will impose
+     *  once the PersonalSystem re-derives well-being:
+     *  `(exhaustionAfter - exhaustionBefore) ×
+     *  PROVISIONAL_LABOR_HEALTH_PENALTY_MAX`. In [0, 1]. */
+    healthCost: z.number().min(0).max(1),
+    /** Player's resulting cash balance (after the wage credit). Mirrored to
+     *  `player.personalCash`. */
+    playerBalanceAfter: z.string(),
+    /** Transaction id of the corresponding `labor` issuance transaction. */
+    transactionId: z.string().min(1),
+  }),
+});
+export type LaborCompletedEvent = z.infer<typeof laborCompletedEventSchema>;

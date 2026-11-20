@@ -407,3 +407,73 @@ export const PROVISIONAL_WELL_BEING_HAPPINESS_WEIGHT_HEALTH = 0.3;
 // P6+ EnvironmentSystem + future social systems will replace this constant
 // with real derivations.
 export const PROVISIONAL_WELL_BEING_HAPPINESS_BASELINE = 0.2;
+
+// ---------------------------------------------------------------------------
+// P11 (W12 / RV5-F2): bounded array caps. Pre-fix, `economy.transactions`
+// and `economy.processedRequestIds` grew unboundedly — a 100-year run at
+// 60s/tick (~52.5M ticks) could accumulate millions of entries, bloating
+// saves and slowing load. The caps keep the most recent N entries (tail);
+// older entries are pruned when the cap is exceeded. The values are generous
+// enough for the UI (TransactionsPanel shows recent history) while keeping
+// save size bounded.
+// ---------------------------------------------------------------------------
+
+/** Max transaction records kept (most recent). @provisional — tunable. */
+export const PROVISIONAL_ECONOMY_MAX_TRANSACTIONS = 5000;
+
+/** Max processed-request-id entries kept (idempotency set, most recent). */
+export const PROVISIONAL_ECONOMY_MAX_PROCESSED_REQUEST_IDS = 10000;
+
+// ---------------------------------------------------------------------------
+// PROVISIONAL (P12-D follow-up — the `perform-labor` action: a second income
+// path distinct from harvesting leaves that costs the player's health).
+//
+// The player can do wage labor to earn cash without touching the tree. Each
+// hour worked pays a fixed wage (issued from the monetary authority, like
+// harvest issuance) and accrues exhaustion on `player.laborExhaustion`. The
+// PersonalSystem decays exhaustion each tick (rest) and the well-being
+// derivation turns it into a physical-health penalty — overworking makes the
+// player sick. This gives the player a deliberate tradeoff: reliable labor
+// income vs. the passive-but-finite income from harvesting a cared-for tree.
+//
+// Balance (tuned against the $240/mo living-expense bill + the $10/leaf
+// harvest income from P12-C follow-up #3):
+//   - wage:        $5/hour   =   500 minor/hour  (8h shift = $40 = 4000 minor)
+//   - exhaustion:  0.05/hour                    (8h shift = 0.40 exhaustion)
+//   - max shift:   12 hours                     (cap per action)
+//   - health penalty max: 0.5                   (exhaustion=1 → health -0.5)
+//   - recovery:    0.10/tick                    (full recovery ~10 ticks)
+//   - min health to work: 0.15                  (too worn out to labor)
+// A maxed-out labor burst (~20h before the exhaustion cap) earns ~$100, then
+// ~10 ticks of rest recover — comparable to sustainable harvesting (~$300/mo)
+// but with a health cost, so the two strategies are viable alternatives.
+// ---------------------------------------------------------------------------
+
+/** Wage per hour of labor, in bigint minor units as string. @provisional. */
+export const PROVISIONAL_LABOR_WAGE_MINOR_PER_HOUR = '500';
+
+/** Maximum hours a single `perform-labor` action can cover. @provisional. */
+export const PROVISIONAL_LABOR_MAX_HOURS_PER_SHIFT = 12;
+
+/** Exhaustion accrued per hour worked (added to `player.laborExhaustion`).
+ * @provisional. */
+export const PROVISIONAL_LABOR_EXHAUSTION_PER_HOUR = 0.05;
+
+/** Cap on `player.laborExhaustion` (the [0,1] field ceiling). @provisional. */
+export const PROVISIONAL_LABOR_EXHAUSTION_MAX = 1.0;
+
+/** Max physical-health penalty from exhaustion (`laborExhaustion=1` → health
+ * drops by this much). @provisional. */
+export const PROVISIONAL_LABOR_HEALTH_PENALTY_MAX = 0.5;
+
+/** Fraction of `laborExhaustion` recovered per tick (asymptotic decay toward
+ * 0 — rest). @provisional. */
+export const PROVISIONAL_LABOR_EXHAUSTION_RECOVERY_PER_TICK = 0.10;
+
+/** The player cannot labor if `player.health` is below this — too worn out.
+ * @provisional. */
+export const PROVISIONAL_LABOR_MIN_HEALTH_TO_WORK = 0.15;
+
+/** Transaction category label for wage-labor issuance. Free-form string
+ * (matches the existing free-form business categories). */
+export const PROVISIONAL_ECONOMY_CATEGORY_LABOR = 'labor';

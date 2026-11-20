@@ -32,6 +32,21 @@ export default defineConfig({
       // rendering src dirs in one place.
       'tests/**/*.test.{ts,tsx}',
     ],
+    // P12-C: the design-promise bot is a slow (~9 min) verification tool that
+    // runs 3 scenarios at 1-day steps for 90 days + writes a markdown report.
+    // Excluded from the default test run (CI); run manually via
+    // `pnpm exec vitest run packages/simulation/test/design-promise-bot.test.ts`
+    // (temporarily comment out this exclude line first — vitest applies the
+    // exclude even when the file is passed explicitly).
+    exclude: [
+      'packages/simulation/test/design-promise-bot.test.ts',
+      // DR-1 long-timeframe runner (P12-C follow-up): 1-day steps × multi-year
+      // is infeasible inline — the engine runs at ~1-2s/tick at 1-day steps (the
+      // bot's 90d × 3 scenarios already takes ~9min). Excluded from the default
+      // run; run manually for an overnight verification of the collapse ≥2yr /
+      // recovery ≥1yr targets.
+      'packages/simulation/test/dr1-long-run.test.ts',
+    ],
     environment: 'node',
     globals: false,
     reporters: ['default'],

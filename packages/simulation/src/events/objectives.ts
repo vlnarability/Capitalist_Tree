@@ -41,6 +41,10 @@
  * §4.1, §18.4). Deterministic given `state` — no RNG.
  */
 import type { GameState } from '@capitalist-tree/shared';
+import {
+  PROVISIONAL_RESTORATION_THRESHOLD,
+  PROVISIONAL_DESTRUCTION_THRESHOLD,
+} from '@capitalist-tree/shared';
 
 // ---------------------------------------------------------------------------
 // Objective ids (GDD §12 — the 6 endings)
@@ -90,9 +94,8 @@ const OBJECTIVE_DESCRIPTIONS: Readonly<Record<ObjectiveId, string>> = {
 // 1e11 minor units. PROVISIONAL.
 const PROVISIONAL_WEALTHIEST_BEING_CASH_MINOR = 100_000_000_000n; // 1e11
 
-// PROVISIONAL (GDD §12) — restoration / balance thresholds.
-const PROVISIONAL_RESTORATION_THRESHOLD = 0.8;
-const PROVISIONAL_DESTRUCTION_THRESHOLD = 0.2;
+// P11 (W18): restoration / destruction thresholds now imported from the
+// shared progression constants (same source as the achievement evaluators).
 
 // PROVISIONAL (GDD §12) — generational-legacy generation count.
 const PROVISIONAL_GENERATIONAL_LEGACY_GENERATIONS = 3;
@@ -212,11 +215,21 @@ function evaluateLastTree(state: GameState): ObjectiveResult {
   const globalBiodiversity = indicators.avgBiodiversity;
   const globalForest = indicators.avgForestCoverage;
   // High extraction = aggregate industrialActivity above 0.6. @provisional.
+  // P11 (W5/W7): use the POPULATION-WEIGHTED aggregate (matching the markets
+  // system's `aggregateIndustrialActivity` + GDD §10.2 regional aggregation),
+  // not the unweighted average. Pre-fix the unweighted average meant raising
+  // one region to 1.0 only gave 0.475 — the last-tree objective was
+  // unreachable even with W6's player→regional bridge. Population-weighted,
+  // the home region (50% weight) at 1.0 gives 0.655 ≥ 0.6.
   const regions = state.eventState.global.regions;
-  const aggregateActivity =
-    regions.length > 0
-      ? regions.reduce((a, r) => a + r.industrialActivity, 0) / regions.length
-      : 0;
+  let weightSum = 0;
+  let activityAcc = 0;
+  for (const r of regions) {
+    const w = Math.max(1, r.population);
+    activityAcc += r.industrialActivity * w;
+    weightSum += w;
+  }
+  const aggregateActivity = weightSum > 0 ? activityAcc / weightSum : 0;
   const highExtraction = aggregateActivity >= 0.6;
   const achieved =
     globalBiodiversity <= PROVISIONAL_DESTRUCTION_THRESHOLD &&

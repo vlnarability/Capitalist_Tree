@@ -868,3 +868,64 @@ describe('originalTree guard', () => {
     ).toThrow(OriginalTreeNotTransferableError);
   });
 });
+
+describe('event-triggered policies (engine wiring — P6b2 follow-up)', () => {
+  // The engine threads the SimulationEvents emitted by earlier systems in the
+  // same step into ctx.events; AutomationSystem (#9) reads them + an `event`
+  // policy fires when its eventType appears. TimeSystem (#1) emits a `tick`
+  // event every step, so an `event` policy on `'tick'` is the reliable
+  // positive trigger.
+  it('an event policy fires when its eventType is emitted by an earlier system in the same step', () => {
+    let state = freshState();
+    const soilWaterBefore = state.world.environment.soil.soilWater;
+    state = addAutomation(
+      state,
+      makeAutomation({
+        id: 'evt-tick',
+        policy: {
+          kind: 'event',
+          condition: { eventType: 'tick' },
+          action: 'apply-water',
+          actionParams: { litres: 5 },
+        },
+      }),
+    );
+
+    // Advance one step. TimeSystem emits `tick`; AutomationSystem sees it in
+    // ctx.events + fires the apply-water action.
+    const result = engine.advance(state, STEP);
+
+    // The automation-triggered event is emitted.
+    const triggered = result.events.find((e) => e.type === 'automation-triggered');
+    expect(triggered).toBeDefined();
+    // The dispatched apply-water action's event is emitted.
+    expect(result.events.some((e) => e.type === 'water-applied')).toBe(true);
+    // lastRunAt advanced off 0.
+    expect(result.state.automation[0]!.lastRunAt).toBeGreaterThan(0);
+    // soil water increased by the 5 L apply-water.
+    expect(result.state.world.environment.soil.soilWater).toBeGreaterThan(soilWaterBefore);
+  });
+
+  it('an event policy does NOT fire when its eventType is not emitted this step', () => {
+    // `tree-died` is not emitted on a fresh alive-tree tick, so the event
+    // policy should not fire.
+    let state = freshState();
+    state = addAutomation(
+      state,
+      makeAutomation({
+        id: 'evt-nodeath',
+        policy: {
+          kind: 'event',
+          condition: { eventType: 'tree-died' },
+          action: 'apply-water',
+          actionParams: { litres: 5 },
+        },
+      }),
+    );
+
+    const result = engine.advance(state, STEP);
+
+    expect(result.events.find((e) => e.type === 'automation-triggered')).toBeUndefined();
+    expect(result.state.automation[0]!.lastRunAt).toBe(0);
+  });
+});

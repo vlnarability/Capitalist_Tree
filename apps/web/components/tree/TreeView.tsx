@@ -97,6 +97,7 @@ export function TreeView({
   width = DEFAULT_WIDTH_PX,
   height = DEFAULT_HEIGHT_PX,
   className,
+  onHarvest,
 }: TreeViewProps): ReactElement {
   // Refs:
   //   - canvasRef: the mounted <canvas> DOM element.
@@ -259,6 +260,7 @@ export function TreeView({
       width={width}
       height={height}
       className={className}
+      onClick={onHarvest}
       style={{
         display: 'block',
         // Fluid sizing: the canvas scales to its container's width while
@@ -269,9 +271,32 @@ export function TreeView({
         height: 'auto',
         aspectRatio: `${width} / ${height}`,
         maxWidth: `${width}px`,
+        // Click-to-harvest affordance (GDD §5.4): when an onHarvest handler is
+        // wired, the tree is interactive — show a pointer cursor and mark the
+        // canvas as a button so assistive tech announces it as actionable.
+        // When no handler is wired, the canvas stays a non-interactive image.
+        cursor: onHarvest ? 'pointer' : 'default',
       }}
-      aria-label="Procedural capitalist-tree visualization"
-      role="img"
+      role={onHarvest ? 'button' : 'img'}
+      aria-label={
+        onHarvest
+          ? 'Capitalist tree — click to harvest leaves'
+          : 'Procedural capitalist-tree visualization'
+      }
+      // The canvas is focusable only when interactive, so keyboard users can
+      // trigger the harvest via Enter/Space (the button role maps these to
+      // click). A non-interactive canvas is not focusable (role="img").
+      tabIndex={onHarvest ? 0 : undefined}
+      onKeyDown={
+        onHarvest
+          ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onHarvest();
+              }
+            }
+          : undefined
+      }
     />
   );
 }

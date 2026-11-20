@@ -212,4 +212,41 @@ describe('EnvironmentPanel (P5c)', () => {
     expect(pops?.textContent ?? '').toMatch(/bird:robin/);
     expect(pops?.textContent ?? '').toMatch(/insect:bee/);
   });
+
+  it('renders the GAP-21 environmental indicators (air / ocean / wetland / runoff)', () => {
+    publish(freshState());
+    const { getByTestId } = render(<EnvironmentPanel />);
+    const indicators = getByTestId('environment-indicators');
+    expect(indicators).toBeInTheDocument();
+    // A fresh sim starts pristine: air + ocean at 100%, no wetland, no runoff.
+    expect(indicators.textContent ?? '').toMatch(/Air quality/);
+    expect(indicators.textContent ?? '').toMatch(/Ocean health/);
+    expect(indicators.textContent ?? '').toMatch(/Wetland coverage/);
+    expect(indicators.textContent ?? '').toMatch(/Nutrient runoff/);
+    expect(indicators.textContent ?? '').toMatch(/100%/); // pristine air/ocean
+  });
+
+  it('reflects degraded air quality + ocean health when the indicators decline', () => {
+    const base = freshState();
+    publish({
+      ...base,
+      world: {
+        ...base.world,
+        environment: {
+          ...base.world.environment,
+          airQuality: 0.2, // hazardous
+          oceanHealth: 0.4, // stressed
+          wetlandCoverage: 0.15, // 15% restored
+          nutrientRunoff: 3.5, // accumulating
+        },
+      },
+    });
+    const { getByTestId } = render(<EnvironmentPanel />);
+    const indicators = getByTestId('environment-indicators');
+    // The degraded values surface as percentages / the raw runoff stock.
+    expect(indicators.textContent ?? '').toMatch(/20%/); // air quality
+    expect(indicators.textContent ?? '').toMatch(/40%/); // ocean health
+    expect(indicators.textContent ?? '').toMatch(/15%/); // wetland coverage
+    expect(indicators.textContent ?? '').toMatch(/3\.5/); // nutrient runoff
+  });
 });

@@ -17,6 +17,7 @@ export {
   type TransactionsPanelProps,
 } from './TransactionsPanel';
 export { HarvestControls, type HarvestControlsProps } from './HarvestControls';
+export { SeedControls, type SeedControlsProps } from './SeedControls';
 export { PurchaseControls, type PurchaseControlsProps } from './PurchaseControls';
 export {
   CurrencyCosmeticPicker,

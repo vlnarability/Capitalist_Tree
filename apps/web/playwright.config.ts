@@ -74,6 +74,18 @@ export default defineConfig({
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
     },
+    // P13-C (GAP-37): cross-browser coverage. The app is standard React +
+    // canvas (no browser-specific APIs), so the smoke suite is expected to
+    // pass on all three Playwright browser engines. CI installs + runs all
+    // three; a per-browser failure surfaces as a distinct CI matrix entry.
+    {
+      name: 'firefox',
+      use: { ...devices['Desktop Firefox'] },
+    },
+    {
+      name: 'webkit',
+      use: { ...devices['Desktop Safari'] },
+    },
   ],
 
   ...webServerBlock,

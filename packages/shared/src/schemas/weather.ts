@@ -71,24 +71,33 @@ export const weatherStateSchema = z.object({
    * apply the staleness bias (PROVISIONAL_WEATHER_STALENESS_BIAS) once it
    * exceeds PROVISIONAL_WEATHER_MAX_DAYS_IN_CONDITION.
    */
-  daysInCondition: z.number().int().nonnegative(),
+  daysInCondition: z.number().nonnegative(),
 });
 export type WeatherState = z.infer<typeof weatherStateSchema>;
 
 /**
- * Climate baseline for a region (TDD §9.2, GDD §10.2).
+ * Climate baseline for a region (TDD §9.2, GDD §10.2) — extended by GAP-17
+ * (DR-11) into a full Köppen-Geiger climate zone.
  *
- * Pure data — lives in `packages/content/src/weather/climate-baselines.ts`.
- * Defines the long-term climate parameters WeatherSystem uses to derive
- * local temperature and pick transition matrices.
+ * Pure data — lives in `packages/content/src/weather/` (climate-baselines.ts
+ * for the default + koppen-zones.ts for the 31 Köppen-Geiger exemplars +
+ * highland.ts for the H elevation modifier). Defines the long-term climate
+ * parameters WeatherSystem uses to derive local temperature and pick
+ * transition matrices.
  *
- * P2 ships a single baseline (`climate:temperate`). P6/P9 add regional
- * climate data; the engine code stays fixed (rule 5: content is data).
+ * The Köppen fields (`koppenCode`, `koppenClass`, `precipitation`,
+ * `seasonality`, `frostRisk`, `heatStressRisk`, `supportsTrees`,
+ * `treeSuitabilityNote`) are the realistic climate profile grounded in the
+ * Kottek et al. 2006 classification (NOAA Jetstream Köppen subdivisions). The
+ * WeatherSystem does not yet read them (Phase 1 = catalog + schema only, no
+ * sim behavior change); Phase 3 wires them into the existing temp/water/
+ * season/weather channels.
  *
- * PROVISIONAL per GDD §17 ("detailed climate model").
+ * PROVISIONAL per GDD §17 ("detailed climate model"); Köppen grounding per
+ * GAP-17 / DR-11.
  */
 export const climateBaselineSchema = z.object({
-  /** Climate id. Convention: `climate:<slug>` (e.g. `climate:temperate`). */
+  /** Climate id. Convention: `climate:<slug>` (e.g. `climate:temperate`, `climate:af`). */
   id: z.string().min(1),
   /** Human-readable name. */
   name: z.string().min(1),
@@ -117,8 +126,43 @@ export const climateBaselineSchema = z.object({
     /** Per-degree-of-warming shift in drought probability, applied above baseline. */
     droughtProbShiftPerDegreeC: z.number(),
   }),
+  // --- GAP-17 (DR-11) Köppen-Geiger climate profile (realistic, content data) ---
+  /** Köppen-Geiger code, e.g. "Cfb", "BWh", "ET". */
+  koppenCode: z.string().min(1),
+  /** Köppen main class — for catalog grouping + UX. */
+  koppenClass: z.enum(['A', 'B', 'C', 'D', 'E', 'H']),
+  /** Plain-language description (what this climate feels like + a real-world exemplar). */
+  description: z.string().min(1),
+  /**
+   * Realistic precipitation profile — Köppen's defining axis. `annualMm` is the
+   * long-term annual mean; `pattern` is the seasonality; `driestMonthMm` is for
+   * the Köppen dry-season criteria (e.g. Af requires the driest month ≥ 60 mm).
+   */
+  precipitation: z.object({
+    annualMm: z.number().nonnegative(),
+    pattern: z.enum(['year-round', 'dry-summer', 'dry-winter', 'monsoon', 'arid']),
+    driestMonthMm: z.number().nonnegative(),
+  }),
+  /** Season structure the season system should follow. */
+  seasonality: z.enum(['wet-dry', 'four-season', 'polar']),
+  /** Frost risk — drives weather-event weighting + dormancy (Phase 3). */
+  frostRisk: z.enum(['none', 'occasional', 'regular-winter', 'severe']),
+  /** Heat-stress risk — drives heat-wave + drought weighting (Phase 3). */
+  heatStressRisk: z.enum(['none', 'occasional', 'regular']),
+  /** Whether trees can grow here at all (false only for EF — ice cap). */
+  supportsTrees: z.boolean(),
+  /** UX hint: how a generic tree fares here (the real effects come from the temp/precip values, not this string). */
+  treeSuitabilityNote: z.string().min(1),
 });
 export type ClimateBaseline = z.infer<typeof climateBaselineSchema>;
+/**
+ * A climate baseline that carries its full Köppen-Geiger profile (GAP-17 / DR-11).
+ * Alias of `ClimateBaseline` — all baselines now carry the Köppen fields. New
+ * code should use `ClimateZone`; `ClimateBaseline` is kept for back-compat with
+ * existing consumers (packages/simulation/src/weather/types.ts, effects.ts,
+ * weather-system.ts).
+ */
+export type ClimateZone = ClimateBaseline;
 
 /**
  * A single weather condition's static effects (TDD §9.3).

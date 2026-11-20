@@ -23,6 +23,8 @@ import {
   PROVISIONAL_BIOLOGY_DEATH_DEFOLIATION_WINDOW_DAYS,
   PROVISIONAL_BIOLOGY_DEATH_RESERVE_CRITICAL_FRACTION,
   PROVISIONAL_BIOLOGY_DEATH_STRESS_CRITICAL,
+  PROVISIONAL_BIOLOGY_WEAR_DEATH_THRESHOLD,
+  PROVISIONAL_BIOLOGY_WEAR_MORTALITY_ONSET,
 } from '@capitalist-tree/shared';
 import type { Rng } from '../rng.js';
 import { computeReserveCapacity, reserveFraction } from './reserves.js';
@@ -36,6 +38,7 @@ export type DeathCause =
   | 'stress'
   | 'defoliation'
   | 'structural'
+  | 'wear'
   | 'unknown';
 
 export interface MortalityCheck {
@@ -118,17 +121,35 @@ export function checkMortality(
     return { died: false };
   }
 
-  // 3. Stress alone (no reserves crisis) — still slow mortality risk.
-  if (stressCritical) {
-    const stressOverage =
-      (tree.stress - PROVISIONAL_BIOLOGY_DEATH_STRESS_CRITICAL) /
-      (1 - PROVISIONAL_BIOLOGY_DEATH_STRESS_CRITICAL);
-    const prob = PROVISIONAL_BIOLOGY_DEATH_DAILY_PROBABILITY * 0.5 * stressOverage * stepDays;
+  // 3. (Removed in P12-C redesign) Stress-alone mortality path. Pre-P12-C this
+  //    fired when stress >= STRESS_CRITICAL (regardless of reserves), killing
+  //    the idle tree at ~3mo via the infestation-driven stress — before the
+  //    wear path's ~6mo onset could fire, defeating the DR-1 6-12mo target.
+  //    The chronic-neglect case is now handled by the wear path (path 4 below),
+  //    which is robust against the activeDamage prune-window fluctuation +
+  //    Poisson variance. The acute-crisis case (stress + depleted reserves)
+  //    is still handled by path 2 above. A stressed-but-resilient tree (high
+  //    stress, high reserves) now lingers until the wear accumulates —
+  //    consistent, since the wear reflects the same chronic damage.
+
+  // 4. Cumulative wear (P12-C redesign — chronic neglect). The monotonic wear
+  //    counter accumulates non-weather damage severity (pest/disease/
+  //    severe-defoliation) + never decays. When it crosses the onset, the
+  //    mortality probability ramps linearly to DEATH_DAILY_PROBABILITY at the
+  //    threshold. This gives a reliable 6-12mo neglect death regardless of the
+  //    activeDamage prune-window fluctuation + Poisson variance that makes the
+  //    stress-based paths fragile near the recovery threshold.
+  if (tree.wear > PROVISIONAL_BIOLOGY_WEAR_MORTALITY_ONSET) {
+    const wearOverage =
+      (tree.wear - PROVISIONAL_BIOLOGY_WEAR_MORTALITY_ONSET) /
+      (PROVISIONAL_BIOLOGY_WEAR_DEATH_THRESHOLD - PROVISIONAL_BIOLOGY_WEAR_MORTALITY_ONSET);
+    const prob =
+      PROVISIONAL_BIOLOGY_DEATH_DAILY_PROBABILITY * Math.min(1, wearOverage) * stepDays;
     if (rng.next() < prob) {
       return {
         died: true,
-        cause: 'stress',
-        detail: `Stress at ${(tree.stress * 100).toFixed(1)}% (critical threshold ${PROVISIONAL_BIOLOGY_DEATH_STRESS_CRITICAL * 100}%).`,
+        cause: 'wear',
+        detail: `Cumulative wear ${tree.wear.toFixed(2)} (onset ${PROVISIONAL_BIOLOGY_WEAR_MORTALITY_ONSET}, threshold ${PROVISIONAL_BIOLOGY_WEAR_DEATH_THRESHOLD}) — chronic neglect from accumulated pest/disease/severe-defoliation damage.`,
       };
     }
   }

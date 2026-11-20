@@ -18,6 +18,30 @@ import {
 } from '@capitalist-tree/shared';
 import type { Storage } from '@capitalist-tree/simulation';
 
+// P11 (W20 / RV5-F3): typed error for browser storage quota exhaustion. The
+// caller (useSimulationLoop) catches this + surfaces a notification instead
+// of silently losing the save.
+export class SaveQuotaExceededError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SaveQuotaExceededError';
+  }
+}
+
+/** Detect a browser QuotaExceededError (DOMException name OR legacy code). */
+function isQuotaExceededError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  // Modern browsers: DOMException with name 'QuotaExceededError' (or
+  // 'NS_ERROR_DOM_QUOTA_REACHED' on Firefox).
+  const name = (err as { name?: string }).name;
+  if (name === 'QuotaExceededError' || name === 'NS_ERROR_DOM_QUOTA_REACHED') {
+    return true;
+  }
+  // Legacy: DOMException code 1014 (quota exceeded).
+  const code = (err as { code?: number }).code;
+  return code === 1014;
+}
+
 const DB_NAME = 'capitalist-tree';
 const DB_VERSION = 1;
 const STORE_SAVES = 'saves';
@@ -49,8 +73,26 @@ export class IndexedDbStorage implements Storage {
   async save(state: GameState): Promise<string> {
     const db = await getDB();
     const env = envelope(state);
-    await db.put(STORE_SAVES, env);
-    await db.put(STORE_META, state.metadata.saveId, META_ACTIVE_KEY);
+    // P11 (W22 / RV5-F5): wrap BOTH puts in a single readwrite transaction
+    // so the save + the active-key pointer are atomic. Pre-fix, two separate
+    // db.put calls could leave the DB inconsistent if the first succeeded but
+    // the second failed (the active pointer would reference a stale save).
+    // P11 (W20 / RV5-F3): catch QuotaExceededError (browser storage full) +
+    // re-throw a typed error so the caller can surface a notification instead
+    // of silently losing the save.
+    try {
+      const tx = db.transaction([STORE_SAVES, STORE_META], 'readwrite');
+      await tx.objectStore(STORE_SAVES).put(env);
+      await tx.objectStore(STORE_META).put(state.metadata.saveId, META_ACTIVE_KEY);
+      await tx.done;
+    } catch (err) {
+      if (isQuotaExceededError(err)) {
+        throw new SaveQuotaExceededError(
+          'Save failed: browser storage quota exceeded. Free up space or export your save.',
+        );
+      }
+      throw err;
+    }
     return state.metadata.saveId;
   }
 

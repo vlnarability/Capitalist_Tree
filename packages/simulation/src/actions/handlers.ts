@@ -17,6 +17,7 @@ import type {
   GameState,
   GameAction,
   HarvestLeavesAction,
+  PlantSeedAction,
   HarvestResult,
   SimulationEvent,
   SetSpeedAction,
@@ -27,11 +28,15 @@ import type {
   FertilizerApplicationResult,
   WaterApplicationResult,
   PurchaseAction,
+  ImportCommodityAction,
+  ExportCommodityAction,
 } from '@capitalist-tree/shared';
 import {
   PROVISIONAL_BIOLOGY_HARVEST_STRESS_PER_LEAF_FRACTION,
   PROVISIONAL_BIOLOGY_DEATH_DEFOLIATION_WINDOW_DAYS,
+  PROVISIONAL_BIOLOGY_WEAR_PER_DAMAGE,
   PROVISIONAL_RESOURCE_SOIL_WATER_CAPACITY,
+  PROVISIONAL_PROGRESSION_LEGACY_POINTS_PER_SEED,
   UnknownActionError,
 } from '@capitalist-tree/shared';
 import type { SystemResult } from '../systems/system.js';
@@ -46,11 +51,15 @@ import { findFertilizerById } from '@capitalist-tree/content';
 import { applyFertilizer, applyWaterToSoil } from '../resources/index.js';
 import {
   applyPurchase,
+  applyImport,
+  applyExport,
   InsufficientFundsError,
+  InsufficientInventoryError,
   UnknownMarketError,
   payExpenseHandler,
   transferHandler,
   sellTreeHandler,
+  performLaborHandler,
 } from '../economy/index.js';
 import {
   setAutomationPolicyHandler,
@@ -67,7 +76,9 @@ import {
   hireEmployeesHandler,
   layOffEmployeesHandler,
   setBusinessStatusHandler,
+  restructureOwnershipHandler,
 } from '../business/actions.js';
+import { applyPlayerEnvironmentalImpact } from '../environment/player-impact.js';
 import {
   unlockResearchHandler,
   activateTraitHandler,
@@ -75,6 +86,7 @@ import {
   prestigeResetHandler,
   recordHistoricalEventHandler,
 } from '../progression/actions.js';
+import { InsufficientSeedsError } from '../progression/errors.js';
 import {
   scheduleEventHandler,
   cancelEventHandler,
@@ -82,6 +94,7 @@ import {
   resolveEventHandler,
   setGovernmentPolicyHandler,
   setMonetaryPolicyHandler,
+  lobbyGovernmentHandler,
 } from '../events/actions.js';
 
 export type ActionListener<A extends GameAction = GameAction> = (
@@ -199,17 +212,36 @@ const harvestLeavesHandler: ActionListener<HarvestLeavesAction> = (state, action
   // Apply immediate stress (GDD §5.4: harvesting induces stress).
   tree.stress = Math.min(1, tree.stress + result.stressInduced);
 
-  // Record a severe-defoliation damage entry if >= 50% of foliage was removed.
-  // The BiologySystem prunes old damage records and counts these for mortality.
+  // Record a severe-defoliation damage entry if the harvest intended to remove
+  // >= SEVERE_DEFOLIATION_FRACTION of foliage. We use the INTENDED fraction
+  // (min(requested, maximumHarvestFraction)) — NOT the floor-rounded actual
+  // leavesHarvested/foliageBefore — so that a genuine max-rate harvest on a
+  // non-even foliage count (e.g. 56/112.33 = 0.4987 after Math.floor, or
+  // 1500/3001 = 0.4998 on an odd integer) still registers as severe. Otherwise
+  // the repeated-defoliation mortality counter under-counts + a tree harvested
+  // at the maximum rate 8× can survive (TDD §21 #6 regression). The
+  // leavesHarvested > 0 guard avoids recording severe for the degenerate
+  // 1-leaf case where floor rounds the removal to 0.
   const fractionRemoved =
     result.foliageBefore > 0 ? result.leavesHarvested / result.foliageBefore : 0;
+  const requestedFraction =
+    result.foliageBefore > 0 ? action.payload.requestedLeaves / result.foliageBefore : 0;
+  const intendedFraction = Math.min(requestedFraction, ctx.species.maximumHarvestFraction);
+  const effectiveFraction = Math.max(fractionRemoved, intendedFraction);
+  const isSevere =
+    result.leavesHarvested > 0 && intendedFraction >= SEVERE_DEFOLIATION_FRACTION;
   const damage: TreeDamageState[] = [...tree.damage];
-  if (fractionRemoved >= SEVERE_DEFOLIATION_FRACTION) {
+  if (isSevere) {
+    const sev = Math.min(1, effectiveFraction);
     damage.push({
       type: 'severe-defoliation',
-      severity: Math.min(1, fractionRemoved),
+      severity: sev,
       appliedAt: state.clock.elapsedSeconds,
     });
+    // P12-C redesign: over-pruning/over-harvesting is a neglect signal —
+    // accumulate the severe-defoliation severity into the monotonic wear
+    // counter (drives the chronic-neglect mortality path in death.ts).
+    tree.wear += sev * PROVISIONAL_BIOLOGY_WEAR_PER_DAMAGE;
   }
   tree.damage = damage;
 
@@ -230,7 +262,7 @@ const harvestLeavesHandler: ActionListener<HarvestLeavesAction> = (state, action
       },
     },
   ];
-  if (fractionRemoved >= SEVERE_DEFOLIATION_FRACTION) {
+  if (isSevere) {
     // Count prior severe defoliations within the window to flag "repeated".
     const windowSeconds =
       PROVISIONAL_BIOLOGY_DEATH_DEFOLIATION_WINDOW_DAYS * 24 * 60 * 60;
@@ -243,7 +275,7 @@ const harvestLeavesHandler: ActionListener<HarvestLeavesAction> = (state, action
       at: state.clock.elapsedSeconds,
       payload: {
         treeId: tree.id,
-        fractionRemoved,
+        fractionRemoved: effectiveFraction,
         repeated: priorCount >= 1,
       },
     });
@@ -253,7 +285,91 @@ const harvestLeavesHandler: ActionListener<HarvestLeavesAction> = (state, action
   // per-leaf tuning — the actual stress computation lives in harvestLeaves).
   void PROVISIONAL_BIOLOGY_HARVEST_STRESS_PER_LEAF_FRACTION;
 
-  return { state: next, events };
+  // P11 (W6 / RV4-F-H3): harvesting leaves is a light extraction — it nudges
+  // the home region's industrialActivity (the player is harvesting the tree's
+  // production) and slightly reduces forestCoverage (canopy thinning). The
+  // impact is small per-leaf so casual harvesting is sustainable, but
+  // aggressive harvesting contributes to regional deforestation pressure.
+  const leavesHarvested = action.payload.requestedLeaves ?? 1;
+  const withRegionalImpact = applyPlayerEnvironmentalImpact(next, {
+    carbonEmissions: 0,
+    waterConsumption: 0,
+    soilDegradation: 0,
+    pollution: 0.002 * leavesHarvested,
+    landDisturbance: 0.003 * leavesHarvested,
+    biodiversityImpact: 0.001 * leavesHarvested,
+  });
+
+  return { state: withRegionalImpact, events };
+};
+
+/**
+ * `plant-seed` action handler (GAP-19 / GDD §11.2 — Genetic Legacy: the seed
+ * production → planting loop). Consumes ONE seed from the tree's `seeds`
+ * accumulator + credits `PROVISIONAL_PROGRESSION_LEGACY_POINTS_PER_SEED`
+ * genetic-legacy points to `prestige.geneticLegacyPoints` (the prestige currency
+ * that funds `unlock-research`). A mid-generation earning mechanism that
+ * supplements the generation-end prestige bonus — gives the player a reason to
+ * accumulate + plant seeds between prestige resets.
+ *
+ *   1. Resolves the tree (P1: only the original tree — rejects if `treeId`
+ *      doesn't match `originalTree.id`).
+ *   2. Verifies `tree.seeds >= 1` (rejects with `InsufficientSeedsError` if 0 —
+ *      the tree has produced no seeds to plant yet).
+ *   3. Decrements `tree.seeds` by 1.
+ *   4. Credits the per-seed points to `geneticLegacyPoints` (bigint string
+ *      arithmetic — TDD §10.1, same precision discipline as unlock-research).
+ *   5. Emits a `seed-planted` event carrying the seeds consumed, the seeds
+ *      remaining, the points gained, + the resulting balance.
+ *
+ * A dead tree's stored seeds remain plantable (the genetic legacy persists after
+ * death — GDD §16.3: tree death does not end the game; the lineage continues).
+ *
+ * Pure: returns a new state + events. Deterministic given (state, action).
+ */
+const plantSeedHandler: ActionListener<PlantSeedAction> = (state, action) => {
+  const next: GameState = {
+    ...state,
+    originalTree: { ...state.originalTree },
+    progression: {
+      ...state.progression,
+      prestige: { ...state.progression.prestige },
+    },
+  };
+  const tree = next.originalTree as TreeState;
+
+  // Resolve the tree (P1: only the original tree can plant a seed).
+  if (action.payload.treeId !== tree.id) {
+    throw new Error(
+      `plant-seed: unknown treeId "${action.payload.treeId}". P1 only supports the original tree ("${tree.id}").`,
+    );
+  }
+  // Gate: the tree must have produced at least one seed (the BiologySystem
+  // seed-dispersed flow, fed by alloc.reproduction, gated on the fruiting age).
+  if (tree.seeds < 1) {
+    throw new InsufficientSeedsError(tree.id, tree.seeds);
+  }
+
+  // Consume one seed + credit the per-seed genetic-legacy points (bigint string
+  // arithmetic — TDD §10.1). The points fund unlock-research (GDD §11.2).
+  const seedsRemaining = tree.seeds - 1;
+  tree.seeds = seedsRemaining;
+  const gained = PROVISIONAL_PROGRESSION_LEGACY_POINTS_PER_SEED;
+  const balanceAfter = BigInt(next.progression.prestige.geneticLegacyPoints) + BigInt(gained);
+  next.progression.prestige.geneticLegacyPoints = balanceAfter.toString(10);
+
+  const event: SimulationEvent = {
+    type: 'seed-planted',
+    at: action.payload.tick,
+    payload: {
+      treeId: tree.id,
+      seedsConsumed: 1,
+      seedsRemaining,
+      legacyPointsGained: gained,
+      geneticLegacyPointsAfter: next.progression.prestige.geneticLegacyPoints,
+    },
+  };
+  return { state: next, events: [event] };
 };
 
 /**
@@ -398,23 +514,50 @@ const purchaseHandler: ActionListener<PurchaseAction> = (state, action) => {
   return { state: result.state, events: result.events };
 };
 
+// P13-B / GAP-24: import-commodity — buy from the foreign market at the
+// domestic price + a tariff surcharge (base → external:default, tariff → authority).
+const importCommodityHandler: ActionListener<ImportCommodityAction> = (state, action) => {
+  const result = applyImport(state, {
+    marketId: action.payload.marketId,
+    quantity: action.payload.quantity,
+    timestamp: state.clock.elapsedSeconds,
+  });
+  return { state: result.state, events: result.events };
+};
+
+// P13-B / GAP-24: export-commodity — sell inventory abroad at the domestic
+// price; revenue issued from the authority (mint) → player (foreign buyer pays
+// into the domestic economy). Inventory debited.
+const exportCommodityHandler: ActionListener<ExportCommodityAction> = (state, action) => {
+  const result = applyExport(state, {
+    marketId: action.payload.marketId,
+    quantity: action.payload.quantity,
+    timestamp: state.clock.elapsedSeconds,
+  });
+  return { state: result.state, events: result.events };
+};
+
 // Re-export the typed errors so the action layer (or a UI) can catch them.
 // The errors are NOT part of the saved GameState — they are runtime-only
 // signals. The handler above lets them propagate to `executeAction`, which
 // surfaces them as exceptions for the engine caller to handle (P3c may
 // wrap them into `notification` events for the UI).
-export { InsufficientFundsError, UnknownMarketError };
+export { InsufficientFundsError, InsufficientInventoryError, UnknownMarketError };
 
 export const actionHandlers: Record<string, ActionListener> = {
   'no-op': noOp,
   'set-speed': setSpeed as ActionListener,
   'harvest-leaves': harvestLeavesHandler as ActionListener,
+  'plant-seed': plantSeedHandler as ActionListener,
   'apply-water': applyWaterHandler as ActionListener,
   'apply-fertilizer': applyFertilizerHandler as ActionListener,
   'purchase': purchaseHandler as ActionListener,
+  'import-commodity': importCommodityHandler as ActionListener,
+  'export-commodity': exportCommodityHandler as ActionListener,
   'pay-expense': payExpenseHandler as ActionListener,
   'transfer': transferHandler as ActionListener,
   'sell-tree': sellTreeHandler as ActionListener,
+  'perform-labor': performLaborHandler as ActionListener,
   'set-automation-policy': setAutomationPolicyHandler as ActionListener,
   'enable-automation': enableAutomationHandler as ActionListener,
   'disable-automation': disableAutomationHandler as ActionListener,
@@ -428,6 +571,7 @@ export const actionHandlers: Record<string, ActionListener> = {
   'hire-employees': hireEmployeesHandler as ActionListener,
   'lay-off-employees': layOffEmployeesHandler as ActionListener,
   'set-business-status': setBusinessStatusHandler as ActionListener,
+  'restructure-ownership': restructureOwnershipHandler as ActionListener,
   // P9b: progression actions (TDD §5.7 / §11, GDD §11 / §12).
   'unlock-research': unlockResearchHandler as ActionListener,
   'activate-trait': activateTraitHandler as ActionListener,
@@ -440,6 +584,7 @@ export const actionHandlers: Record<string, ActionListener> = {
   'trigger-event': triggerEventHandler as ActionListener,
   'resolve-event': resolveEventHandler as ActionListener,
   'set-government-policy': setGovernmentPolicyHandler as ActionListener,
+  'lobby-government': lobbyGovernmentHandler as ActionListener,
   'set-monetary-policy': setMonetaryPolicyHandler as ActionListener,
 };
 

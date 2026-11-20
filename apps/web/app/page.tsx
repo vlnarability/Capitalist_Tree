@@ -55,18 +55,26 @@
  *     `simState` reference is untouched, rule 6). The page re-renders to
  *     mount / unmount the advanced Panels.
  */
-import { useCallback, useMemo, type ReactElement } from 'react';
-import { DEFAULT_GAME_CONFIG } from '@capitalist-tree/simulation';
+import { useCallback, useMemo, useState, type ReactElement } from 'react';
+import {
+  DEFAULT_GAME_CONFIG,
+  estimateSustainableHarvest,
+  SECONDS_PER_DAY,
+  type BiologyContext,
+  type TreeSpecies,
+} from '@capitalist-tree/simulation';
 import {
   buildTreeRenderData,
   buildEnvironmentRenderData,
 } from '@capitalist-tree/rendering';
+import { findSpeciesById } from '@capitalist-tree/content';
 import type { GameConfig } from '@capitalist-tree/shared';
 import { useSimulationLoop } from '../hooks/useSimulationLoop';
 import { useGameStore } from '../stores/game-store';
 import { createBrowserStorage } from '../lib/persistence';
+import { harvest } from '../lib/actions';
 import { TreeView } from '../components/tree';
-import { Panel, Button } from '../components/common';
+import { Panel, Button, ClimatePicker, type ClimatePickerSelection } from '../components/common';
 import {
   MoneyDisplay,
   TreeConditionSummary,
@@ -82,11 +90,19 @@ import { BiologyPanel, EnvironmentPanel } from '../components/environment';
 import {
   TransactionsPanel,
   HarvestControls,
+  SeedControls,
   PurchaseControls,
   CurrencyCosmeticPicker,
 } from '../components/economy';
 import { AutomationPanel } from '../components/automation';
-import { OfflineModal } from '../components/offline';
+import { BusinessesPanel } from '../components/business';
+import { ObjectivesPanel } from '../components/objectives';
+import { ProgressionPanel } from '../components/progression';
+import { EventsPanel } from '../components/events';
+import { PolicyPanel } from '../components/policy';
+import { OfflineModal, CatchUpProgressBar } from '../components/offline';
+import { EndingScreen } from '../components/common/EndingScreen';
+import { WelcomePanel } from '../components/common/WelcomePanel';
 
 // ----------------------------------------------------------------------------
 // Page component.
@@ -146,12 +162,68 @@ export default function HomePage(): ReactElement {
     return buildEnvironmentRenderData(worldState, clockState);
   }, [worldState, clockState]);
 
-  // New-Game handler: wraps `loop.newGame` with a fresh `GameConfig` stamped
-  // with the current wall-clock. (`Date.now()` here is the spec-allowed
-  // single read at game-creation time — TDD §18.1.)
+  // Click-to-harvest handler (GDD §5.4 Harvesting). The tree canvas is the
+  // focal point of the game (GDD §16 rule 13) — making it clickable lets the
+  // player harvest leaves directly from the tree instead of reaching for the
+  // HarvestControls input. A click dispatches the sustainable per-day harvest
+  // estimate (the same number HarvestControls shows as its recommendation);
+  // the engine caps the actual harvest by available foliage AND the species'
+  // `maximumHarvestFraction`, so a click on a defoliated or dead tree is a
+  // safe no-op rather than an over-harvest. Returns a no-op when the tree is
+  // not actionable (no sim state, dead tree, or estimate unavailable) so the
+  // click never throws; TreeView stays interactive because the handler is
+  // always defined once the page is past the loading gate.
+  const dispatch = useGameStore((s) => s.dispatch);
+  const onTreeClick = useCallback((): void => {
+    const tree = treeState;
+    const clock = clockState;
+    const world = worldState;
+    if (!tree || !clock || !world || !tree.alive) return;
+    const species: TreeSpecies | undefined = findSpeciesById(tree.speciesId);
+    if (!species) return;
+    const ctx: BiologyContext = {
+      now: clock.elapsedSeconds,
+      stepSeconds: SECONDS_PER_DAY,
+      stepDays: 1,
+      season: clock.season,
+      timeOfDay: clock.timeOfDay,
+      species,
+      environment: world.environment,
+    };
+    const estimate = estimateSustainableHarvest(tree, ctx);
+    // Always dispatch at least 1 leaf on a click so the player gets feedback
+    // even when the sustainable estimate rounds to 0 (young tree / winter).
+    // The engine still caps to actual foliage, so this can't over-harvest.
+    const requested = Math.max(1, estimate.leavesPerDay);
+    dispatch(harvest(tree.id, requested));
+  }, [treeState, clockState, worldState, dispatch]);
+
+  // GAP-17 (DR-11) Phase 4: the New Game button opens the climate + species
+  // picker modal instead of booting the default config directly. The player
+  // picks a Köppen zone + a native species (+ optional highland elevation),
+  // and `onPickerSubmit` routes the selection through `loop.newGame`.
+  const [pickerOpen, setPickerOpen] = useState(false);
+
   const onNewGame = useCallback(() => {
-    loop.newGame({ ...DEFAULT_GAME_CONFIG, createdAt: Date.now() });
-  }, [loop]);
+    setPickerOpen(true);
+  }, []);
+
+  // Start the game with the picker's selection (climateId + speciesId +
+  // elevationM), stamped with the current wall-clock (the spec-allowed single
+  // read at game-creation time — TDD §18.1).
+  const onPickerSubmit = useCallback(
+    (selection: ClimatePickerSelection) => {
+      setPickerOpen(false);
+      loop.newGame({
+        ...DEFAULT_GAME_CONFIG,
+        climateId: selection.climateId,
+        speciesId: selection.speciesId,
+        elevationM: selection.elevationM,
+        createdAt: Date.now(),
+      });
+    },
+    [loop],
+  );
 
   // Loading state — boot hasn't published a non-null `simState` yet.
   if (!loop.ready || !treeRenderData || !environmentRenderData) {
@@ -197,6 +269,26 @@ export default function HomePage(): ReactElement {
           null when no summary is parked, so this mount is a no-op most of
           the time. */}
       <OfflineModal />
+      {/* GAP-17 (DR-11) Phase 4: the climate + species picker, opened from the
+          New Game button. Returns null when `pickerOpen` is false, so this
+          mount is a no-op most of the time. */}
+      <ClimatePicker
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        onSubmit={onPickerSubmit}
+      />
+      {/* GAP-36 (GDD §12 endings): celebratory modal surfaced when an objective
+          newly completes. Renders null when no ending is parked, so this mount
+          is a no-op most of the time. */}
+      <EndingScreen />
+      {/* GAP-33 (first-time tutorial): one-time "Getting Started" orientation,
+          dismissed persists to localStorage. Renders null once dismissed. */}
+      <WelcomePanel />
+      {/* P11 (W11): progress bar for the Web Worker offline catch-up. Renders
+          null when no catch-up is running, so this mount is a no-op most of
+          the time. Shows while the worker runs chunks, then the OfflineModal
+          renders the summary. */}
+      <CatchUpProgressBar />
 
       {/* Top row: speed + save/load controls + the advanced-view toggle.
           Always visible — the player should be able to pause / save /
@@ -256,6 +348,7 @@ export default function HomePage(): ReactElement {
                 tree={treeRenderData}
                 environment={environmentRenderData}
                 className="block w-full"
+                onHarvest={onTreeClick}
               />
             </div>
             <div className="mt-3">
@@ -305,6 +398,9 @@ export default function HomePage(): ReactElement {
           <Panel title="Harvest" icon="🍃" tone="emerald" hint="GDD §5.4">
             <HarvestControls />
           </Panel>
+          <Panel title="Genetic Legacy" icon="🌰" tone="amber" hint="GDD §11.2">
+            <SeedControls />
+          </Panel>
           <Panel title="Markets" icon="🛒" hint="GDD §8.5">
             <PurchaseControls />
           </Panel>
@@ -321,6 +417,33 @@ export default function HomePage(): ReactElement {
               (the AutomationSystem owns evaluation + execution). */}
           <Panel title="Automation" icon="🤖" hint="GDD §9 / TDD §12">
             <AutomationPanel />
+          </Panel>
+          {/* P11-E (Phase 3 game-loop gap): bridges the previously-unreachable
+              purchase-business / operate-business / sell-business GameActions
+              to the UI. Pre-P11-E Phase 3 "Expansion" was entirely unwired. */}
+          <Panel title="Businesses" icon="🏭" hint="GDD §8 / Phase 3">
+            <BusinessesPanel />
+          </Panel>
+          {/* DR-8 (GDD §12 endings): the six long-term objectives were
+              evaluated + persisted (W8) but had no UI surface. This panel
+              shows each objective's progress + completion status. */}
+          <Panel title="Objectives" icon="🎯" hint="GDD §12 / Endings">
+            <ObjectivesPanel />
+          </Panel>
+          {/* P11-E (Phase 5 game-loop gap): bridges unlock-research /
+              activate-trait / deactivate-trait / prestige-reset to the UI. */}
+          <Panel title="Progression" icon="🧬" hint="GDD §11 / Phase 5">
+            <ProgressionPanel />
+          </Panel>
+          {/* P11-E (Phase 6 game-loop gap): bridges schedule-event /
+              cancel-event / trigger-event / resolve-event to the UI. */}
+          <Panel title="Events" icon="🌦️" hint="GDD §10 / Phase 6">
+            <EventsPanel />
+          </Panel>
+          {/* P11-E (Phase 6 cont.): bridges set-government-policy /
+              set-monetary-policy to the UI. */}
+          <Panel title="Policy" icon="🏛️" hint="GDD §404 / Phase 6">
+            <PolicyPanel />
           </Panel>
         </div>
       ) : null}

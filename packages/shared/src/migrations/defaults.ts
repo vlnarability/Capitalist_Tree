@@ -1084,6 +1084,7 @@ const v12ToV13: Migration = (state: GameState): GameState => {
         governmentPolicy: {
           environmentalRegulations: 0.3,
           carbonTaxRate: 0,
+          tariffRate: 0,
           subsidies: [],
         },
         monetaryPolicy: {
@@ -1123,7 +1124,16 @@ const v12ToV13: Migration = (state: GameState): GameState => {
     const existingGlobal = existing.global as Record<string, unknown> | undefined;
     const global = isObject(existingGlobal)
       ? (() => {
-          const g: Record<string, unknown> = {};
+          // P11 (W8) / P13-C fix: spread `existingGlobal` first to preserve
+          // forward-compatible fields the v12→v13 migration doesn't know about
+          // (mirrors the top-level `{ ...existing, scheduler, global }` spread
+          // below). Pre-fix this rebuilt `global` as `{}` + a fixed field list,
+          // which dropped any unknown sub-field — breaking idempotency for saves
+          // migrated through the v12→v13 hop. The reconstructions below then
+          // overlay the known sub-fields (each preserves its own existing
+          // values + backfills missing ones), so the net effect is "preserve
+          // everything, backfill missing".
+          const g: Record<string, unknown> = { ...existingGlobal };
           // regions — preserve if array, else [].
           g.regions = Array.isArray(existingGlobal.regions) ? existingGlobal.regions : [];
           // aggregatedIndicators — preserve present sub-fields, backfill missing
@@ -1174,11 +1184,12 @@ const v12ToV13: Migration = (state: GameState): GameState => {
                   0.3,
                 ),
                 carbonTaxRate: num(existingGov.carbonTaxRate, 0),
+                tariffRate: num(existingGov.tariffRate, 0),
                 subsidies: Array.isArray(existingGov.subsidies)
                   ? existingGov.subsidies
                   : [],
               }
-            : { environmentalRegulations: 0.3, carbonTaxRate: 0, subsidies: [] };
+            : { environmentalRegulations: 0.3, carbonTaxRate: 0, tariffRate: 0, subsidies: [] };
           // monetaryPolicy — preserve present sub-fields, backfill missing.
           const existingMon = existingGlobal.monetaryPolicy as
             | Record<string, unknown>
@@ -1204,7 +1215,12 @@ const v12ToV13: Migration = (state: GameState): GameState => {
           globalMarketIndices: {},
         };
 
-    eventState = { scheduler, global };
+    // P11 (W8): spread `existing` to preserve forward-compatible fields the
+    // v12→v13 migration doesn't know about (e.g. `objectives` added in v15).
+    // Pre-fix this rebuilt eventState as `{ scheduler, global }` explicitly,
+    // which dropped any unknown fields — breaking idempotency for v15+ saves
+    // migrated through the v12→v13 hop.
+    eventState = { ...existing, scheduler, global };
   }
 
   (out as { eventState: unknown }).eventState = eventState;
@@ -1212,3 +1228,157 @@ const v12ToV13: Migration = (state: GameState): GameState => {
 };
 
 migrations.register(12, v12ToV13);
+
+// P11 (W14 / RV3-3): v13 -> v14 migration. Adds `economy.initialSupply` —
+// the starting money supply, persisted so `conservationDiscrepancy()` is
+// computable on a LOADED save (the caller no longer needs the original
+// config) and so non-default starts compute correct monetary-conditions
+// (the market `monetaryConditionsFactor` divides
+// `monetarySupply / initialSupply`).
+//
+// Backfill strategy: derive `initialSupply` from the conservation invariant
+//   `sum(accounts.balance) + totalSinks - totalIssued === initialSupply`
+// Rearranged: `initialSupply = sum(accounts.balance) + totalSinks - totalIssued`.
+// This is EXACT for any conservation-correct save (the invariant holds by
+// construction in the ledger). For a save with a conservation discrepancy it
+// gives the best estimate. When the accounts ledger is absent/empty (a
+// pre-P3a save that never migrated the accounts, or a hand-built state), it
+// falls back to `'50000'` — the default `startingPersonalCash`.
+//
+// Idempotent: a v14 save with `initialSupply` already present keeps its value
+// (hand-patched values are preserved, never overwritten). Pure: does NOT
+// touch `originalTree.id` / `originalTree.isOriginal` (GDD §16.1/16.2).
+const v13ToV14: Migration = (state: GameState): GameState => {
+  const out: GameState = { ...state };
+  const economy = out.economy as {
+    accounts?: { balance?: string }[];
+    totalSinks?: string;
+    totalIssued?: string;
+    initialSupply?: string;
+  };
+
+  // Already present (idempotent) — keep the hand-patched value.
+  if (economy.initialSupply !== undefined) {
+    return out;
+  }
+
+  const accounts = Array.isArray(economy.accounts) ? economy.accounts : [];
+  const sinks = BigInt(economy.totalSinks ?? '0');
+  const issued = BigInt(economy.totalIssued ?? '0');
+
+  // Sum account balances (defensive: skip malformed entries).
+  let sumBalances = 0n;
+  for (const a of accounts) {
+    const bal = a?.balance;
+    if (typeof bal === 'string' && /^\d+$/.test(bal)) {
+      sumBalances += BigInt(bal);
+    }
+  }
+
+  // initialSupply = sum(balances) + totalSinks - totalIssued (conservation).
+  // Fall back to the default starting cash when the ledger is empty/absent
+  // (a pre-P3a save or a hand-built state with no accounts).
+  let initialSupply: string;
+  if (accounts.length === 0) {
+    initialSupply = '50000';
+  } else {
+    const derived = sumBalances + sinks - issued;
+    // If the save has a conservation discrepancy that drives the derived
+    // value negative (shouldn't happen for a real save, but be defensive),
+    // fall back to the default rather than persisting a negative supply.
+    initialSupply = derived >= 0n ? derived.toString(10) : '50000';
+  }
+
+  (out.economy as { initialSupply: string }).initialSupply = initialSupply;
+  return out;
+};
+
+migrations.register(13, v13ToV14);
+
+// P11 (W8 / RV4-F-H5): v14 -> v15 migration. Adds
+// `eventState.objectives.completed` — persisted end-game objective completion.
+// Pre-v15, objectives were recomputed fresh each tick with no persistence, so
+// the `objective-achieved` notification could re-fire on threshold re-crossings
+// and after save/load. The fix records completed objectives permanently.
+//
+// Backfill: `{ completed: [] }`. Objectives re-evaluate on the first post-load
+// tick; any that are still achieved get recorded then. A save that already has
+// a hand-patched `objectives` block keeps its values (idempotent).
+//
+// Pure: does NOT touch `originalTree.id` / `originalTree.isOriginal`.
+const v14ToV15: Migration = (state: GameState): GameState => {
+  const out: GameState = { ...state };
+  const eventState = out.eventState as { objectives?: { completed?: string[] } };
+
+  // Already present (idempotent) — keep the hand-patched value.
+  if (eventState.objectives !== undefined) {
+    return out;
+  }
+
+  (out.eventState as { objectives: { completed: string[] } }).objectives = {
+    completed: [],
+  };
+  return out;
+};
+
+migrations.register(14, v14ToV15);
+
+// P11 (W15 follow-up / RV4-F-M8): v15 -> v16 migration. Adds
+// `eventState.environment.lastSoilHealthBand` — persisted previous-tick soil-
+// health severity band so the W15 crossing-throttle can detect
+// previous-tick → this-tick escalations for soil.health (a cross-system field
+// set by ResourceSystem before EnvironmentSystem runs; without this, a
+// sustained-low soil.health emits no notification because the EnvironmentSystem's
+// beforeEnv.soil.health is already this-tick's value).
+//
+// Backfill: `{ lastSoilHealthBand: 0 }` (band 0 = healthy). A loaded save with
+// already-critical soil therefore emits ONE environment-soil-health-low
+// notification on the first post-load tick (0 -> 2 escalation), then dedups.
+// A save that already has a hand-patched `environment` block keeps its values
+// (idempotent).
+//
+// Pure: does NOT touch `originalTree.id` / `originalTree.isOriginal` / the
+// `objectives` block added in v14 -> v15.
+const v15ToV16: Migration = (state: GameState): GameState => {
+  const out: GameState = { ...state };
+  const eventState = out.eventState as {
+    environment?: { lastSoilHealthBand?: number };
+  };
+
+  // Already present (idempotent) — keep the hand-patched value.
+  if (eventState.environment !== undefined) {
+    return out;
+  }
+
+  (out.eventState as { environment: { lastSoilHealthBand: number } }).environment = {
+    lastSoilHealthBand: 0,
+  };
+  return out;
+};
+
+migrations.register(15, v15ToV16);
+
+/**
+ * DR-6 (docs/reviews/DECISIONS.md): stamp `rngVersion` on legacy saves.
+ *
+ * Pre-v17 saves have no `rngVersion` field. They MUST migrate in at v1
+ * (legacy root-consuming fork) so their RNG sequence does not silently
+ * change — the whole point of DR-6's versioning is that switching to the
+ * non-root-consuming v2 fork only affects NEW simulations. The gameStateSchema
+ * also defaults the field to 1, but the migration stamps it explicitly so the
+ * intent is recorded + a future schema change can't accidentally shift it.
+ *
+ * Idempotent: a save that already has `rngVersion` (e.g. a v17 save re-loaded
+ * through the migration path, or a hand-patched save) keeps its value.
+ */
+const v16ToV17: Migration = (state: GameState): GameState => {
+  const out: GameState = { ...state };
+  const maybeRngVersion = (out as { rngVersion?: number }).rngVersion;
+  if (maybeRngVersion !== undefined) {
+    return out;
+  }
+  (out as { rngVersion: number }).rngVersion = 1;
+  return out;
+};
+
+migrations.register(16, v16ToV17);

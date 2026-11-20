@@ -1033,6 +1033,7 @@ describe('MigrationRegistry', () => {
     expect(out.eventState.global.governmentPolicy).toEqual({
       environmentalRegulations: 0.3,
       carbonTaxRate: 0,
+      tariffRate: 0,
       subsidies: [],
     });
     // monetaryPolicy — schema defaults.
@@ -1162,6 +1163,153 @@ describe('MigrationRegistry', () => {
     const v13State = freshState();
     const out = migrations.migrate(v13State, 12, CURRENT_SCHEMA_VERSION);
     expect(out).toEqual(v13State);
+  });
+
+  // --------------------------------------------------------------------------
+  // P11 (W14 / RV3-3): v13 -> v14 migration backfills `economy.initialSupply`.
+  // --------------------------------------------------------------------------
+  it('v13 -> v14 migration backfills economy.initialSupply from the conservation invariant', () => {
+    // A v13 save predates the initialSupply field. The migration derives it
+    // from `sum(accounts.balance) + totalSinks - totalIssued` — exact for any
+    // conservation-correct save.
+    const v13State = freshState();
+    const { initialSupply: _is, ...withoutInitialSupply } = v13State.economy;
+    void _is;
+    const v13Save = {
+      ...v13State,
+      economy: withoutInitialSupply,
+    } as unknown as GameState;
+    const out = migrations.migrate(v13Save, 13, CURRENT_SCHEMA_VERSION);
+    // The default fresh state has startingPersonalCash = '50000' in the player
+    // account, totalIssued = 0, totalSinks = 0 → derived initialSupply = 50000.
+    expect(out.economy.initialSupply).toBe('50000');
+  });
+
+  it('v13 -> v14 migration derives correct initialSupply after issuance + sinks', () => {
+    // A v13 save that has been played: the authority issued 30000 (totalIssued)
+    // and 10000 was sunk (totalSinks). The accounts now sum to
+    // 50000 + 30000 - 10000 = 70000. The conservation invariant says
+    // initialSupply = sum(balances) + totalSinks - totalIssued
+    //               = 70000 + 10000 - 30000 = 50000 (the original start).
+    const v13State = freshState();
+    // Hand-build a played economy state without initialSupply.
+    const playerAccount = v13State.economy.accounts.find(
+      (a) => a.id === 'account:player:personal',
+    )!;
+    const externalAccount = v13State.economy.accounts.find(
+      (a) => a.id === 'account:external:default',
+    )!;
+    const playedAccounts = [
+      { ...playerAccount, balance: '60000' }, // grew via issuance
+      { ...externalAccount, balance: '10000' }, // received some
+    ];
+    const { initialSupply: _is, ...econRest } = v13State.economy;
+    void _is;
+    const played = {
+      ...v13State,
+      economy: {
+        ...econRest,
+        accounts: playedAccounts,
+        monetarySupply: '70000',
+        totalIssued: '30000',
+        totalSinks: '10000',
+      },
+    } as unknown as GameState;
+    const out = migrations.migrate(played, 13, CURRENT_SCHEMA_VERSION);
+    // 60000 + 10000 + 10000 - 30000 = 50000 — the original starting supply.
+    expect(out.economy.initialSupply).toBe('50000');
+  });
+
+  it('v13 -> v14 migration is idempotent on a v14 save (hand-patched initialSupply preserved)', () => {
+    // A v14 save with a non-default initialSupply (e.g. a game started with
+    // 100000) must keep its value — the migration never overwrites.
+    const v14State = freshState();
+    const handPatched = {
+      ...v14State,
+      economy: { ...v14State.economy, initialSupply: '100000' },
+    } as unknown as GameState;
+    const out = migrations.migrate(handPatched, 13, CURRENT_SCHEMA_VERSION);
+    expect(out.economy.initialSupply).toBe('100000');
+  });
+
+  it('v13 -> v14 migration falls back to default when the accounts ledger is empty', () => {
+    // A malformed/pre-P3a save with no accounts ledger: the migration cannot
+    // derive initialSupply from the invariant, so it falls back to '50000'.
+    const v13State = freshState();
+    const { initialSupply: _is, ...econRest } = v13State.economy;
+    void _is;
+    const noAccounts = {
+      ...v13State,
+      economy: { ...econRest, accounts: [], totalIssued: '0', totalSinks: '0' },
+    } as unknown as GameState;
+    const out = migrations.migrate(noAccounts, 13, CURRENT_SCHEMA_VERSION);
+    expect(out.economy.initialSupply).toBe('50000');
+  });
+
+  it('v15 -> v16 migration backfills eventState.environment.lastSoilHealthBand (W15 follow-up)', () => {
+    // Construct a v15 state WITHOUT eventState.environment (the field the
+    // v15→v16 migration adds). freshState() + manual override.
+    const v15State = freshState();
+    // Strip any environment block on eventState (simulate a pre-v16 save).
+    const { environment: _stripped, ...eventStateWithoutEnv } = v15State.eventState as {
+      environment?: unknown;
+    };
+    const state = {
+      ...v15State,
+      eventState: eventStateWithoutEnv,
+    } as unknown as GameState;
+
+    const out = migrations.migrate(state, 15, CURRENT_SCHEMA_VERSION);
+    expect(out.eventState.environment).toBeDefined();
+    expect(out.eventState.environment.lastSoilHealthBand).toBe(0);
+  });
+
+  it('v15 -> v16 migration is idempotent on a v16 save (preserves hand-patched band)', () => {
+    // A save that already has eventState.environment keeps its value.
+    const v15State = freshState();
+    const state = {
+      ...v15State,
+      eventState: {
+        ...v15State.eventState,
+        environment: { lastSoilHealthBand: 2 },
+      },
+    } as unknown as GameState;
+
+    const out = migrations.migrate(state, 15, CURRENT_SCHEMA_VERSION);
+    expect(out.eventState.environment.lastSoilHealthBand).toBe(2);
+  });
+
+  it('v16 -> v17 migration backfills rngVersion=1 (DR-6 — legacy saves keep v1 root-consuming fork)', () => {
+    // Construct a v16 state WITHOUT rngVersion (the field the v16→v17 migration
+    // adds). freshState() initializes at v2, so strip it to simulate a legacy
+    // save that predates the field.
+    const v16State = freshState();
+    const { rngVersion: _stripped, ...withoutRngVersion } = v16State as {
+      rngVersion?: number;
+    };
+    const state = withoutRngVersion as unknown as GameState;
+
+    const out = migrations.migrate(state, 16, CURRENT_SCHEMA_VERSION);
+    // Legacy saves MUST migrate to v1 so their RNG sequence is preserved
+    // (the whole point of DR-6 versioning — v2 only affects NEW simulations).
+    expect(out.rngVersion).toBe(1);
+  });
+
+  it('v16 -> v17 migration is idempotent on a save that already has rngVersion (preserves the value)', () => {
+    // A save that already has rngVersion keeps its value (hand-patched or a
+    // re-loaded v17 save routed through the migration path).
+    const v16State = freshState();
+    const state = {
+      ...v16State,
+      rngVersion: 2,
+    } as unknown as GameState;
+
+    const out = migrations.migrate(state, 16, CURRENT_SCHEMA_VERSION);
+    expect(out.rngVersion).toBe(2);
+  });
+
+  it('v17 is the current schema version', () => {
+    expect(CURRENT_SCHEMA_VERSION).toBe(17);
   });
 
   it('v12 -> v13 migration is a defensive no-op on the environment derivation when world.environment is missing', () => {

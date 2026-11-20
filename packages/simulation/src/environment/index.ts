@@ -44,3 +44,4 @@ export * from './soil.js';
 export * from './biodiversity.js';
 export * from './impact.js';
 export * from './energy.js';
+export * from './indicators.js';

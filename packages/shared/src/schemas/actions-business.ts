@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { businessStatusSchema } from './business.js';
+import { businessStatusSchema, ownershipStateSchema } from './business.js';
 
 /**
  * Business-related GameAction variants (P8a — TDD §5.7 / §11, GDD §8.1 / §8.2 /
@@ -117,8 +117,17 @@ export const operateBusinessActionSchema = z.object({
   payload: z.object({
     /** Id of the business to operate (must exist in `state.businesses`). */
     businessId: z.string().min(1),
-    /** Simulation second at which the operate step runs. */
-    tick: z.number().int().nonnegative(),
+    /**
+     * Simulation second at which the operate step runs.
+     *
+     * @deprecated P11 (RV3-2): the handler now uses `state.clock.elapsedSeconds`
+     * as the authoritative `now` — a player-supplied `tick` is IGNORED. This
+     * closes the infinite-money exploit where a forward-dated `tick` replayed
+     * at the same engine `now` re-triggered demand-injection. The field is kept
+     * optional for backward compatibility with existing dispatches/tests but
+     * has no effect. Remove in a future schema bump once callers stop sending it.
+     */
+    tick: z.number().int().nonnegative().optional(),
   }),
 });
 export type OperateBusinessAction = z.infer<typeof operateBusinessActionSchema>;
@@ -151,8 +160,14 @@ export const sellBusinessActionSchema = z.object({
   payload: z.object({
     /** Id of the business to liquidate. */
     businessId: z.string().min(1),
-    /** Simulation second at which the sale runs (deterministic event `at`). */
-    tick: z.number().int().nonnegative(),
+    /**
+     * Simulation second at which the sale runs (deterministic event `at`).
+     *
+     * @deprecated P11 (RV3-2/RV3-6): the handler now uses
+     * `state.clock.elapsedSeconds` for the event timestamp. A player-supplied
+     * `tick` is IGNORED. Kept optional for backward compatibility.
+     */
+    tick: z.number().int().nonnegative().optional(),
   }),
 });
 export type SellBusinessAction = z.infer<typeof sellBusinessActionSchema>;
@@ -214,8 +229,14 @@ export const repayLoanActionSchema = z.object({
     liabilityId: z.string().min(1),
     /** Amount to repay (bigint minor units as string, > 0). */
     amount: z.string().min(1),
-    /** Simulation second at which the repayment runs (deterministic event `at`). */
-    tick: z.number().int().nonnegative(),
+    /**
+     * Simulation second at which the repayment runs (deterministic event `at`).
+     *
+     * @deprecated P11 (RV3-2/RV3-6): the handler now uses
+     * `state.clock.elapsedSeconds` for the event timestamp. A player-supplied
+     * `tick` is IGNORED. Kept optional for backward compatibility.
+     */
+    tick: z.number().int().nonnegative().optional(),
   }),
 });
 export type RepayLoanAction = z.infer<typeof repayLoanActionSchema>;
@@ -288,3 +309,29 @@ export const setBusinessStatusActionSchema = z.object({
   }),
 });
 export type SetBusinessStatusAction = z.infer<typeof setBusinessStatusActionSchema>;
+
+/**
+ * `restructure-ownership` action (P13-A / GAP-23 — GDD §8.3) — change a
+ * business's organizational structure (sole-proprietorship → corporation /
+ * cooperative / sustainable-enterprise / non-profit / state-owned).
+ *
+ * This is the entry point that makes the per-type incentives
+ * (`packages/content/src/businesses/org-types.ts`) player-facing: restructuring
+ * to a corporation exposes full shareholder growth pressure, to a non-profit
+ * removes it, to a sustainable-enterprise halves the env footprint, etc. The
+ * handler flips `ownership.structure` + emits a `notification` (the
+ * BusinessSystem picks up the new incentives on its next tick).
+ *
+ * Restructuring is free in this revision (a real implementation would charge a
+ * filing fee + legal cost — PROVISIONAL). The `share` is preserved.
+ */
+export const restructureOwnershipActionSchema = z.object({
+  type: z.literal('restructure-ownership'),
+  payload: z.object({
+    /** Id of the business to restructure (must exist in `state.businesses`). */
+    businessId: z.string().min(1),
+    /** New organizational structure (GDD §8.3 — one of the six types). */
+    structure: ownershipStateSchema.shape.structure,
+  }),
+});
+export type RestructureOwnershipAction = z.infer<typeof restructureOwnershipActionSchema>;

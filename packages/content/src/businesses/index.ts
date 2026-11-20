@@ -38,6 +38,7 @@ export { FERTILIZER_FACTORY, EQUIPMENT_FACTORY } from './manufacturing.js';
 export { DISTRIBUTION_COMPANY } from './distribution.js';
 export { GENERAL_STORE } from './retail.js';
 export { FARM } from './application.js';
+export * from './org-types.js';
 
 export { EXTRACTION_BUSINESSES } from './extraction.js';
 export { PROCESSING_BUSINESSES } from './processing.js';

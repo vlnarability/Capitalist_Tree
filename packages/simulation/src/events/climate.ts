@@ -220,25 +220,32 @@ export function applyClimateFeedback(
  * notification events for material secondary damage.
  *
  * Chain reactions applied per region per call (rates are per sim day; this
- * helper is called once per EventSystem tick with the tick's `dtSeconds` baked
- * into the magnitude via the @provisional rates above — the magnitudes are
- * small per-tick so a single call does not overshoot):
+ * helper is called once per EventSystem tick and scales every rate by
+ * `days = dtSeconds / SECONDS_PER_DAY` so a 60-second tick applies 1/1440 of
+ * a day's damage):
  *   - DEFORESTATION → EROSION: low `forestCoverage` (missing canopy → exposed
  *     soil) reduces `soilHealth` at `PROVISIONAL_DEFORESTATION_EROSION_RATE`
- *     per unit of missing coverage.
+ *     per unit of missing coverage per day.
  *   - SOIL DEGRADATION → REDUCED PRODUCTIVITY: low `soilHealth` reduces
  *     `industrialActivity` at `PROVISIONAL_SOIL_PRODUCTIVITY_PENALTY` per unit
- *     of soil-health deficit (GDD §10.3 "soil degradation → reduced
+ *     of soil-health deficit per day (GDD §10.3 "soil degradation → reduced
  *     productivity").
  *   - WATER SCARCITY → HIGHER PRICES: low `waterAvailability` raises the
  *     `index:commodity-basket` global market index at
- *     `PROVISIONAL_WATER_SCARCITY_PRICE_LIFT` per unit of water deficit (GDD
- *     §10.3 "water scarcity → higher prices"). Averaged across regions
- *     (population-weighted) so a populous parched region lifts the global
- *     price more.
+ *     `PROVISIONAL_WATER_SCARCITY_PRICE_LIFT` per unit of water deficit per
+ *     day (GDD §10.3 "water scarcity → higher prices"). Averaged across
+ *     regions (population-weighted) so a populous parched region lifts the
+ *     global price more.
  *   - BIODIVERSITY LOSS → REDUCED RESILIENCE: low `biodiversity` pulls the
  *     global `ecosystemResilience` down at
- *     `PROVISIONAL_BIODIVERSITY_RESILIENCE_PENALTY` per unit of deficit.
+ *     `PROVISIONAL_BIODIVERSITY_RESILIENCE_PENALTY` per unit of deficit per
+ *     day.
+ *
+ * P11 (RV4-F-H2): pre-fix, this helper took NO `dtSeconds` and applied the
+ * full per-day rate every tick — 1440× too fast at a 60-second step. Soil
+ * health crashed to 0 in ~1 day. The fix scales every rate by
+ * `days = dtSeconds / SECONDS_PER_DAY`, mirroring `applyClimateFeedback`'s
+ * `years = dtSeconds / SECONDS_PER_YEAR` pattern.
  *
  * SPECIES EXTINCTION (irreversible — GDD §10.3): if a region's `biodiversity`
  * is below `PROVISIONAL_SPECIES_EXTINCTION_THRESHOLD`, it is FLOORED at its
@@ -248,11 +255,20 @@ export function applyClimateFeedback(
  * irreversibility so a downstream secondary effect cannot lift biodiversity
  * back above the threshold once collapse has begun.
  *
- * A no-op when there are no regions. Deterministic given `state` — no RNG.
+ * A no-op when there are no regions or `dtSeconds <= 0`. Deterministic given
+ * `state` — no RNG.
  */
 export function applyEnvironmentalFeedback(
   state: GameState,
+  dtSeconds: number,
 ): { state: GameState; events: SimulationEvent[] } {
+  if (dtSeconds <= 0) {
+    return { state, events: [] };
+  }
+  // P11 (RV4-F-H2): scale per-day rates by the fraction of a day this tick
+  // represents. Pre-fix the rates were applied unscaled every tick (1440×
+  // too fast at a 60s step).
+  const days = dtSeconds / SECONDS_PER_DAY;
   const regions = state.eventState.global.regions;
   if (regions.length === 0) {
     return { state, events: [] };
@@ -271,31 +287,34 @@ export function applyEnvironmentalFeedback(
     const biodiversity = region.biodiversity;
 
     // 1. Deforestation → erosion (low forestCoverage erodes soilHealth).
+    //    P11 (RV4-F-H2): scaled by `days` so a 60s tick applies 1/1440 of a
+    //    day's erosion.
     const missingForest = 1 - region.forestCoverage;
-    const erosion = missingForest * PROVISIONAL_DEFORESTATION_EROSION_RATE;
+    const erosion = missingForest * PROVISIONAL_DEFORESTATION_EROSION_RATE * days;
     soilHealth = clamp01(soilHealth - erosion);
 
     // 2. Soil degradation → reduced productivity (low soilHealth cuts
-    //    industrialActivity).
+    //    industrialActivity). P11: scaled by `days`.
     const soilDeficit = 1 - soilHealth;
-    const productivityPenalty = soilDeficit * PROVISIONAL_SOIL_PRODUCTIVITY_PENALTY;
+    const productivityPenalty = soilDeficit * PROVISIONAL_SOIL_PRODUCTIVITY_PENALTY * days;
     industrialActivity = clamp01(industrialActivity - productivityPenalty);
 
     // 3. Water scarcity → higher resource prices (lifts the commodity-basket
     //    global market index). Population-weighted so a populous parched region
-    //    weighs more on the global price.
+    //    weighs more on the global price. P11: scaled by `days`.
     const waterDeficit = 1 - region.waterAvailability;
     if (waterDeficit > 0) {
-      const lift = waterDeficit * PROVISIONAL_WATER_SCARCITY_PRICE_LIFT * Math.max(1, region.population / 1_000_000);
+      const lift = waterDeficit * PROVISIONAL_WATER_SCARCITY_PRICE_LIFT * days * Math.max(1, region.population / 1_000_000);
       const current = globalMarketIndices[COMMODITY_BASKET_INDEX_ID] ?? MARKET_INDEX_BASELINE;
       globalMarketIndices[COMMODITY_BASKET_INDEX_ID] = current + lift;
       if (waterDeficit > 0.5) commodityLiftedRegions.push(region.name);
     }
 
     // 4. Biodiversity loss → reduced ecosystem resilience (global).
+    //    P11: scaled by `days`.
     const biodiversityDeficit = 1 - biodiversity;
     ecosystemResilience = clamp01(
-      ecosystemResilience - biodiversityDeficit * PROVISIONAL_BIODIVERSITY_RESILIENCE_PENALTY,
+      ecosystemResilience - biodiversityDeficit * PROVISIONAL_BIODIVERSITY_RESILIENCE_PENALTY * days,
     );
 
     // 5. Species extinction (irreversible — GDD §10.3). Floor biodiversity at
@@ -303,7 +322,8 @@ export function applyEnvironmentalFeedback(
     //    the threshold via this helper); ratchet the global extinction rate.
     if (biodiversity < PROVISIONAL_SPECIES_EXTINCTION_THRESHOLD) {
       // Floor — no recovery through the secondary chain. biodiversity stays.
-      speciesExtinctionRate += PROVISIONAL_BIODIVERSITY_RESILIENCE_PENALTY;
+      // P11 (RV4-F-H2): ratchet scaled by `days` (was unscaled per-tick).
+      speciesExtinctionRate += PROVISIONAL_BIODIVERSITY_RESILIENCE_PENALTY * days;
       events.push({
         type: 'notification',
         at: state.clock.elapsedSeconds,

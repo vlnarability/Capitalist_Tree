@@ -82,6 +82,14 @@ export interface NotificationsPanelProps {
  * filtered out by the panel (they may still be in the store for the dev
  * console / future audit log).
  *
+ * P11 (RV6-1): the three safety-critical codes produced by the dispatch
+ * wrapper (`offline-clock-tampered`, `save-corrupt`, `original-tree-
+ * protected`) are now included. Pre-fix, the whitelist omitted them, so the
+ * player never saw clock-tamper / corrupt-save / original-tree-guard
+ * warnings even though the simulation detected them — a silent failure on
+ * the most safety-critical paths. They are `critical` severity (mapped by
+ * the dispatch wrapper) and render with the rose tint + alert role.
+ *
  * Exported for testing + for the dispatch-wrapper's documentation.
  */
 export const ACTIONABLE_NOTIFICATION_CODES: ReadonlySet<string> = Object.freeze(
@@ -92,6 +100,10 @@ export const ACTIONABLE_NOTIFICATION_CODES: ReadonlySet<string> = Object.freeze(
     'tree-died',
     'storm-damage',
     'severe-weather',
+    // P11 (RV6-1) — safety-critical codes from the dispatch wrapper.
+    'offline-clock-tampered',
+    'save-corrupt',
+    'original-tree-protected',
   ]),
 );
 

@@ -1,12 +1,13 @@
 import { z } from 'zod';
 import { PROVISIONAL_SPEED_MULTIPLIERS } from '../constants/provisional.js';
-import { harvestLeavesActionSchema } from './actions-biology.js';
+import { harvestLeavesActionSchema, plantSeedActionSchema } from './actions-biology.js';
 import { applyWaterActionSchema, applyFertilizerActionSchema } from './actions-resources.js';
 import {
   purchaseActionSchema,
   payExpenseActionSchema,
   transferActionSchema,
   sellTreeActionSchema,
+  performLaborActionSchema,
 } from './actions-economy.js';
 import {
   setAutomationPolicyActionSchema,
@@ -23,6 +24,7 @@ import {
   hireEmployeesActionSchema,
   layOffEmployeesActionSchema,
   setBusinessStatusActionSchema,
+  restructureOwnershipActionSchema,
 } from './actions-business.js';
 import {
   unlockResearchActionSchema,
@@ -38,6 +40,9 @@ import {
   resolveEventActionSchema,
   setGovernmentPolicyActionSchema,
   setMonetaryPolicyActionSchema,
+  lobbyGovernmentActionSchema,
+  importCommodityActionSchema,
+  exportCommodityActionSchema,
 } from './actions-events.js';
 
 /**
@@ -55,10 +60,11 @@ import {
  * pure — never mutate input state. Reject unknown action types with
  * `UnknownActionError` (handled centrally by `executeAction`).
  */
-const speedMultiplierSchema = z.number().refine(
-  (n) => (PROVISIONAL_SPEED_MULTIPLIERS as readonly number[]).includes(n),
-  (n) => ({ message: `Invalid speed multiplier ${n}` }),
-);
+const speedMultiplierSchema = z
+  .number()
+  .refine((n) => (PROVISIONAL_SPEED_MULTIPLIERS as readonly number[]).includes(n), {
+    message: 'Invalid speed multiplier',
+  });
 
 export const noOpActionSchema = z.object({
   type: z.literal('no-op'),
@@ -75,12 +81,14 @@ export const gameActionSchema = z.discriminatedUnion('type', [
   noOpActionSchema,
   setSpeedActionSchema,
   harvestLeavesActionSchema,
+  plantSeedActionSchema,
   applyWaterActionSchema,
   applyFertilizerActionSchema,
   purchaseActionSchema,
   payExpenseActionSchema,
   transferActionSchema,
   sellTreeActionSchema,
+  performLaborActionSchema,
   setAutomationPolicyActionSchema,
   enableAutomationActionSchema,
   disableAutomationActionSchema,
@@ -94,6 +102,7 @@ export const gameActionSchema = z.discriminatedUnion('type', [
   hireEmployeesActionSchema,
   layOffEmployeesActionSchema,
   setBusinessStatusActionSchema,
+  restructureOwnershipActionSchema,
   // P9a: progression actions (schema-only — handlers + ProgressionSystem land in P9b).
   unlockResearchActionSchema,
   activateTraitActionSchema,
@@ -107,11 +116,15 @@ export const gameActionSchema = z.discriminatedUnion('type', [
   resolveEventActionSchema,
   setGovernmentPolicyActionSchema,
   setMonetaryPolicyActionSchema,
+  lobbyGovernmentActionSchema,
+  importCommodityActionSchema,
+  exportCommodityActionSchema,
 ]);
 export type GameAction = z.infer<typeof gameActionSchema>;
 export type NoOpAction = z.infer<typeof noOpActionSchema>;
 export type SetSpeedAction = z.infer<typeof setSpeedActionSchema>;
 export type HarvestLeavesAction = z.infer<typeof harvestLeavesActionSchema>;
+export type PlantSeedAction = z.infer<typeof plantSeedActionSchema>;
 
 // Re-export biology action variants so consumers can `import { HarvestLeavesAction }`
 // from @capitalist-tree/shared without reaching into the biology submodule.

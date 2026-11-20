@@ -78,9 +78,24 @@ export function updateStress(tree: TreeState, ctx: BiologyContext): StressUpdate
       stepDays;
   }
 
-  // Active damage stress — each unresolved damage record contributes.
-  // (Damage records decay naturally via age; the BiologySystem prunes them.)
-  const activeDamage = tree.damage.length;
+  // Active damage stress — only SEVERE-DEFOLIATION records contribute (the
+  // acute defoliation crisis from over-pruning/over-harvesting). Damage records
+  // decay naturally via age; the BiologySystem prunes them.
+  //
+  // P12-C redesign: `weather:*`, `pest`, + `disease` records are EXCLUDED from
+  // the stress. Pre-P12-C-redesign, counting infestation records made the
+  // infestation-driven stress climb to critical at ~3mo, firing the (now-
+  // removed) stress-alone mortality path + the reserves+stress path (via
+  // weather-defoliation-driven reserve depletion) — both BEFORE the wear path's
+  // ~6mo onset, defeating the DR-1 6-12mo target. The chronic infestation
+  // damage is now tracked by the monotonic `wear` counter (death.ts path 4),
+  // which is robust against the activeDamage prune-window fluctuation + Poisson
+  // variance. The stress now reflects only ACUTE strain: water/nutrient/reserve
+  // deficits (below) + severe-defoliation (here). Severe-defoliation also feeds
+  // the wear + the defoliation-count mortality path (path 1) — the overlap is
+  // intentional (a severe defoliation is an acute crisis worth all three
+  // signals).
+  const activeDamage = tree.damage.filter((d) => d.type === 'severe-defoliation').length;
   stressAdd += PROVISIONAL_BIOLOGY_STRESS_DAMAGE_PER_DAY * activeDamage * stepDays;
 
   // Stress recovery: if no major stressors (water OK, nutrients OK, reserves

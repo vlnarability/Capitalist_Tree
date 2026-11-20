@@ -34,6 +34,7 @@ import type {
   PayExpenseAction,
   TransferAction,
   SellTreeAction,
+  PerformLaborAction,
   SimulationEvent,
   TransactionRecord,
 } from '@capitalist-tree/shared';
@@ -42,9 +43,16 @@ import {
   TreeSaleNotImplementedError,
   PROVISIONAL_ECONOMY_CATEGORY_TRANSFER,
   PROVISIONAL_ECONOMY_AUTHORITY_ACCOUNT_ID,
+  PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID,
+  PROVISIONAL_ECONOMY_CATEGORY_LABOR,
+  PROVISIONAL_LABOR_WAGE_MINOR_PER_HOUR,
+  PROVISIONAL_LABOR_EXHAUSTION_PER_HOUR,
+  PROVISIONAL_LABOR_EXHAUSTION_MAX,
+  PROVISIONAL_LABOR_HEALTH_PENALTY_MAX,
+  PROVISIONAL_LABOR_MIN_HEALTH_TO_WORK,
 } from '@capitalist-tree/shared';
 import type { SystemResult } from '../systems/system.js';
-import { transfer, getBalance, findAccount } from './ledger.js';
+import { transfer, getBalance, findAccount, parseAmount } from './ledger.js';
 import { UnknownAccountError } from './errors.js';
 import { processExpensePayment } from '../personal/expenses.js';
 
@@ -227,4 +235,155 @@ export const sellTreeHandler: ActionListener<SellTreeAction> = (state, action) =
   // Non-original tree — P8+ will implement the sale flow. For P3c, throw a
   // typed NotImplemented error so the caller gets a clear signal.
   throw new TreeSaleNotImplementedError(target);
+};
+
+/**
+ * `perform-labor` action handler (P12-D follow-up — a second income path
+ * that costs the player's health).
+ *
+ * The player works `action.payload.hours` of wage labor. The handler:
+ *   1. Computes the wage (`hours × PROVISIONAL_LABOR_WAGE_MINOR_PER_HOUR`)
+ *      and the exhaustion gain (`hours ×
+ *      PROVISIONAL_LABOR_EXHAUSTION_PER_HOUR`).
+ *   2. Gracefully rejects (a `notification`, no state change) when the player
+ *      is too unhealthy to work (`health` below
+ *      `PROVISIONAL_LABOR_MIN_HEALTH_TO_WORK`) or when the shift would push
+ *      `laborExhaustion` past its cap. This mirrors `pay-expense`'s
+ *      graceful-rejection pattern — no throw.
+ *   3. Issues the wage from the monetary authority to `player:personal` via
+ *      `transfer()` (issuance — `monetarySupply` + `totalIssued` rise, like
+ *      harvest issuance). The deterministic `requestId` makes it replay-safe.
+ *   4. Accrues the exhaustion onto `player.laborExhaustion` + mirrors the new
+ *      balance to `player.personalCash`.
+ *   5. Emits `transaction-recorded` (the `labor` issuance transaction) +
+ *      `labor-completed` (hours, wage, exhaustion before/after, marginal
+ *      health cost, balance after, transaction id).
+ *
+ * The PersonalSystem then decays `laborExhaustion` each tick (rest) and the
+ * well-being derivation turns it into a physical-health penalty, so
+ * overworking makes the player sick — the deliberate tradeoff against
+ * harvesting leaves (which costs the tree, not the player).
+ *
+ * Pure + deterministic: same (state, action) → same (new state, events).
+ */
+export const performLaborHandler: ActionListener<PerformLaborAction> = (
+  state,
+  action,
+) => {
+  const hours = action.payload.hours;
+  const timestamp = state.clock.elapsedSeconds;
+  const exhaustionBefore = state.player.laborExhaustion;
+
+  // Wage (bigint minor) + exhaustion gain (float in [0,1]).
+  const wagePerHour = parseAmount(
+    PROVISIONAL_LABOR_WAGE_MINOR_PER_HOUR,
+    'laborWage',
+  );
+  const wageMinor = BigInt(hours) * wagePerHour;
+  const exhaustionGain = hours * PROVISIONAL_LABOR_EXHAUSTION_PER_HOUR;
+
+  // Guard 1: too unhealthy to work — the player is too worn out to labor.
+  // Graceful rejection (matches pay-expense's no-throw pattern).
+  if (state.player.health < PROVISIONAL_LABOR_MIN_HEALTH_TO_WORK) {
+    return {
+      state,
+      events: [
+        {
+          type: 'notification',
+          at: timestamp,
+          payload: {
+            severity: 'warning',
+            code: 'too-unhealthy-to-labor',
+            message: `Player health (${state.player.health.toFixed(2)}) is below the labor minimum (${PROVISIONAL_LABOR_MIN_HEALTH_TO_WORK}). Rest (advance time) to recover before working.`,
+          },
+        },
+      ],
+    };
+  }
+
+  // Guard 2: the shift would push exhaustion past its cap. The player should
+  // choose fewer hours or rest first. Graceful rejection.
+  if (exhaustionBefore + exhaustionGain > PROVISIONAL_LABOR_EXHAUSTION_MAX) {
+    return {
+      state,
+      events: [
+        {
+          type: 'notification',
+          at: timestamp,
+          payload: {
+            severity: 'warning',
+            code: 'too-exhausted-to-labor',
+            message: `Working ${hours}h would push exhaustion past the cap (${PROVISIONAL_LABOR_EXHAUSTION_MAX}); current exhaustion ${exhaustionBefore.toFixed(2)}. Choose fewer hours or rest first.`,
+          },
+        },
+      ],
+    };
+  }
+
+  const exhaustionAfter = Math.min(
+    PROVISIONAL_LABOR_EXHAUSTION_MAX,
+    exhaustionBefore + exhaustionGain,
+  );
+
+  // Issue the wage: authority → player:personal (issuance — money enters
+  // circulation, mirroring harvest issuance). The requestId is deterministic
+  // in (saveId, timestamp, hours, pre-shift transaction count) so a replayed
+  // shift is a no-op (transfer()'s idempotency pre-check).
+  const requestId = `labor:${state.metadata.saveId}:${timestamp}:${hours}:${state.economy.transactions.length}`;
+  let next = transfer(state, {
+    sourceAccount: PROVISIONAL_ECONOMY_AUTHORITY_ACCOUNT_ID,
+    destinationAccount: PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID,
+    amount: wageMinor.toString(10),
+    category: PROVISIONAL_ECONOMY_CATEGORY_LABOR,
+    description: `Wage for ${hours}h of labor`,
+    timestamp,
+    requestId,
+  });
+
+  // The new transaction is the last entry appended by transfer().
+  const transaction: TransactionRecord =
+    next.economy.transactions[next.economy.transactions.length - 1]!;
+
+  // Mirror the new player balance + accrue exhaustion.
+  const playerBalanceAfter = getBalance(
+    next,
+    PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID,
+  );
+  next = {
+    ...next,
+    player: {
+      ...next.player,
+      personalCash: playerBalanceAfter.toString(10),
+      laborExhaustion: exhaustionAfter,
+    },
+  };
+
+  // Marginal health cost the new exhaustion level will impose once the
+  // PersonalSystem re-derives well-being next tick:
+  // (exhaustionAfter - exhaustionBefore) × LABOR_HEALTH_PENALTY_MAX.
+  const healthCost =
+    (exhaustionAfter - exhaustionBefore) * PROVISIONAL_LABOR_HEALTH_PENALTY_MAX;
+
+  const events: SimulationEvent[] = [
+    {
+      type: 'transaction-recorded',
+      at: timestamp,
+      payload: { record: transaction },
+    },
+    {
+      type: 'labor-completed',
+      at: timestamp,
+      payload: {
+        hours,
+        amountMinor: wageMinor.toString(10),
+        exhaustionBefore,
+        exhaustionAfter,
+        healthCost,
+        playerBalanceAfter: playerBalanceAfter.toString(10),
+        transactionId: transaction.id,
+      },
+    },
+  ];
+
+  return { state: next, events };
 };

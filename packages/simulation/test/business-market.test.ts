@@ -237,11 +237,12 @@ describe('clearMarkets — price drift toward supply/demand equilibrium', () => 
     expect(newPrice).toBe(549n);
   });
 
-  it('ensures the three P3b-deferred markets (equipment, labor, land) are live', () => {
-    // A fresh state has only the 5 P3b markets (water, fertilizer, seeds, food,
-    // energy). clearMarkets adds equipment, labor, land on first encounter.
+  it('ensures the three P13-A markets (equipment, labor, land) are live', () => {
+    // P13-A / GAP-22: the three formerly-deferred markets (equipment, labor,
+    // land) now seed into the fresh state from ALL_MARKETS (8 GDD §8.5 markets
+    // total). clearMarkets keeps them live + their accounts are registered.
     const state = freshState();
-    expect(state.economy.markets.find((m) => m.id === 'market:equipment')).toBeUndefined();
+    expect(state.economy.markets.find((m) => m.id === 'market:equipment')).toBeDefined();
     const result = clearMarkets(state, 100);
     const ids = result.state.economy.markets.map((m) => m.id);
     expect(ids).toContain('market:equipment');
@@ -249,7 +250,7 @@ describe('clearMarkets — price drift toward supply/demand equilibrium', () => 
     expect(ids).toContain('market:land');
     // Total 8 GDD §8.5 markets.
     expect(result.state.economy.markets.length).toBe(8);
-    // The deferred market accounts were registered.
+    // The market accounts were registered.
     expect(
       result.state.economy.accounts.find((a) => a.id === 'market:equipment'),
     ).toBeDefined();
@@ -355,6 +356,48 @@ describe('executeMarketTransaction — buyer → seller at the clearing price', 
     // Market account back to 0 (injected 1000, then paid 1000 to seller).
     expect(getBalance(result.state, 'market:water')).toBe(0n);
     // Conservation holds (injection is an issuance; sale is a transfer).
+    expect(conservationDiscrepancy(result.state, INITIAL_SUPPLY)).toBe(0n);
+  });
+
+  // --------------------------------------------------------------------------
+  // P11 (W13 / RV3-4): demand-injection backstop is capped. Pre-fix, the
+  // injection was uncapped — a single sale could trigger an arbitrarily
+  // large authority issuance (infinite external demand), masking GDD §8.5
+  // scarcity. The cap limits each injection; if the buyer still can't afford
+  // the full sale after the capped injection, the quantity is reduced.
+  // --------------------------------------------------------------------------
+  it('caps the demand injection at PROVISIONAL_BUSINESS_MARKET_DEMAND_INJECTION_MAX_PER_CALL_MINOR', () => {
+    // Sell 20000 water @ 10 = 200000 to the market (balance 0). The needed
+    // injection is 200000, but the cap is 100000. The injection is capped at
+    // 100000, and the quantity is reduced to 100000/10 = 10000 (partial sale).
+    let state = freshState();
+    const sellerId = 'business:seller:0';
+    state = registerAccount(state, {
+      id: sellerId,
+      type: 'business',
+      label: 'Seller',
+      balance: '0',
+    });
+    const result = executeMarketTransaction(state, {
+      marketId: 'market:water',
+      buyer: 'market:water',
+      seller: sellerId,
+      quantity: 20000,
+      price: '10',
+      timestamp: 100,
+      category: 'business-market-sale',
+      description: 'Seller sells 20000 water to market (over cap)',
+    });
+    expect(result.demandInjected).toBe(true);
+    // Injection capped at 100000, not 200000.
+    expect(result.injectedAmount).toBe('100000');
+    // The sale total is reduced to 100000 (10000 units × 10).
+    expect(result.total).toBe('100000');
+    // Seller credited the reduced total (100000), not the full 200000.
+    expect(getBalance(result.state, sellerId)).toBe(100000n);
+    // Market account back to 0 (injected 100000, paid 100000 to seller).
+    expect(getBalance(result.state, 'market:water')).toBe(0n);
+    // Conservation still holds (injection is an issuance; sale is a transfer).
     expect(conservationDiscrepancy(result.state, INITIAL_SUPPLY)).toBe(0n);
   });
 

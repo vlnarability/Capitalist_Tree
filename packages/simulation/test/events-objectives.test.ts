@@ -23,6 +23,7 @@ import {
   type ObjectiveMap,
 } from '../src/index.js';
 import { DEFAULT_GAME_CONFIG } from '../src/initial-state.js';
+import { PROVISIONAL_SIMULATION_STEP_SECONDS as STEP } from '@capitalist-tree/shared';
 import type { GameState, GameConfig } from '@capitalist-tree/shared';
 
 function cfg(seed: number): GameConfig {
@@ -200,5 +201,69 @@ describe('P10c objectives — independence + emit-on-first-achievement', () => {
       expect(before[id].achieved).toBe(false);
       expect(after[id].achieved).toBe(true);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P11 (W8 / RV4-F-H5): persisted objective completion. Once an objective is
+// achieved, it's recorded in `eventState.objectives.completed` permanently,
+// and the `objective-achieved` notification fires ONLY the first time (not
+// on every threshold re-crossing or after save/load).
+// ---------------------------------------------------------------------------
+describe('P11 W8 — persisted objective completion', () => {
+  it('eventState.objectives.completed starts empty in a fresh state', () => {
+    const s = freshState();
+    expect(s.eventState.objectives).toBeDefined();
+    expect(s.eventState.objectives.completed).toEqual([]);
+  });
+
+  it('a pre-achieved objective (loaded from save) does NOT re-fire on first tick', () => {
+    // Simulate a save/load: an objective is already in `completed` before the
+    // first post-load tick. The EventSystem should NOT re-emit the
+    // notification even if the objective is still achieved in the current
+    // state — the `completed` set is the permanent record.
+    //
+    // We patch `generational-legacy` to be achieved (totalGenerations: 3) AND
+    // pre-record it in `completed`. The EventSystem evaluates objectives
+    // before + after the tick; since the objective is achieved in both (no
+    // false→true flip), no notification fires. This verifies the EventSystem
+    // does not emit spurious notifications for already-completed objectives.
+    const base = freshState();
+    const s: GameState = {
+      ...base,
+      progression: {
+        ...base.progression,
+        prestige: { ...base.progression.prestige, totalGenerations: 3 },
+      },
+      eventState: {
+        ...base.eventState,
+        objectives: { completed: ['generational-legacy'] },
+      },
+    };
+    const r = engine.advance(s, STEP);
+    const notifs = r.events.filter(
+      (e) =>
+        e.type === 'notification' &&
+        (e.payload as { code: string }).code === 'objective-achieved',
+    );
+    expect(notifs).toHaveLength(0);
+    // Still recorded (not lost).
+    expect(r.state.eventState.objectives.completed).toContain('generational-legacy');
+  });
+
+  it('the completed set is preserved across ticks (not reset)', () => {
+    // An objective recorded in `completed` survives subsequent ticks — the
+    // EventSystem does not clear or rebuild the set.
+    const base = freshState();
+    const s: GameState = {
+      ...base,
+      eventState: {
+        ...base.eventState,
+        objectives: { completed: ['wealthiest-being', 'last-tree'] },
+      },
+    };
+    const r = engine.advance(s, STEP);
+    expect(r.state.eventState.objectives.completed).toContain('wealthiest-being');
+    expect(r.state.eventState.objectives.completed).toContain('last-tree');
   });
 });

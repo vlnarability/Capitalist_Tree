@@ -35,7 +35,7 @@ import {
   PROVISIONAL_ECONOMY_MARKET_INITIAL_SUPPLY,
   PROVISIONAL_ENERGY_BATTERY_CAPACITY_DEFAULT,
 } from '@capitalist-tree/shared';
-import { findSpeciesById, ALL_MARKETS } from '@capitalist-tree/content';
+import { findSpeciesById, findClimateById, ALL_MARKETS } from '@capitalist-tree/content';
 import { seasonFromDay, SECONDS_PER_DAY } from './systems/time-system.js';
 import { Rng } from './rng.js';
 
@@ -45,6 +45,11 @@ export const DEFAULT_GAME_CONFIG: GameConfig = {
   startingDay: 0,
   startingPersonalCash: '50000', // $500.00 in minor units
   speciesId: 'species:white-oak',
+  // GAP-17 (DR-11) Phase 3: default to the warm-Dfb temperate zone (the
+  // existing default starting experience — back-compat).
+  climateId: PROVISIONAL_WEATHER_DEFAULT_CLIMATE_ID,
+  // GAP-17 (DR-11) Phase 4: default sea-level (no highland modifier).
+  elevationM: 0,
   currencyId: PROVISIONAL_DEFAULT_CURRENCY_ID,
 };
 
@@ -63,7 +68,18 @@ export function initializeState(config: GameConfig): GameState {
   // recomputation `day = floor(elapsedSeconds / SECONDS_PER_DAY)` is stable
   // across the first step.
   const startElapsedSeconds = day * SECONDS_PER_DAY;
-  const season = seasonFromDay(day);
+  // Resolve the climate up front: the initial season (below) + the environment
+  // setup (later) both need it. GAP-17 follow-up (b): the season follows the
+  // climate's seasonality (wet-dry / polar / four-season day-count profiles —
+  // see time-system.ts `seasonFromDay`).
+  const climate = findClimateById(config.climateId);
+  if (!climate) {
+    throw new Error(
+      `initializeState: unknown climate id "${config.climateId}". ` +
+        `Register the climate in packages/content/src/weather/climate-baselines.ts.`,
+    );
+  }
+  const season = seasonFromDay(day, climate.seasonality);
   const createdAt = config.createdAt ?? 0;
 
   const species = findSpeciesById(config.speciesId);
@@ -75,6 +91,12 @@ export function initializeState(config: GameConfig): GameState {
   }
   const initialBio = species.initial;
 
+  // GAP-17 (DR-11) Phase 3: validate + resolve the selected climate zone. The
+  // WeatherSystem reads `state.world.climateId` to pick the per-zone transition
+  // matrix (per-zone weather-event weighting); the zone's `seasonalBaseTemp`
+  // feeds the temperature→growth curve. Defaults to climate:temperate. (The
+  // climate was resolved above, before the initial season.)
+
   // Fork a child RNG for the WeatherSystem at game start. Persisted on
   // `state.rngStreams.weather` so the Markov sequence survives save/load
   // (TDD §18.3 — see docs/simulation.md §6 note).
@@ -85,7 +107,6 @@ export function initializeState(config: GameConfig): GameState {
   // P1 baseline; WeatherSystem will overwrite this each tick with the
   // local-temperature derivation.
   const startTempC = 18;
-  void PROVISIONAL_WEATHER_DEFAULT_CLIMATE_ID;
 
   // P3b: seed the 5 commodity markets from content definitions
   // (water, fertilizer, seeds, food, energy — GDD §8.5). Each market starts
@@ -143,6 +164,10 @@ export function initializeState(config: GameConfig): GameState {
       // have come due yet. PersonalSystem increments this when a bill fires
       // and the player cannot pay.
       unpaidDays: 0,
+      // P12-D follow-up: labor-exhaustion accumulator for the `perform-labor`
+      // action. Starts at 0 — the player is rested. PersonalSystem decays it
+      // each tick (rest).
+      laborExhaustion: 0,
       livingExpenses: {
         food: '0',
         housing: '0',
@@ -198,6 +223,9 @@ export function initializeState(config: GameConfig): GameState {
       health: 1, // placeholder; BiologySystem recomputes this each tick (GDD §5.1)
       stress: 0,
       damage: [],
+      wear: 0, // P12-C redesign: cumulative non-weather damage severity (chronic-neglect mortality)
+      seedGrowthProgress: 0, // GAP-19: reproduction accumulator (filled by alloc.reproduction)
+      seeds: 0, // GAP-19: total seeds dispersed (consumed by a future plant-seed action)
       pendingIssuances: [], // P1: queue of CurrencyIssuanceRequests for P3's EconomySystem
     },
     world: {
@@ -264,6 +292,12 @@ export function initializeState(config: GameConfig): GameState {
         // start: the starting plot is undeveloped, undegraded, unprotected.
         // `landDisturbance` from automation increments `degraded` (P7c).
         landUse: { developed: 0, degraded: 0, protected: 0 },
+        // P13-A / GAP-21: additional indicators (pristine defaults — clean air,
+        // thriving ocean, no wetlands yet, no runoff).
+        airQuality: 1,
+        oceanHealth: 1,
+        wetlandCoverage: 0,
+        nutrientRunoff: 0,
       },
       weather: {
         condition: PROVISIONAL_WEATHER_INITIAL_CONDITION,
@@ -273,6 +307,12 @@ export function initializeState(config: GameConfig): GameState {
         daysInCondition: 0,
       },
       regionId: 'region:starting-plot',
+      // GAP-17 (DR-11) Phase 3: the selected Köppen zone — WeatherSystem reads
+      // this instead of the hardwired default.
+      climateId: config.climateId,
+      // GAP-17 (DR-11) Phase 4: highland elevation (m) — WeatherSystem applies
+      // the lapse rate when > 0.
+      elevationM: config.elevationM,
     },
     economy: {
       monetarySupply: config.startingPersonalCash,
@@ -324,6 +364,14 @@ export function initializeState(config: GameConfig): GameState {
       // P3a: cumulative currency removed from circulation via explicit
       // monetary operations (taxes, fees, central-bank interventions).
       totalSinks: '0',
+      // P11 (W14 / RV3-3): the starting money supply, persisted so
+      // `conservationDiscrepancy()` is computable on a loaded save (without
+      // the original config) and non-default starts compute correct
+      // monetary-conditions. Equals `config.startingPersonalCash` at init —
+      // the conservation invariant treats the starting cash as `initialSupply`,
+      // NOT as `totalIssued` (the player's starting money is pre-existing, not
+      // authority-issued).
+      initialSupply: config.startingPersonalCash,
     },
     // P8a (v10): businesses starts empty — the BusinessSystem + purchase-business
     // action handler land in P8b. When a business entry IS instantiated (P8b's
@@ -373,6 +421,14 @@ export function initializeState(config: GameConfig): GameState {
       archive: [],
     },
     rngState: rng.getState(),
+    // DR-6: new sims initialize at fork version 2 (non-root-consuming forks).
+    // The v2 fork + the per-tick root nonce (simulation.ts) advance the root
+    // one draw per tick independent of fork count, so adding a fork cannot
+    // shift other systems' RNG-driven outcomes (mortality, weather, etc.).
+    // Legacy saves migrate in at v1 (their RNG sequence is preserved exactly).
+    // See DECISIONS.md DR-6 for the switchover rationale + the probe-artifact
+    // false-alarm that briefly deferred it.
+    rngVersion: 2,
     rngStreams: {
       // WeatherSystem's persisted RNG sub-stream. Initialized at game start by
       // forking from the root RNG; advanced each tick by WeatherSystem.
@@ -416,6 +472,7 @@ export function initializeState(config: GameConfig): GameState {
         governmentPolicy: {
           environmentalRegulations: 0.3,
           carbonTaxRate: 0,
+          tariffRate: 0,
           subsidies: [],
         },
         monetaryPolicy: {
@@ -424,6 +481,22 @@ export function initializeState(config: GameConfig): GameState {
           moneySupplyGrowth: 0.03,
         },
         globalMarketIndices: {},
+      },
+      // P11 (W8 / RV4-F-H5): persisted objective completion. Starts empty —
+      // objectives are evaluated fresh each tick by the EventSystem; the
+      // first time an objective is achieved it's recorded here permanently.
+      objectives: {
+        completed: [],
+      },
+      // P11 (W15 follow-up / RV4-F-M8): persisted last soil-health band. Starts
+      // at 0 (healthy) — the EnvironmentSystem updates it each tick so the
+      // crossing-throttle can detect previous-tick → this-tick escalations
+      // for soil.health (a cross-system field set by ResourceSystem before
+      // the EnvironmentSystem runs). Populated explicitly here so the
+      // serialize → deserialize round-trip holds (otherwise Zod's .default()
+      // would re-add it on deserialize + the round-trip would not be equal).
+      environment: {
+        lastSoilHealthBand: 0,
       },
     },
   };

@@ -31,6 +31,11 @@ export const WHITE_OAK: TreeSpecies = {
   name: 'White Oak',
   scientificName: 'Quercus alba',
   deciduous: true,
+  // GAP-17 (DR-11): White Oak is native to humid-continental North America
+  // (US Midwest = Dfa; New England / central Europe = Dfb). This is the
+  // existing default starting species + already climate-correct for the
+  // default `climate:temperate` (warm-Dfb).
+  nativeKoppenCodes: ['Dfa', 'Dfb'],
 
   // Growth rate (dimensionless). Oak is slow-growing; this is a sapling-relative
   // baseline. PROVISIONAL: tune against maximumHeight/matureAgeDays.
@@ -43,6 +48,23 @@ export const WHITE_OAK: TreeSpecies = {
   maximumHeight: 25,
   maximumTrunkDiameter: 1.5,
   maximumBranchDevelopment: 100,
+
+  // DR-4 (docs/reviews/DECISIONS.md): height + diameter grow INDEPENDENTLY
+  // from separate energy buckets. heightDiameterSplit is the fraction of the
+  // structural (trunkGrowth) bucket allocated to HEIGHT; the remainder goes to
+  // trunk diameter. White oaks are girth-heavy — a mature oak adds
+  // proportionally more trunk diameter than height — so height gets 40% + the
+  // diameter gets 60%. Tunable per species (a tall/fast species would raise it).
+  heightDiameterSplit: 0.4,
+
+  // DR-4 allometric constraint: the max height/diameter (slenderness) ratio
+  // the species can sustain. A tree cannot grow taller than
+  // `trunkDiameter * maxSlendernessRatio` — height growth is clamped when the
+  // ratio is exceeded, so a tree must add girth before it can add height
+  // (biologically realistic: a spindly tree is structurally unstable). At
+  // White Oak's maxima (25m / 1.5m) the ratio is ~16.7, well under 40, so the
+  // clamp only bites for unrealistic sapling shapes (e.g. tall + very thin).
+  maxSlendernessRatio: 40,
 
   // Root development rate. Low (0.02) so root development grows slowly —
   // root biomass contributes to maintenance, and a sapling whose roots maxed

@@ -353,6 +353,22 @@ export interface TreeViewProps {
   readonly height?: number;
   /** Optional CSS class for the wrapper element. */
   readonly className?: string;
+  /**
+   * Optional click-to-harvest handler (GDD §5.4 Harvesting).
+   *
+   * When provided, the canvas becomes interactive: the cursor turns into a
+   * pointer and a click on the tree dispatches a harvest. The caller decides
+   * the leaf count (typically the sustainable estimate, or a fixed click-batch)
+   * inside this handler; the simulation engine caps the actual harvest by
+   * available foliage AND the species' `maximumHarvestFraction`, so a click
+   * never over-harvests.
+   *
+   * If omitted, the canvas remains a non-interactive visualization (the
+   * HarvestControls panel is the keyboard/input fallback). This keeps the
+   * rendering package decoupled from the action surface: TreeView only knows
+   * that a click happened and asks the caller what to do about it.
+   */
+  readonly onHarvest?: () => void;
 }
 
 // Re-export the simulation's TreeDamageState type alias so consumers building

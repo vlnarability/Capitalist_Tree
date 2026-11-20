@@ -42,6 +42,7 @@ import type {
   ResolveEventAction,
   SetGovernmentPolicyAction,
   SetMonetaryPolicyAction,
+  LobbyGovernmentAction,
   GovernmentPolicy,
   MonetaryPolicy,
 } from '@capitalist-tree/shared';
@@ -52,6 +53,13 @@ import {
   triggerEventImmediate,
   resolveActiveEvent,
 } from './scheduler.js';
+import { transfer } from '../economy/ledger.js';
+import {
+  PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID,
+  PROVISIONAL_ECONOMY_AUTHORITY_ACCOUNT_ID,
+  PROVISIONAL_LOBBY_COST_MINOR,
+  PROVISIONAL_LOBBY_INFLUENCE_RATE,
+} from '@capitalist-tree/shared';
 
 // ---------------------------------------------------------------------------
 // schedule-event
@@ -149,6 +157,7 @@ export const setGovernmentPolicyHandler: ActionListener<SetGovernmentPolicyActio
     environmentalRegulations:
       partial.environmentalRegulations ?? current.environmentalRegulations,
     carbonTaxRate: partial.carbonTaxRate ?? current.carbonTaxRate,
+    tariffRate: partial.tariffRate ?? current.tariffRate,
     subsidies: partial.subsidies ?? current.subsidies,
   };
   // Targeted clone (P10c perf — avoids a full structuredClone). Only the
@@ -170,6 +179,95 @@ export const setGovernmentPolicyHandler: ActionListener<SetGovernmentPolicyActio
     payload: { policy: merged },
   };
   return { state: next, events: [event] };
+};
+
+// ---------------------------------------------------------------------------
+// lobby-government (P13-B / GAP-25)
+// ---------------------------------------------------------------------------
+
+/**
+ * `lobby-government` action handler (P13-B / GAP-25 — GDD §3.3).
+ *
+ * Debits `PROVISIONAL_LOBBY_COST_MINOR` from `player:personal` → `authority`
+ * (political spend), then nudges the target policy lever by
+ * `PROVISIONAL_LOBBY_INFLUENCE_RATE` in the requested direction, clamped to
+ * [0, 1]. Emits `government-policy-changed` (carrying the new full policy) +
+ * a `notification`. A softer, cost-bound alternative to the direct
+ * `set-government-policy` override.
+ *
+ * Pure: returns a new state, never mutates input.
+ */
+export const lobbyGovernmentHandler: ActionListener<LobbyGovernmentAction> = (
+  state,
+  action,
+) => {
+  const { targetField, direction, tick } = action.payload;
+
+  // 1. Transfer the lobby cost from the player to the authority (political spend).
+  const afterTransfer = transfer(state, {
+    sourceAccount: PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID,
+    destinationAccount: PROVISIONAL_ECONOMY_AUTHORITY_ACCOUNT_ID,
+    amount: PROVISIONAL_LOBBY_COST_MINOR.toString(10),
+    category: 'lobby',
+    description: `Lobby to nudge ${targetField} ${direction}`,
+    timestamp: tick,
+  });
+
+  // 2. Nudge the target field by the influence rate, clamped to [0, 1].
+  const current = afterTransfer.eventState.global.governmentPolicy;
+  const delta =
+    direction === 'up'
+      ? PROVISIONAL_LOBBY_INFLUENCE_RATE
+      : -PROVISIONAL_LOBBY_INFLUENCE_RATE;
+  const clamp = (v: number) => Math.max(0, Math.min(1, v));
+  const merged: GovernmentPolicy = {
+    environmentalRegulations: current.environmentalRegulations,
+    carbonTaxRate: current.carbonTaxRate,
+    tariffRate: current.tariffRate,
+    subsidies: current.subsidies,
+    [targetField]: clamp(current[targetField] + delta),
+  } as GovernmentPolicy;
+
+  const next: GameState = {
+    ...afterTransfer,
+    eventState: {
+      ...afterTransfer.eventState,
+      global: {
+        ...afterTransfer.eventState.global,
+        governmentPolicy: merged,
+      },
+    },
+    // Mirror the player's account balance to player.personalCash (the
+    // transfer debited the account; P3a's coupling requires the cached cash
+    // field to track it — see applyPurchase's mirror).
+    player: (() => {
+      const playerAccount = afterTransfer.economy.accounts.find(
+        (a) => a.id === PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID,
+      );
+      const playerBalanceAfter = playerAccount?.balance ?? afterTransfer.player.personalCash;
+      return playerBalanceAfter !== afterTransfer.player.personalCash
+        ? { ...afterTransfer.player, personalCash: playerBalanceAfter }
+        : afterTransfer.player;
+    })(),
+  };
+
+  const events: SimulationEvent[] = [
+    {
+      type: 'government-policy-changed',
+      at: tick,
+      payload: { policy: merged },
+    },
+    {
+      type: 'notification',
+      at: tick,
+      payload: {
+        severity: 'info',
+        message: `Lobbied to nudge ${targetField} ${direction} by ${PROVISIONAL_LOBBY_INFLUENCE_RATE}. New ${targetField} = ${merged[targetField].toFixed(3)}.`,
+        code: 'lobby-government',
+      },
+    },
+  ];
+  return { state: next, events };
 };
 
 // ---------------------------------------------------------------------------

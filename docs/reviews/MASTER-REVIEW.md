@@ -256,6 +256,91 @@ GAP-16 (2nd species), GAP-17 (climates), GAP-18 (pests/disease), GAP-19 (reprodu
 
 Per RV7's P11/P12/P13 phasing. Titles and one-paragraph scope only; full prompts to be authored by the coordinator.
 
+> **2026-11-17 — Roadmap revised per DECISIONS.md (DR-1 through DR-9).** Status
+> of the prompts below:
+> - **1–6 (P11-A through P11-F): COMPLETE** (W1–W30 + W15 follow-up all landed).
+> - **7 (P12-A 2nd species): COMPLETE.** DR-4 (height/diameter independence,
+>   commit 96b95dd) was the prerequisite; Eastern Hemlock (evergreen,
+>   `deciduous: false`) added as the 2nd species — exercises the data-driven
+>   content pipeline + the evergreen seasonal contrast (keeps
+>   photosynthesizing/leaves in winter vs the oak's dormancy) + DR-4's
+>   per-species height/diameter split (hemlock height-focused 0.55 vs oak
+>   girth-heavy 0.40).
+> - **8 (P12-B pests/disease/reproduction): PARTIAL.** Pests + disease
+>   infestations (GAP-18) done (b6ffa61) — they drive the P12-C wear path.
+>   Reproduction/seeding (GAP-19) complete. Seed PRODUCTION done (the
+>   BiologySystem fills `seedGrowthProgress` from `alloc.reproduction`, emits
+>   `seed-dispersed` when it reaches 1.0 past the fruiting gate `matureAgeDays ×
+>   PROVISIONAL_BIOLOGY_REPRODUCTION_FRUITING_AGE_FRACTION`). The fraction was
+>   lowered 0.1 → 0.01: `matureAgeDays` uses SIM days (= matureAgeYears × 120), so
+>   White Oak's 24000 d = 200 sim-yr (the original "≈ 66 sim-yr" comment confused
+>   calendar + sim years); at 0.1× the gate was 2400 d = 20 sim-yr — UNREACHABLE in
+>   any normal sim (the dr1-long-run is 5 sim-yr), so seed production never fired +
+>   the plant-seed action had nothing to plant. At 0.01× the gate is 240 d = 2
+>   sim-yr (date palm 60 d, saxaul 96 d — fast-maturing species fruit earlier),
+>   reachable in a typical long play session + the dr1-long-run. Tested in
+>   `reproduction.test.ts` (incl. a reachability calibration test). The PLANTING
+>   flow + new action surface done: the `plant-seed` action consumes a seed →
+>   credits `PROVISIONAL_PROGRESSION_LEGACY_POINTS_PER_SEED` genetic-legacy points
+>   (the prestige currency funding `unlock-research`), a mid-generation earning
+>   mechanism supplementing the generation-end prestige bonus; emits `seed-planted`;
+>   throws `InsufficientSeedsError` when the tree has no seeds; tested in
+>   `plant-seed-action.test.ts`; exposed in the UI via `SeedControls` (a "Genetic
+>   Legacy" panel). The full "offspring tree" (multi-tree) concept is handled by
+>   `prestige-reset` (establishes a new generation). The `seasonality` →
+>   season-calendar refinement (tropical wet-dry / polar short-growing-window) is
+>   DONE (GAP-17 follow-up (b), 3b47933) — no longer deferred.
+> - **9 (P12-C balance re-tuning): PARTIAL.** The chronic-neglect mortality
+>   path is done + meets the DR-1 6-12mo neglect-death target: P12-C
+>   weather→defoliation (739d4df) + the wear redesign (deaf446: monotonic wear
+>   counter + wear mortality path, removed the fragile stress-threshold chronic
+>   death) + the nutrient-uptake/infestation-rate follow-up (d9d750e:
+>   MAX_UPTAKE_FRACTION 1.5→5.0 fixed nutrient depletion so the tree survives
+>   winter; infestation rates ×1.5 so the wear reaches the onset at ~6mo).
+>   Verified: 270-day idle audit — seed 100 dies at ~6.2mo, seed 7 at ~10.4mo,
+>   both via the wear path. Remaining: the design-promise bot
+>   (extractive-vs-sustainable-vs-balanced at 5/25/100yr) + verifying the other
+>   DR-1 targets (financial independence ≤60d, ecological collapse ≥2yr under
+>   sustained exploitation, ecological recovery ≥1yr).
+> - **10 (P12-D soil depth + analytics + CI/CD): PARTIAL.** CI/CD (GAP-32)
+>   done; soil depth (GAP-20) done (9016f53 — pH/compaction/microbial promoted
+>   from P2 stubs into modeled dynamics, feeding soil health); analytics
+>   (GAP-31) remains.
+> - **11 (P13-A): DONE.** Environmental indicators + markets + org-type
+>   incentives (GAP-21, GAP-22, GAP-23) implemented in `bf8d5f4`. GAP-21
+>   (environmental indicators): the four long-horizon indicators — `airQuality`,
+>   `oceanHealth`, `wetlandCoverage`, `nutrientRunoff` — are stepped each tick by
+>   `stepIndicators` (`packages/simulation/src/environment/indicators.ts`, wired
+>   into the EnvironmentSystem at slot 10c) with sensitivities in
+>   `constants/environment.ts`; tested in `environment.test.ts`. UI surface added
+>   this turn: an `IndicatorsSection` in `EnvironmentPanel` (advanced view)
+>   displays all four with tone-tinted Stats + air/ocean health ProgressBars;
+>   tested in `panels.test.tsx`. GAP-22 (markets) + GAP-23 (org-types): the labor
+>   market (`packages/content/src/markets/labor.ts`) + org-type structures
+>   (corporation/cooperative, `packages/content/src/businesses/org-types.ts`)
+>   are present with tests (`markets.test.ts`, `business-market.test.ts`) —
+>   implemented in `bf8d5f4`, not deeply re-verified this turn.
+> - **12 (P13-B): UNCHANGED.** Large features.
+> - **13 (P13-C productization): IN FLIGHT.** CSP headers (W30) + perf gate
+>   (W29) + cross-browser E2E (GAP-37) done; Zod 4 (DR-7) + i18n scaffold +
+>   audio/art remain. (GAP-37 re-verified: the `b9db3c8` commit — firefox +
+>   webkit projects in `apps/web/playwright.config.ts` + the CI step that
+>   `playwright install --with-deps chromium firefox webkit` then runs
+>   `test:e2e` (executing all three projects) — IS in HEAD's history
+>   (`git merge-base --is-ancestor b9db3c8 HEAD` = 0); the earlier "lost to a
+>   sandbox reset — needs reapplication" note was stale. Local firefox/webkit
+>   execution isn't possible in this sandbox — the browser binaries downloaded
+>   but `validateDependenciesLinux` fails on missing system libs (libgraphene,
+>   libgst, libmanette, libenchant-2, libGLESv2, …) + there's no passwordless
+>   sudo to apt-install them; CI's `--with-deps` provisions them on the runner.
+>   The smoke spec uses only standard `getByTestId`/`click`/`fill`/`reload` APIs
+>   — no browser-specific code — so it's expected to pass on all three.)
+> - **14 (P13-D): REVISED.** Multiplayer removed (DR-2); monetization scoped
+>   cosmetic-only (DR-3). Remaining P13-D work is cosmetic-content plumbing.
+> - **NEW prompts added by the decisions:** DR-6 (RNG fork versioning +
+>   migration), DR-7 (Zod 4 upgrade — now), DR-9 (regression test harness for
+>   RV3-2 + RV4-F-H2).
+
 1. **P11-A: Recover or rebuild P2–P10 baseline.** Reconcile the repository to the state STATUS.md claims (locate `7d8ea77` or rebuild P2–P10 from the local `p2-resources-weather` branch forward). Until this is done, no other P11 prompt can be executed against this repo. Scope: git archaeology + (if needed) sequential phase merges P2→P10.
 
 2. **P11-B: Fix the six economy/security HIGH defects.** Apply W1–W2, W13, W14 (RV3-1/RV3-2/RV3-3/RV3-4) plus W10 (RV6-1 critical notifications) and W9 (RV4-F-M7 trait wiring). These are small, isolated, and independently testable. Scope: ledger idempotency, tick rejection, demand-injection cap, initialSupply persistence, notification whitelist, trait-effects call site.
@@ -288,7 +373,12 @@ Per RV7's P11/P12/P13 phasing. Titles and one-paragraph scope only; full prompts
 
 ## 8. Open questions requiring a human design decision
 
-1. **Balance targets (GDD §17).** Growth rates, mortality, market scarcity, environmental recovery timescales are all `@provisional` constants. RV2-6, RV4-F-M10, and RV4's incomplete design-promise experiment all depend on these being tuned. What are the target time-to-death, time-to-ecological-collapse, and time-to-financial-independence values?
+> **2026-11-17 — ALL 9 RESOLVED.** Every question below is now decided + recorded
+> formally in `docs/reviews/DECISIONS.md` (DR-1 through DR-9). The questions are
+> retained below as historical context; the decision record is canonical. §7's
+> roadmap prompts have been revised accordingly (see the per-prompt notes).
+
+1. **Balance targets (GDD §17).** Growth rates, mortality, market scarcity, environmental recovery timescales are all `@provisional` constants. RV2-6, RV4-F-M10, and RV4's incomplete design-promise experiment all depend on these being tuned. What are the target time-to-death, time-to-ecological-collapse, and time-to-financial-independence values? **[RESOLVED — DR-1]**
 
 2. **Multiplayer scope (GDD §17).** Unresolved. The architecture is local-first (IndexedDB, no server timestamps, no concurrency control — RV5-F4). If multiplayer is in scope, persistence and authority must be reworked before more local-first features accumulate (RV7 risk table).
 

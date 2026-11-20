@@ -3,6 +3,7 @@ import {
   engine,
   deepCopy,
   runOfflineCatchUp,
+  runOfflineCatchUpChunked,
   planOfflineCatchUp,
   DEFAULT_GAME_CONFIG,
 } from '../src/index.js';
@@ -349,10 +350,11 @@ describe('runOfflineCatchUp — originalTree.alive transition (GDD §5.6)', () =
    * `rng.next() < prob` with a per-day probability. It cannot be triggered
    * deterministically in a single chunk for an arbitrary seed. But the engine
    * is deterministic given (seed, state): for seed=3, a fully crippled tree
-   * (stress=1, reserves=0, water=0, no leaves, + 2 severe-defoliation events
-   * within the 60-day window) dies on the FIRST 1-sim-day chunk. So a 1-chunk
-   * catch-up (24 real minutes at factor 60) deterministically flips
-   * alive: true → false. Verified empirically before writing this test.
+   * (stress=1, reserves=0, water=0, no leaves, + 4 severe-defoliation events
+   * within the 90-day window — P12-C follow-up #2 raised COUNT 2→4, WINDOW
+   * 60→90) dies on the FIRST 1-sim-day chunk. So a 1-chunk catch-up (24 real
+   * minutes at factor 60) deterministically flips alive: true → false.
+   * Verified empirically before writing this test.
    */
   function crippled(seed: number): GameState {
     const s = engine.initialize({ ...DEFAULT_GAME_CONFIG, seed, createdAt: 0 });
@@ -370,20 +372,26 @@ describe('runOfflineCatchUp — originalTree.alive transition (GDD §5.6)', () =
         damage: [
           { type: 'severe-defoliation', severity: 1, appliedAt: s.clock.elapsedSeconds },
           { type: 'severe-defoliation', severity: 1, appliedAt: s.clock.elapsedSeconds },
+          { type: 'severe-defoliation', severity: 1, appliedAt: s.clock.elapsedSeconds },
+          { type: 'severe-defoliation', severity: 1, appliedAt: s.clock.elapsedSeconds },
         ],
       },
     };
   }
 
-  it('a starved tree dies during a 1-chunk catch-up: alive.before === true, alive.after === false', () => {
-    const s = crippled(3);
+  it('a starved tree dies during a 3-chunk catch-up: alive.before === true, alive.after === false', () => {
+    // DR-6 v2: the mortality sequence differs from v1 (non-root-consuming
+    // forks + per-tick nonce), so the starved tree dies later — seed 7 dies
+    // on sim day 3 under v2 (seed 3, used pre-DR-6, dies within 1 day under v1
+    // but survives ~10 days under v2's sequence). 3 chunks = 3 sim days.
+    const s = crippled(7);
     expect(s.originalTree.alive).toBe(true);
     const T = s.metadata.lastSimulatedAt;
     // 24 real minutes → 1 sim day → 1 chunk.
-    const nowMs = T + realMsForChunks(1);
+    const nowMs = T + realMsForChunks(3);
     const r = runOfflineCatchUp(s, nowMs);
 
-    expect(r.summary.chunksRun).toBe(1);
+    expect(r.summary.chunksRun).toBe(3);
     expect(r.summary.biological.alive.before).toBe(true);
     expect(r.summary.biological.alive.after).toBe(false);
     expect(r.state.originalTree.alive).toBe(false);
@@ -412,5 +420,54 @@ describe('runOfflineCatchUp — purity (rule 2: no input mutation)', () => {
     expect(() => runOfflineCatchUp(s, T + ONE_REAL_HOUR_MS)).not.toThrow();
     // Input is structurally unchanged.
     expect(s).toEqual(freshState());
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P11 (W11 / RV5-F1): chunked catch-up with a progress callback (for the Web
+// Worker path — the worker posts {type:'progress'} after each chunk).
+// ---------------------------------------------------------------------------
+describe('runOfflineCatchUpChunked — progress callback (W11)', () => {
+  it('calls onProgress after each chunk with (completed, total)', () => {
+    const s = deepCopy(freshState());
+    const T = s.metadata.lastSimulatedAt;
+    // 1 real hour → 2 chunks at factor 60.
+    const nowMs = T + ONE_REAL_HOUR_MS;
+    const plan = planOfflineCatchUp(s, nowMs);
+    expect(plan.chunksPlanned).toBe(2);
+
+    const calls: Array<{ completed: number; total: number }> = [];
+    const result = runOfflineCatchUpChunked(s, nowMs, (completed, total) => {
+      calls.push({ completed, total });
+    });
+    // Called once per chunk: (1, 2) then (2, 2).
+    expect(calls).toEqual([
+      { completed: 1, total: 2 },
+      { completed: 2, total: 2 },
+    ]);
+    // The result is identical to the synchronous runOfflineCatchUp.
+    const syncResult = runOfflineCatchUp(s, nowMs);
+    expect(result.summary.chunksRun).toBe(syncResult.summary.chunksRun);
+    expect(result.state.clock.elapsedSeconds).toBe(syncResult.state.clock.elapsedSeconds);
+  });
+
+  it('reports (0, 0) for a zero-chunk catch-up (fresh save)', () => {
+    const s = deepCopy(freshState());
+    const T = s.metadata.lastSimulatedAt;
+    const calls: Array<{ completed: number; total: number }> = [];
+    const result = runOfflineCatchUpChunked(s, T, (completed, total) => {
+      calls.push({ completed, total });
+    });
+    expect(result.summary.chunksRun).toBe(0);
+    expect(calls).toEqual([{ completed: 0, total: 0 }]);
+  });
+
+  it('without a callback, behaves identically to runOfflineCatchUp', () => {
+    const s = deepCopy(freshState());
+    const T = s.metadata.lastSimulatedAt;
+    const chunked = runOfflineCatchUpChunked(s, T + ONE_REAL_HOUR_MS);
+    const sync = runOfflineCatchUp(s, T + ONE_REAL_HOUR_MS);
+    expect(chunked.state.clock.elapsedSeconds).toBe(sync.state.clock.elapsedSeconds);
+    expect(chunked.summary.chunksRun).toBe(sync.summary.chunksRun);
   });
 });

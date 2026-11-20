@@ -74,8 +74,21 @@ export const PROVISIONAL_BIOLOGY_RESERVE_CAPACITY_DEVELOPMENT_GAIN = 1.0;
 // PROVISIONAL (GDD §17: initial leaf denomination and production rules)
 //
 // Default leaf denomination (minor currency units) when a species doesn't
-// specify one. $1.00 = 100 minor units. The White Oak species uses this.
-export const PROVISIONAL_BIOLOGY_DEFAULT_LEAF_DENOMINATION_MINOR = '100';
+// specify one. $10.00 = 1000 minor units. The White Oak species uses this.
+//
+// P12-C follow-up #3 (economy tuning for the DR-1 financial-independence
+// target ≤60d): raised 100 → 1000 (10×). At $1/leaf, a young tree (~30
+// leaves) earned ~$30/month — far below the $240/month living-expense bill
+// (PROVISIONAL_PERSONAL_EXPENSE_*_MINOR), so the player's cash always
+// declined and the DR-1 "escape basic financial survival within a few weeks"
+// target was unreachable (verified by the design-promise bot). Even a
+// full-grown tree (200 leaves × $1 = $200) fell short of the $240 bill. At
+// $10/leaf, a young cared-for tree (~30 leaves) earns ~$300/month > $240,
+// so an engaged player's cash grows from the first harvest — the target is
+// met. The 10× raise preserves the relative bill weights (housing still
+// dominates) and the $500 starting-cash runway (now ~2 months at the bill,
+// giving the player time to start harvesting).
+export const PROVISIONAL_BIOLOGY_DEFAULT_LEAF_DENOMINATION_MINOR = '1000';
 
 // PROVISIONAL (GDD §17: maximum harvesting rates)
 //
@@ -96,13 +109,27 @@ export const PROVISIONAL_BIOLOGY_HARVEST_STRESS_PER_LEAF_FRACTION = 0.5;
 // Number of severe defoliations (>50% foliage removed) within
 // `PROVISIONAL_BIOLOGY_DEATH_DEFOLIATION_WINDOW_DAYS` sim days that triggers
 // a death check. A mature tree survives one but suffers on repeats.
-export const PROVISIONAL_BIOLOGY_DEATH_DEFOLIATION_COUNT = 2;
+//
+// P12-C redesign follow-up #2: raised 2 → 4. At 2, the defoliation mortality
+// fired far too early — because `PROVISIONAL_BIOLOGY_DEFAULT_MAX_HARVEST_FRACTION`
+// (0.5) equals `SEVERE_DEFOLIATION_FRACTION` (0.5), every max harvest is a
+// severe-defoliation, so 2 max harvests within 60 days killed the tree (even a
+// mature one), defeating the DR-1 intent ("survives one, suffers on repeats" +
+// "aggressive harvesting fatal within a growing season" — ~1yr, not ~1mo). At
+// 4, a mature tree tolerates up to 3 max harvests within the window; the 4th
+// triggers the mortality check (a probability ramp, not an instant kill).
+export const PROVISIONAL_BIOLOGY_DEATH_DEFOLIATION_COUNT = 4;
 
 // PROVISIONAL (GDD §5.6: tree death — repeated severe defoliation)
 //
 // Rolling window (sim days) used to count severe defoliations for the
 // mortality check.
-export const PROVISIONAL_BIOLOGY_DEATH_DEFOLIATION_WINDOW_DAYS = 60;
+//
+// P12-C redesign follow-up #2: widened 60 → 90. Paired with the COUNT raise
+// (2→4) so the density of severe-defoliations that triggers death is roughly
+// preserved (~1 per 22 days) but the absolute count is higher, giving the tree
+// more recovery headroom between harvests.
+export const PROVISIONAL_BIOLOGY_DEATH_DEFOLIATION_WINDOW_DAYS = 90;
 
 // PROVISIONAL (GDD §5.6: tree death)
 //
@@ -238,9 +265,10 @@ export const PROVISIONAL_BIOLOGY_NUTRIENT_UPTAKE_RATE = 1.0; // units per unit a
 // Allocation weights for surplus energy (after maintenance is paid). Each is a
 // fraction of the surplus; the remainder goes to reserve storage. Weights are
 // survival-first: roots are prioritized over trunk, trunk over branches,
-// branches over new leaves, leaves over reproduction. Reproduction is a stub
-// (0.0) until P6+ (Genetic Legacy) — the slot exists so allocation math does
-// not need to change when reproduction is added.
+// branches over new leaves, leaves over reproduction. Reproduction is the
+// smallest bucket (lowest priority) — a tree only directs surplus energy to
+// reproduction once the higher-priority survival/growth buckets are satisfied
+// (GAP-19 / GDD §5.2 "Reproductive development where applicable").
 //
 // The sum is intentionally < 1.0 so a substantial fraction of surplus goes to
 // reserve storage. This is critical for sapling bootstrap: a sapling's small
@@ -253,9 +281,42 @@ export const PROVISIONAL_BIOLOGY_ALLOCATION_WEIGHTS = Object.freeze({
   trunkGrowth: 0.10,
   branchGrowth: 0.10,
   leafGrowth: 0.15,
-  reproduction: 0.0,
+  reproduction: 0.05,
 });
 export type AllocationWeights = typeof PROVISIONAL_BIOLOGY_ALLOCATION_WEIGHTS;
+
+// PROVISIONAL (GAP-19 / GDD §5.2, §11.2 — reproduction / seeding).
+//
+// The reproduction bucket (`alloc.reproduction`) fills a per-tree
+// `seedGrowthProgress` accumulator in [0, 1]. Each tick:
+//   seedGrowthProgress = min(1, current + alloc.reproduction / SEED_ENERGY_COST)
+// When it reaches 1.0 AND the tree is past its fruiting age, the BiologySystem
+// emits a `seed-dispersed` event, increments `tree.seeds` by SEED_YIELD, and
+// resets the accumulator to 0. The fruiting gate is a fraction of the species'
+// `matureAgeDays`. NOTE: `matureAgeDays = matureAgeYears × 120` (SIM days, not
+// calendar), so White Oak's 24000 d = 200 sim-yr (the original "≈ 66 sim-yr"
+// comment confused calendar + sim years). At 0.1× the gate was 2400 d = 20
+// sim-yr — UNREACHABLE in any normal sim (the dr1-long-run is 5 sim-yr), so the
+// seed production never fired + the plant-seed action had nothing to plant.
+// Lowered to 0.01× → 240 d = 2 sim-yr for White Oak (date palm 60 d, saxaul 96 d
+// — fast-maturing species fruit earlier), reachable in a typical long play
+// session + the dr1-long-run. Still a late-game mechanic (GDD §11.2 Genetic
+// Legacy: saplings have little surplus, so they barely invest until established).
+// Tunable.
+//
+// Balance: a mature tree with ~50 eu/tick surplus × 0.05 weight = 2.5 eu/tick
+// into reproduction → 500 / 2.5 = 200 ticks to a seed (≈200 d at 1-day steps,
+// ~2-3 seeds/sim-year). Saplings produce almost no surplus so they barely
+// invest — correct (reproduction is a late-game mechanic, GDD §11.2 Genetic
+// Legacy).
+/** Energy (eu) required to fill `seedGrowthProgress` from 0 to 1 (one seed).
+ * @provisional. */
+export const PROVISIONAL_BIOLOGY_REPRODUCTION_SEED_ENERGY_COST_EU = 500;
+/** Fruiting age = species.matureAgeDays × this fraction. @provisional.
+ *  0.01 → White Oak 240 d (2 sim-yr), reachable in normal play (was 0.1 → 20 sim-yr, unreachable). */
+export const PROVISIONAL_BIOLOGY_REPRODUCTION_FRUITING_AGE_FRACTION = 0.01;
+/** Seeds produced per dispersal event. @provisional. */
+export const PROVISIONAL_BIOLOGY_REPRODUCTION_SEED_YIELD = 1;
 
 // PROVISIONAL (GDD §5.6: tree death)
 //
@@ -305,7 +366,83 @@ export const PROVISIONAL_BIOLOGY_STRESS_RESERVE_PER_DAY = 0.1;
 
 // PROVISIONAL (GDD §5.6 / §17: detailed photosynthesis and energy allocation equations)
 //
-// Stress added per active damage record per day. Damage records (severe
-// defoliation, weather damage) accumulate stress while they're on the tree;
-// the BiologySystem prunes old records via the mortality window.
+// Stress added per active (non-weather) damage record per day. Damage records
+// (severe defoliation, pest, disease) accumulate stress while they're on the
+// tree; the BiologySystem prunes old records via the mortality window.
+// (P12-C: `weather:*` records are excluded from this count — see
+// biology/stress.ts. The weather damage's mechanical impact is defoliation,
+// applied in the WeatherSystem.)
 export const PROVISIONAL_BIOLOGY_STRESS_DAMAGE_PER_DAY = 0.05;
+
+// PROVISIONAL (GDD §5.6 / P12-C redesign — chronic-neglect mortality).
+//
+// Cumulative "wear" — a monotonic accumulation of NON-WEATHER damage severity
+// (pest, disease, severe-defoliation). Each damage event adds `severity ×
+// WEAR_PER_DAMAGE` to tree.wear; wear never decays + is never pruned (unlike
+// tree.damage, which is prune-windowed to 60 days). This makes the chronic-
+// neglect death reliable: the wear crosses the mortality thresholds at a
+// predictable time regardless of the activeDamage prune-window fluctuation +
+// Poisson variance that makes the stress-based neglect death fragile near the
+// recovery threshold (see P12-C commit 739d4df for the analysis).
+//
+// Weather damage is EXCLUDED from the wear (it's ambient — happens regardless
+// of player care; its mechanical impact is defoliation, applied in the
+// WeatherSystem). The wear accumulates only from NEGLECT signals: infestations
+// (pest/disease, which take hold when the player isn't doing pest control) +
+// severe-defoliation (from over-pruning/over-harvesting).
+//
+// Calibration (idle sim, no pest control): infestation rate ~0.035/day × mean
+// severity ~0.5 = ~0.0175 severity/day. WEAR_PER_DAMAGE=1 → wear ≈ cumulative
+// severity. ONSET 3.0 ≈ 0.0175 × 171 days (~5.7mo); THRESHOLD 6.0 ≈ 0.0175 ×
+// 343 days (~11.4mo). The mortality probability ramps linearly from 0 at ONSET
+// to DEATH_DAILY_PROBABILITY at THRESHOLD, so the tree dies in the 6-12mo
+// window (the DR-1 target). Tunable in future P12-C iterations.
+export const PROVISIONAL_BIOLOGY_WEAR_PER_DAMAGE = 1.0;
+export const PROVISIONAL_BIOLOGY_WEAR_MORTALITY_ONSET = 3.0;
+export const PROVISIONAL_BIOLOGY_WEAR_DEATH_THRESHOLD = 6.0;
+
+// ---------------------------------------------------------------------------
+// P12-B (GAP-18): pest + disease infestations.
+//
+// Biological threats that accumulate `pest` / `disease` damage records on the
+// tree, driving the DR-1 6–12 month neglect-death target. The rates are
+// per-day; the BiologySystem scales by stepDays. With the 60-day damage-prune
+// window (PROVISIONAL_BIOLOGY_DEATH_DEFOLIATION_WINDOW_DAYS), the steady-state
+// activeDamage ≈ rate × 60. The damage stress (PROVISIONAL_BIOLOGY_STRESS_
+// DAMAGE_PER_DAY × activeDamage) must exceed the recovery rate
+// (PROVISIONAL_BIOLOGY_STRESS_RECOVERY_RATE = 0.1/day) for stress to climb —
+// i.e. activeDamage > 2, rate > 0.033/day. At the rates below (pest 0.02 +
+// disease 0.015 = 0.035/day total), activeDamage ≈ 2.1, stressAdd ≈ 0.105/day
+// just edges past recovery (0.1/day), so stress climbs to critical over ~9
+// months, then the critical-stress mortality path fires. Tunable in P12-C.
+// ---------------------------------------------------------------------------
+
+// PROVISIONAL (GDD §5.6 "Pests" / §17: detailed biology model).
+//
+// Probability per day of a pest infestation taking hold (adds a `pest` damage
+// record). Pests are the more frequent biological threat.
+//
+// P12-C redesign follow-up: raised from 0.02 to 0.03 (~1.5×). At 0.02, the
+// combined infestation rate (pest 0.02 + disease 0.015 = 0.035/day growing
+// season, disease-only in winter) accumulated wear at ~0.0113/day observed —
+// too slow for the wear path's onset (3.0) to be reached within the DR-1
+// 6-12mo target (onset at ~9mo, threshold at ~18mo). At 0.03 (combined 0.0525
+// growing), the observed wear rate ~0.017/day → onset (3.0) at ~6mo, threshold
+// (6.0) at ~12mo, so the wear-path neglect death fires in the 6-12mo window.
+export const PROVISIONAL_BIOLOGY_PEST_INFESTATION_RATE_PER_DAY = 0.03;
+
+// PROVISIONAL (GDD §5.6 "Disease" / §17: detailed biology model).
+//
+// Probability per day of a disease taking hold (adds a `disease` damage
+// record). Rarer than pests. Raised 0.015 → 0.0225 (~1.5×) alongside the pest
+// rate (P12-C redesign follow-up) for the same wear-accumulation reason.
+export const PROVISIONAL_BIOLOGY_DISEASE_INFESTATION_RATE_PER_DAY = 0.0225;
+
+// PROVISIONAL (GDD §5.6 / §17).
+//
+// Severity range for an infestation damage record (uniform in [min, max]).
+// The severity is recorded for the defoliation/mortality checks + future
+// condition-dependent scaling; the stress calculation uses the record COUNT,
+// not the severity.
+export const PROVISIONAL_BIOLOGY_INFESTATION_SEVERITY_MIN = 0.3;
+export const PROVISIONAL_BIOLOGY_INFESTATION_SEVERITY_MAX = 0.7;

@@ -25,6 +25,10 @@
  *   - **CO2 concentration** — atmosphere.co2Concentration vs the
  *     photosynthesis saturation point (PROVISIONAL_BIOLOGY_CO2_SATURATION_PPM).
  *   - **Biodiversity** — index + species-population breakdown.
+ *   - **Environmental indicators (GAP-21, GDD §10.1)** — the four long-horizon
+ *     indicators the simulation steps but P3b/P7 deferred surfacing: air
+ *     quality, ocean health, wetland coverage, nutrient runoff. Surfaced here
+ *     so the player can see ecological pressure build (or recover) over time.
  *
  * Architecture: same as BiologyPanel — narrow selectors, pure compute,
  * `describe.ts` for the plain-language explanations (rule 6 + purity).
@@ -133,6 +137,7 @@ export function EnvironmentPanel({
       <WeatherSection weather={weather} />
       <AtmosphereSection environment={environment} clock={clock} />
       <BiodiversitySection environment={environment} />
+      <IndicatorsSection environment={environment} />
     </div>
   );
 }
@@ -449,6 +454,91 @@ function BiodiversitySection({
           ))}
         </ul>
       ) : null}
+    </section>
+  );
+}
+
+interface IndicatorsSectionProps {
+  readonly environment: EnvironmentState;
+}
+
+/**
+ * GAP-21 (GDD §10.1) — the four long-horizon environmental indicators the
+ * EnvironmentSystem steps each tick (`stepIndicators`):
+ *   - `airQuality` [0,1] — 1 = clean, 0 = hazardous. Relaxes toward a target
+ *     set by `atmosphere.emissions`.
+ *   - `oceanHealth` [0,1] — 1 = thriving, 0 = dead. Relaxes toward a target
+ *     set by the global-temperature anomaly + excess CO2 (bleaching +
+ *     acidification). A long-horizon indicator — only visibly degrades across
+ *     many sim years of warming.
+ *   - `wetlandCoverage` [0,1] — share of the plot that's wetland. Relaxes
+ *     toward a target set by `landUse.protected` (restoration) minus
+ *     `landUse.developed` (drainage).
+ *   - `nutrientRunoff` (≥ 0) — accumulated nutrient stock leached to waterways
+ *     when soil nutrients exceed the holding capacity; decays exponentially.
+ *
+ * Surfaced here so the player can see ecological pressure build (emissions →
+ * poor air; warming → ocean decline; over-fertilization → runoff) or recover
+ * (the indicators relax toward their targets when the pressure eases).
+ */
+function IndicatorsSection({
+  environment,
+}: IndicatorsSectionProps): ReactElement {
+  const airQuality = clampProgress(environment.airQuality);
+  const oceanHealth = clampProgress(environment.oceanHealth);
+  const wetlandCoverage = clampProgress(environment.wetlandCoverage);
+  const nutrientRunoff = environment.nutrientRunoff;
+  // 100% = clean/thriving for the two health indicators; degrade emerald →
+  // amber → rose. Wetland/runoff are presence-tinted (emerald when present,
+  // slate when zero — no "bad" tier at zero for wetland; runoff amber when
+  // accumulating, slate when none).
+  const healthTone = (v: number): 'emerald' | 'amber' | 'rose' =>
+    v >= 0.7 ? 'emerald' : v >= 0.3 ? 'amber' : 'rose';
+  return (
+    <section className="flex flex-col gap-2" data-testid="environment-indicators">
+      <span className="text-[10px] uppercase tracking-wider text-slate-500">
+        Environmental indicators (GAP-21)
+      </span>
+      <p className="text-xs text-slate-400" data-testid="environment-indicators-summary">
+        Long-horizon ecological pressure (GDD §10.1) — relaxes toward targets
+        set by emissions, warming, land use, + soil nutrients.
+      </p>
+      <div className="grid grid-cols-2 gap-2 text-xs">
+        <Stat
+          label="Air quality"
+          value={`${Math.round(airQuality * 100)}%`}
+          sub="100% = clean"
+          tone={healthTone(airQuality)}
+        />
+        <Stat
+          label="Ocean health"
+          value={`${Math.round(oceanHealth * 100)}%`}
+          sub="100% = thriving"
+          tone={healthTone(oceanHealth)}
+        />
+        <Stat
+          label="Wetland coverage"
+          value={`${Math.round(wetlandCoverage * 100)}%`}
+          sub="share of plot"
+          tone={wetlandCoverage > 0 ? 'emerald' : 'slate'}
+        />
+        <Stat
+          label="Nutrient runoff"
+          value={nutrientRunoff.toFixed(1)}
+          sub="0 = none"
+          tone={nutrientRunoff > 0 ? 'amber' : 'slate'}
+        />
+      </div>
+      <ProgressBar
+        value={airQuality}
+        label="Air quality"
+        tone={healthTone(airQuality)}
+      />
+      <ProgressBar
+        value={oceanHealth}
+        label="Ocean health"
+        tone={healthTone(oceanHealth)}
+      />
     </section>
   );
 }

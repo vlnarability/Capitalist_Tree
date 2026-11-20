@@ -65,11 +65,20 @@ import {
   updateStress,
   checkMortality,
   recentSevereDefoliations,
+  rollInfestation,
   getSpeciesOrFail,
   type BiologyContext,
 } from '../biology/index.js';
 import {
+  applyTraitEffects,
+  defaultBiologyParameters,
+} from '../progression/trait-effects.js';
+import {
   PROVISIONAL_BIOLOGY_DEATH_DEFOLIATION_WINDOW_DAYS,
+  PROVISIONAL_BIOLOGY_WEAR_PER_DAMAGE,
+  PROVISIONAL_BIOLOGY_REPRODUCTION_SEED_ENERGY_COST_EU,
+  PROVISIONAL_BIOLOGY_REPRODUCTION_FRUITING_AGE_FRACTION,
+  PROVISIONAL_BIOLOGY_REPRODUCTION_SEED_YIELD,
 } from '@capitalist-tree/shared';
 
 const SECONDS_PER_DAY = 24 * 60 * 60;
@@ -154,8 +163,21 @@ export const biologySystem: System = {
     // grown since last tick). Used by budding and reserve update below.
     const capacity = computeReserveCapacity(tree, species);
 
+    // 9b. P11 (W9 / RV4-F-M7): apply genetic trait effects to the biology
+    // multipliers BEFORE growth. `applyTraitEffects` folds each active
+    // (expressed) trait's benefit + trade-off into the parameter set; the
+    // resulting `growthRateMultiplier` scales height/trunk/branch/root growth
+    // in `applyGrowth` below. Pre-P11 this helper was defined + unit-tested
+    // but never called — the genetics subsystem was non-functional despite
+    // passing its own unit tests. With this call, activating `trait:rapid-
+    // growth` measurably raises the growth rate.
+    const traitParams = applyTraitEffects(
+      defaultBiologyParameters(),
+      state.progression.genetics.activeTraits,
+    );
+
     // 10. Apply growth.
-    const growth = applyGrowth(tree, bioCtx, alloc, seasonalMax);
+    const growth = applyGrowth(tree, bioCtx, alloc, seasonalMax, traitParams);
     tree.structure.height = growth.height;
     tree.structure.trunkDiameter = growth.trunkDiameter;
     tree.structure.branchDevelopment = growth.branchDevelopment;
@@ -205,6 +227,45 @@ export const biologySystem: System = {
     // Update activeLeafArea for P4's renderer (GDD §5.1).
     tree.foliage.activeLeafArea = computeActiveLeafArea(tree, species.leafAreaPerLeaf);
 
+    // P12-B (GAP-18): pest + disease infestations. Roll BEFORE the stress
+    // computation so the new damage records count toward activeDamage (which
+    // drives STRESS_DAMAGE_PER_DAY × activeDamage × stepDays). Uses a dedicated
+    // RNG fork ('BiologySystem:infestation') so the infestation draws don't
+    // shift the mortality fork's sequence (DR-6 — non-root-consuming, versioned
+    // forks; a new fork label is the standard pattern for adding RNG draws).
+    // Pests are gated on foliage (pests eat leaves); disease can take hold on
+    // any living tree. The rates are per-day × stepDays (per-tick-vs-per-day
+    // scaling, same pattern as the weather fix + RV4-F-H2).
+    const infestationRng = ctx.rng.fork('BiologySystem:infestation');
+    const infestationDamage = rollInfestation(
+      tree.foliage.currentLeaves > 0,
+      bioCtx,
+      infestationRng,
+      stepDays,
+    );
+    if (infestationDamage.length > 0) {
+      tree.damage = [...tree.damage, ...infestationDamage];
+      // P12-C redesign: accumulate non-weather damage severity into the
+      // monotonic wear counter (drives the chronic-neglect mortality path in
+      // death.ts). Weather damage is excluded (ambient; its impact is
+      // defoliation, applied in the WeatherSystem).
+      tree.wear += infestationDamage.reduce(
+        (sum, d) => sum + d.severity * PROVISIONAL_BIOLOGY_WEAR_PER_DAMAGE,
+        0,
+      );
+      for (const d of infestationDamage) {
+        events.push({
+          type: 'infestation',
+          at: ctx.now,
+          payload: {
+            treeId: tree.id,
+            kind: d.type as 'pest' | 'disease',
+            severity: d.severity,
+          },
+        });
+      }
+    }
+
     // 11. Update reserves (storage - draw - recovery).
     // Stress update needs to happen before reserves so we know recovery cost.
     const stressUpdate = updateStress(tree, bioCtx);
@@ -241,6 +302,39 @@ export const biologySystem: System = {
           detail: mortality.detail,
         },
       });
+    }
+
+    // 15b. Reproduction (GAP-19 / GDD §5.2, §11.2). The reproduction energy
+    // bucket (`alloc.reproduction`, fed by the allocation weight) fills
+    // `tree.seedGrowthProgress`. When it reaches 1.0 AND the tree is past its
+    // fruiting age (`ageDays >= matureAgeDays × FRUITING_AGE_FRACTION`),
+    // disperse a seed: increment `tree.seeds`, reset the accumulator, emit
+    // `seed-dispersed`. Dead trees don't reproduce. Saplings accumulate
+    // progress (capped at 1.0) but don't fruit until the gate opens — so the
+    // first seed fires soon after maturity.
+    if (tree.alive && alloc.reproduction > 0) {
+      const progressAfter = Math.min(
+        1,
+        tree.seedGrowthProgress +
+          alloc.reproduction / PROVISIONAL_BIOLOGY_REPRODUCTION_SEED_ENERGY_COST_EU,
+      );
+      tree.seedGrowthProgress = progressAfter;
+      const fruitingAgeDays =
+        species.matureAgeDays * PROVISIONAL_BIOLOGY_REPRODUCTION_FRUITING_AGE_FRACTION;
+      if (progressAfter >= 1 && tree.ageDays >= fruitingAgeDays) {
+        tree.seeds += PROVISIONAL_BIOLOGY_REPRODUCTION_SEED_YIELD;
+        tree.seedGrowthProgress = 0;
+        events.push({
+          type: 'seed-dispersed',
+          at: ctx.now,
+          payload: {
+            treeId: tree.id,
+            seedsProduced: PROVISIONAL_BIOLOGY_REPRODUCTION_SEED_YIELD,
+            seedsTotal: tree.seeds,
+            seedGrowthProgressAfter: 0,
+          },
+        });
+      }
     }
 
     // 16. Soft notifications for adverse conditions (info for the UI).

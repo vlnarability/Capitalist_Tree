@@ -11,7 +11,7 @@
  *     secondary chain).
  */
 import { describe, it, expect } from 'vitest';
-import { engine } from '../src/index.js';
+import { engine, SECONDS_PER_DAY } from '../src/index.js';
 import {
   applyClimateFeedback,
   applyEnvironmentalFeedback,
@@ -124,7 +124,7 @@ describe('P10c environmental feedback — applyEnvironmentalFeedback secondary c
       eventState: { ...base.eventState, global: { ...base.eventState.global, regions } },
     };
     const before = state.eventState.global.regions[0]!.soilHealth;
-    const result = applyEnvironmentalFeedback(state);
+    const result = applyEnvironmentalFeedback(state, SECONDS_PER_DAY);
     const after = result.state.eventState.global.regions[0]!.soilHealth;
     expect(after).toBeLessThan(before);
   });
@@ -138,7 +138,7 @@ describe('P10c environmental feedback — applyEnvironmentalFeedback secondary c
       ...base,
       eventState: { ...base.eventState, global: { ...base.eventState.global, regions } },
     };
-    const result = applyEnvironmentalFeedback(state);
+    const result = applyEnvironmentalFeedback(state, SECONDS_PER_DAY);
     const idx =
       result.state.eventState.global.globalMarketIndices[CLIMATE_CONSTANTS.COMMODITY_BASKET_INDEX_ID] ??
       100;
@@ -158,7 +158,7 @@ describe('P10c environmental feedback — applyEnvironmentalFeedback secondary c
       eventState: { ...base.eventState, global: { ...base.eventState.global, regions } },
     };
     const before = state.eventState.global.aggregatedIndicators.ecosystemResilience;
-    const result = applyEnvironmentalFeedback(state);
+    const result = applyEnvironmentalFeedback(state, SECONDS_PER_DAY);
     const after = result.state.eventState.global.aggregatedIndicators.ecosystemResilience;
     expect(after).toBeLessThan(before);
   });
@@ -177,7 +177,7 @@ describe('P10c environmental feedback — applyEnvironmentalFeedback secondary c
       eventState: { ...base.eventState, global: { ...base.eventState.global, regions } },
     };
     const beforeRate = state.eventState.global.aggregatedIndicators.speciesExtinctionRate;
-    const result = applyEnvironmentalFeedback(state);
+    const result = applyEnvironmentalFeedback(state, SECONDS_PER_DAY);
     const afterRate = result.state.eventState.global.aggregatedIndicators.speciesExtinctionRate;
     // Biodiversity is NOT lifted above the threshold by the secondary chain.
     for (const r of result.state.eventState.global.regions) {
@@ -190,6 +190,98 @@ describe('P10c environmental feedback — applyEnvironmentalFeedback secondary c
         (e) => e.type === 'notification' && (e.payload as { code: string }).code === 'species-extinction-collapse',
       ),
     ).toBe(true);
+  });
+
+  // --------------------------------------------------------------------------
+  // P11 (RV4-F-H2) regression: the 1440× too-fast bug. Pre-fix,
+  // `applyEnvironmentalFeedback` applied the full per-day rate every tick
+  // with no `dtSeconds` scaling. At a 60-second step (the default
+  // PROVISIONAL_SIMULATION_STEP_SECONDS), one tick applied 1/1440 of a day
+  // but the FULL day's erosion — so soil health crashed to 0 in ~1 day of
+  // sim time (1440 ticks × full daily rate). The fix scales every rate by
+  // `days = dtSeconds / SECONDS_PER_DAY`.
+  // --------------------------------------------------------------------------
+  it('a single 60-second tick erodes soilHealth by ~1/1440 of a day (RV4-F-H2)', () => {
+    const base = freshState();
+    // Fully deforested region — maximum erosion pressure.
+    const regions = base.eventState.global.regions.map((r, i) =>
+      i === 0 ? { ...r, forestCoverage: 0, climate: { ...r.climate }, pollution: { ...r.pollution } } : r,
+    );
+    const state: GameState = {
+      ...base,
+      eventState: { ...base.eventState, global: { ...base.eventState.global, regions } },
+    };
+    const before = state.eventState.global.regions[0]!.soilHealth;
+
+    // One 60-second tick (the default simulation step).
+    const STEP_SECONDS = 60;
+    const tickResult = applyEnvironmentalFeedback(state, STEP_SECONDS);
+    const afterOneTick = tickResult.state.eventState.global.regions[0]!.soilHealth;
+    const tickErosion = before - afterOneTick;
+
+    // One full day (86400s) of erosion — the reference.
+    const dayResult = applyEnvironmentalFeedback(state, SECONDS_PER_DAY);
+    const afterOneDay = dayResult.state.eventState.global.regions[0]!.soilHealth;
+    const dayErosion = before - afterOneDay;
+
+    // The tick erosion should be ~1/1440 of the day erosion (within 1e-9 for
+    // float rounding). Pre-fix, both were identical (the 1440× bug).
+    expect(dayErosion).toBeGreaterThan(0);
+    expect(tickErosion / dayErosion).toBeCloseTo(STEP_SECONDS / SECONDS_PER_DAY, 6);
+  });
+
+  it('soilHealth does NOT crash to 0 in one day of 60-second ticks (RV4-F-H2)', () => {
+    // The headline symptom: pre-fix, 1440 ticks (= 1 day) at full daily rate
+    // each eroded soilHealth to 0 almost immediately. Post-fix, 1440 ticks
+    // each applying 1/1440 of the daily rate leaves soilHealth where one
+    // `applyEnvironmentalFeedback(state, SECONDS_PER_DAY)` call would —
+    // materially lower, but NOT zero.
+    const base = freshState();
+    const regions = base.eventState.global.regions.map((r) => ({
+      ...r,
+      forestCoverage: 0, // max erosion
+      climate: { ...r.climate },
+      pollution: { ...r.pollution },
+    }));
+    let state: GameState = {
+      ...base,
+      eventState: { ...base.eventState, global: { ...base.eventState.global, regions } },
+    };
+    const before = state.eventState.global.regions[0]!.soilHealth;
+
+    // Run 1440 ticks of 60s each (= one sim day).
+    const STEP_SECONDS = 60;
+    for (let i = 0; i < SECONDS_PER_DAY / STEP_SECONDS; i++) {
+      state = applyEnvironmentalFeedback(state, STEP_SECONDS).state;
+    }
+    const after = state.eventState.global.regions[0]!.soilHealth;
+
+    // Soil health dropped (erosion happened) but is NOT near zero. Pre-fix it
+    // would have hit 0 within the first few ticks. The daily erosion rate is
+    // 0.002 × missingForest(=1) = 0.002/day, so after 1 day soilHealth ≈
+    // before − 0.002 (a small, sane drop — NOT a crash).
+    expect(after).toBeGreaterThan(0);
+    expect(after).toBeGreaterThan(before - 0.01); // < 1% drop in one day
+    // And materially: it actually moved (sanity that the loop ran).
+    expect(after).toBeLessThan(before);
+  });
+
+  it('a zero dtSeconds is a no-op (defensive guard)', () => {
+    const base = freshState();
+    const regions = base.eventState.global.regions.map((r) => ({
+      ...r,
+      forestCoverage: 0,
+      climate: { ...r.climate },
+      pollution: { ...r.pollution },
+    }));
+    const state: GameState = {
+      ...base,
+      eventState: { ...base.eventState, global: { ...base.eventState.global, regions } },
+    };
+    const result = applyEnvironmentalFeedback(state, 0);
+    // No-op: state returned unchanged, no events.
+    expect(result.state).toBe(state);
+    expect(result.events).toHaveLength(0);
   });
 
   it('purity — input is not mutated (freeze test)', () => {
@@ -210,6 +302,6 @@ describe('P10c environmental feedback — applyEnvironmentalFeedback secondary c
     }
     // Should not throw — applyClimateFeedback deep-copies before mutating.
     expect(() => applyClimateFeedback(warmed, 365 * 24 * 60 * 60)).not.toThrow();
-    expect(() => applyEnvironmentalFeedback(warmed)).not.toThrow();
+    expect(() => applyEnvironmentalFeedback(warmed, SECONDS_PER_DAY)).not.toThrow();
   });
 });

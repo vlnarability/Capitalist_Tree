@@ -39,10 +39,12 @@ import type {
 } from '@capitalist-tree/shared';
 import {
   PROVISIONAL_WEATHER_DEFAULT_CLIMATE_ID,
+  PROVISIONAL_WEATHER_DAMAGE_LEAF_LOSS_FRACTION,
 } from '@capitalist-tree/shared';
 import {
+  applyHighlandModifier,
   findClimateById,
-  findTransitionMatrix,
+  findOrDeriveTransitionMatrix,
   WEATHER_EVENT_MAP,
 } from '@capitalist-tree/content';
 import type { System, SystemContext, SystemResult } from './system.js';
@@ -53,6 +55,8 @@ import {
   computeLocalTemperature,
   shouldEmitDamage,
 } from '../weather/effects.js';
+
+const SECONDS_PER_DAY = 24 * 60 * 60;
 
 export const weatherSystem: System = {
   id: 'WeatherSystem',
@@ -88,24 +92,48 @@ export const weatherSystem: System = {
     }
 
     // 2. Look up the active climate + transition matrix.
-    const climateId = PROVISIONAL_WEATHER_DEFAULT_CLIMATE_ID;
-    const climate = findClimateById(climateId);
-    if (!climate) {
+    // GAP-17 (DR-11) Phase 3: read the selected climate from state (stamped at
+    // initialize from `config.climateId`) instead of the hardwired default, so
+    // the per-zone transition matrix (weather-event weighting) + the zone's
+    // `seasonalBaseTemp` (→ temperature → growth curve) reflect the player's
+    // chosen Köppen zone. Falls back to the default for pre-GAP-17 states.
+    const climateId = next.world.climateId ?? PROVISIONAL_WEATHER_DEFAULT_CLIMATE_ID;
+    const baseClimate = findClimateById(climateId);
+    if (!baseClimate) {
       // Defensive — content package should always ship the default climate.
       return { state: next, events };
     }
-    const matrix = findTransitionMatrix(climateId, next.clock.season);
+    // GAP-17 (DR-11) Phase 4 + Phase 5: apply the highland elevation modifier
+    // (lapse rate 6.5 °C/km) when > 0 — a highland game is colder at altitude.
+    // The modifier returns a new ClimateZone (base untouched) with shifted
+    // seasonalBaseTemp + bumped frostRisk. Phase 4: the shifted temps feed
+    // computeLocalTemperature → the temperature→growth curve. Phase 5: the
+    // bumped frostRisk re-derives the transition matrix at runtime
+    // (findOrDeriveTransitionMatrix derives + memoizes for koppenClass 'H') →
+    // MORE frost/snow events at altitude, not just colder temps. The base-zone
+    // matrix (non-highland) still uses the pre-built catalog (unchanged).
+    const elevationM = next.world.elevationM ?? 0;
+    const climate = elevationM > 0 ? applyHighlandModifier(baseClimate, elevationM) : baseClimate;
+    const matrix = findOrDeriveTransitionMatrix(climate, next.clock.season);
     if (!matrix) {
       return { state: next, events };
     }
 
     // 3. Roll the Markov chain to pick the next condition.
     const currentWeather: WeatherState = next.world.weather;
+    // stepDays = the fraction of a day this tick represents (60s → ~0.000694).
+    // Passed to pickNextCondition so the daily transition matrix is scaled to
+    // the per-tick rate (pre-fix the matrix was applied every tick, changing
+    // the condition ~1440× too fast). Also used for the daysInCondition
+    // increment (pre-fix Math.ceil rounded 60s up to 1 day per tick, inflating
+    // daysInCondition + tripping the staleness bias almost immediately).
+    const stepDays = ctx.stepSeconds / SECONDS_PER_DAY;
     const nextCondition = pickNextCondition(
       matrix,
       currentWeather.condition,
       currentWeather.daysInCondition,
       weatherRng,
+      stepDays,
     );
 
     // 4. Roll a fresh intensity in [0, 1].
@@ -127,7 +155,7 @@ export const weatherSystem: System = {
 
     // 6. Update state.world.weather.
     const conditionChanged = nextCondition !== currentWeather.condition;
-    const newDaysInCondition = conditionChanged ? 0 : currentWeather.daysInCondition + Math.ceil(ctx.stepSeconds / 86400);
+    const newDaysInCondition = conditionChanged ? 0 : currentWeather.daysInCondition + stepDays;
     next.world.weather = {
       condition: nextCondition,
       temperature: localTemp,
@@ -152,15 +180,61 @@ export const weatherSystem: System = {
     //    + R-P7-2, and the updated R-P2-1 in docs/resources-weather.md.
 
     // 8. Emit weather-damage if applicable.
-    if (shouldEmitDamage(eventDef, intensity)) {
+    //    P11 (W4 / RV2-1): APPLY the damage to the tree, not just emit an event.
+    //    Pre-fix, the `weather-damage` event was emitted but no consumer
+    //    applied it to `tree.damage` — weather damage was dead code (GDD §5.6
+    //    "Extreme environmental conditions" + "Physical destruction" death
+    //    causes were unreachable). The BiologySystem (slot #3, runs AFTER this
+    //    system) reads `tree.damage` for stress/health/death, so writing the
+    //    damage entry here makes frost/storm/heat-wave actually wound the tree.
+    //
+    //    Gated on `conditionChanged` so damage fires once per weather EPISODE
+    //    (when the weather transitions INTO a damage-capable condition), not
+    //    every tick the condition persists. This matches the GDD §5.6 semantics
+    //    (a frost EVENT damages the tree) and bounds the damage array — without
+    //    this gate, a multi-day frost would append one entry per tick (O(n²)
+    //    array growth over long runs). The severity captures the episode's
+    //    damage magnitude; the BiologySystem's age-based prune (slot #3) cleans
+    //    up entries older than the defoliation window.
+    if (conditionChanged && shouldEmitDamage(eventDef, intensity)) {
       const severity = computeDamageSeverity(eventDef, intensity);
+      // Targeted clone of originalTree + its damage array (the rest of state
+      // is already shared by reference from the line-67 shallow clone).
+      const damageType = eventDef.damageType!;
+      // P12-C: the weather damage's mechanical impact is DEFOILIATION (leaf
+      // loss), not stress. Pre-P12-C the only impact was via the damage-stress
+      // path (counting ALL damage records), which made the weather damage the
+      // dominant neglect-death driver (~2mo, 3-6× too fast vs the DR-1 6-12mo
+      // target). Now the weather:* records are excluded from the stress count
+      // (biology/stress.ts), + the canopy loss here is the weather damage's
+      // mechanical impact: reduced photosynthesis → slower reserve accrual.
+      // The leaf loss scales with severity × FRACTION of current leaves (a
+      // mature tree loses more canopy in absolute terms).
+      const currentLeaves = next.originalTree.foliage.currentLeaves;
+      const leafLoss = currentLeaves * severity * PROVISIONAL_WEATHER_DAMAGE_LEAF_LOSS_FRACTION;
+      const newLeaves = Math.max(0, currentLeaves - leafLoss);
+      next.originalTree = {
+        ...next.originalTree,
+        damage: [
+          ...next.originalTree.damage,
+          {
+            type: `weather:${damageType}`,
+            severity,
+            appliedAt: ctx.now,
+          },
+        ],
+        foliage: {
+          ...next.originalTree.foliage,
+          currentLeaves: newLeaves,
+        },
+      };
       events.push({
         type: 'weather-damage',
         at: ctx.now,
         payload: {
           condition: nextCondition,
           intensity,
-          damageType: eventDef.damageType!,
+          damageType,
           severity,
           treeIds: [next.originalTree.id],
         },

@@ -53,6 +53,8 @@ import {
   severityMultiplier,
   UnknownEventDefinitionError,
   UnknownActiveEventError,
+  UnknownMarketError,
+  InsufficientInventoryError,
   DEFAULT_REGION_IDS,
   ECOSYSTEM_RESILIENCE_WEIGHTS,
 } from '../src/index.js';
@@ -110,7 +112,7 @@ function ctxAt(state: GameState, now: number): SystemContext {
     now,
     stepSeconds: STEP,
     dayOfYear: state.clock.day,
-    rng: Rng.fromState(state.rngState),
+    rng: Rng.fromState(state.rngState, state.rngVersion),
   };
 }
 
@@ -958,6 +960,161 @@ describe('actions — set-government-policy', () => {
   });
 });
 
+describe('actions — lobby-government (P13-B / GAP-25)', () => {
+  it('debits the lobby cost + nudges the target field up, emits events', () => {
+    const state = freshState();
+    const cashBefore = state.player.personalCash;
+    const before = state.eventState.global.governmentPolicy.environmentalRegulations;
+    const result = engine.executeAction(state, {
+      type: 'lobby-government',
+      payload: { targetField: 'environmentalRegulations', direction: 'up', tick: 1000 },
+    });
+    // Field nudged up by 0.05, clamped to [0,1].
+    expect(result.state.eventState.global.governmentPolicy.environmentalRegulations).toBeCloseTo(
+      before + 0.05,
+      6,
+    );
+    // Lobby cost (10000 minor) debited from the player.
+    expect(BigInt(result.state.player.personalCash)).toBe(BigInt(cashBefore) - 10_000n);
+    // government-policy-changed + a notification.
+    expect(result.events.some((e) => e.type === 'government-policy-changed')).toBe(true);
+    expect(result.events.some((e) => e.type === 'notification')).toBe(true);
+  });
+
+  it('nudges down + clamps at 0 (never negative)', () => {
+    const state = freshState();
+    // carbonTaxRate starts at 0 — nudging down stays at 0 (clamped).
+    expect(state.eventState.global.governmentPolicy.carbonTaxRate).toBe(0);
+    const result = engine.executeAction(state, {
+      type: 'lobby-government',
+      payload: { targetField: 'carbonTaxRate', direction: 'down', tick: 0 },
+    });
+    expect(result.state.eventState.global.governmentPolicy.carbonTaxRate).toBe(0);
+  });
+
+  it('can nudge the tariffRate lever', () => {
+    const state = freshState();
+    const result = engine.executeAction(state, {
+      type: 'lobby-government',
+      payload: { targetField: 'tariffRate', direction: 'up', tick: 0 },
+    });
+    expect(result.state.eventState.global.governmentPolicy.tariffRate).toBeCloseTo(0.05, 6);
+  });
+});
+
+describe('actions — import-commodity (P13-B / GAP-24)', () => {
+  it('credits inventory + debits the player by the base cost (no tariff)', () => {
+    const state = freshState();
+    const cashBefore = state.player.personalCash;
+    // market:water basePrice = '10' minor/L. Import 100 L → baseCost = 1000.
+    const result = engine.executeAction(state, {
+      type: 'import-commodity',
+      payload: { marketId: 'market:water', quantity: 100, tick: 1000 },
+    });
+    // Inventory credited with resource:water × 100.
+    const water = result.state.inventory.items.find((i) => i.resourceId === 'resource:water');
+    expect(water?.quantity).toBeGreaterThanOrEqual(100);
+    // Player debited by baseCost (1000) — no tariff (tariffRate defaults to 0).
+    expect(BigInt(result.state.player.personalCash)).toBe(BigInt(cashBefore) - 1000n);
+  });
+
+  it('applies the tariff surcharge to the authority account', () => {
+    // Set a 10% tariff first.
+    let state = freshState();
+    state = engine.executeAction(state, {
+      type: 'set-government-policy',
+      payload: { policy: { tariffRate: 0.1 }, tick: 0 },
+    }).state;
+    const cashBefore = state.player.personalCash;
+    // baseCost = 1000, tariff = 100, totalCost = 1100.
+    const result = engine.executeAction(state, {
+      type: 'import-commodity',
+      payload: { marketId: 'market:water', quantity: 100, tick: 1000 },
+    });
+    // Player debited by baseCost + tariff = 1100.
+    expect(BigInt(result.state.player.personalCash)).toBe(BigInt(cashBefore) - 1100n);
+    // transaction-recorded events emitted (base + tariff).
+    const tx = result.events.filter((e) => e.type === 'transaction-recorded');
+    expect(tx.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('throws UnknownMarketError for an unknown market id', () => {
+    const state = freshState();
+    expect(() =>
+      engine.executeAction(state, {
+        type: 'import-commodity',
+        payload: { marketId: 'market:no-such', quantity: 1, tick: 0 },
+      }),
+    ).toThrow(UnknownMarketError);
+  });
+});
+
+describe('actions — export-commodity (P13-B / GAP-24)', () => {
+  it('debits inventory + issues revenue to the player from the foreign sale', () => {
+    // Stock inventory first via an import (100 L of water).
+    let state = freshState();
+    state = engine.executeAction(state, {
+      type: 'import-commodity',
+      payload: { marketId: 'market:water', quantity: 100, tick: 0 },
+    }).state;
+    const held = state.inventory.items.find((i) => i.resourceId === 'resource:water')?.quantity ?? 0;
+    expect(held).toBeGreaterThanOrEqual(100);
+    const cashBefore = state.player.personalCash;
+
+    // Export 50 L @ 10 minor/L → revenue = 500 issued to the player.
+    const result = engine.executeAction(state, {
+      type: 'export-commodity',
+      payload: { marketId: 'market:water', quantity: 50, tick: 1000 },
+    });
+    // Inventory debited by 50.
+    const afterHeld = result.state.inventory.items.find(
+      (i) => i.resourceId === 'resource:water',
+    )?.quantity;
+    expect(afterHeld).toBe(held - 50);
+    // Revenue (500) issued to the player.
+    expect(BigInt(result.state.player.personalCash)).toBe(BigInt(cashBefore) + 500n);
+    // transaction-recorded + a system event.
+    expect(result.events.some((e) => e.type === 'transaction-recorded')).toBe(true);
+    expect(result.events.some((e) => e.type === 'system')).toBe(true);
+  });
+
+  it('drops the inventory item when the export empties it', () => {
+    let state = freshState();
+    state = engine.executeAction(state, {
+      type: 'import-commodity',
+      payload: { marketId: 'market:water', quantity: 10, tick: 0 },
+    }).state;
+    // Export all 10 → the resource:water item is removed from inventory.
+    const result = engine.executeAction(state, {
+      type: 'export-commodity',
+      payload: { marketId: 'market:water', quantity: 10, tick: 1000 },
+    });
+    expect(
+      result.state.inventory.items.find((i) => i.resourceId === 'resource:water'),
+    ).toBeUndefined();
+  });
+
+  it('throws InsufficientInventoryError when inventory is short', () => {
+    const state = freshState(); // empty inventory
+    expect(() =>
+      engine.executeAction(state, {
+        type: 'export-commodity',
+        payload: { marketId: 'market:water', quantity: 1, tick: 0 },
+      }),
+    ).toThrow(InsufficientInventoryError);
+  });
+
+  it('throws UnknownMarketError for an unknown market id', () => {
+    const state = freshState();
+    expect(() =>
+      engine.executeAction(state, {
+        type: 'export-commodity',
+        payload: { marketId: 'market:no-such', quantity: 1, tick: 0 },
+      }),
+    ).toThrow(UnknownMarketError);
+  });
+});
+
 describe('actions — set-monetary-policy', () => {
   it('merges a partial policy into monetaryPolicy + emits monetary-policy-changed', () => {
     const state = freshState();
@@ -1019,7 +1176,7 @@ describe('determinism + purity', () => {
 describe('EventSystem — RNG fork deferred (R-P10-N: zero root draws)', () => {
   it('execute() consumes ZERO root RNG draws (rng state unchanged)', () => {
     const initial = freshState(42);
-    const rng = Rng.fromState(initial.rngState);
+    const rng = Rng.fromState(initial.rngState, initial.rngVersion);
     const before = rng.getState();
     const c: SystemContext = {
       now: initial.clock.elapsedSeconds + STEP,
@@ -1036,7 +1193,7 @@ describe('EventSystem — RNG fork deferred (R-P10-N: zero root draws)', () => {
 
   it('execute() consumes ZERO root RNG draws even on a check tick (first tick seeds regions + aggregates)', () => {
     const initial = freshState(42);
-    const rng = Rng.fromState(initial.rngState);
+    const rng = Rng.fromState(initial.rngState, initial.rngVersion);
     const before = rng.getState();
     const c: SystemContext = {
       now: initial.clock.elapsedSeconds + STEP,
@@ -1055,7 +1212,10 @@ describe('EventSystem — RNG fork deferred (R-P10-N: zero root draws)', () => {
     const full = engine.advance(initial, STEP);
     // Manually replay one step WITHOUT the EventSystem to isolate its
     // root-RNG contribution (mirrors runOneStep's RNG threading).
-    const rng = Rng.fromState(initial.rngState);
+    const rng = Rng.fromState(initial.rngState, initial.rngVersion);
+    // DR-6 v2: mirror runOneStep's per-tick root nonce so the manual replay
+    // advances the root identically to the full engine.
+    if (rng.forkVersion === 2) rng.next();
     const c: SystemContext = {
       now: initial.clock.elapsedSeconds + STEP,
       stepSeconds: STEP,
@@ -1102,11 +1262,16 @@ describe('EventSystem — RNG fork deferred (R-P10-N: zero root draws)', () => {
         },
       };
     }
-    const state = crippled(3);
-    // Advance one sim day (enough for the BiologySystem mortality check to
-    // kill the starved tree — calibrated to the current 2-fork-per-step
-    // root sequence).
-    const result = engine.advance(state, DAY);
+    const state = crippled(7);
+    // Advance 10 sim days. Under DR-6 v2 (non-root-consuming forks + the
+    // per-tick root nonce), the mortality roll sequence differs from v1's
+    // root-consuming-fork sequence, so the starved tree dies later (within
+    // ~10 days, not within 1 day as under v1). Seed 7 dies within this window
+    // under v2 (seed 3, used pre-DR-6, survives ~10 days under v2's sequence).
+    // The EventSystem uses a hash-derived sub-RNG (never touches ctx.rng), so
+    // it cannot perturb the BiologySystem's mortality sequence — the tree dies
+    // the same way with the EventSystem present.
+    const result = engine.advance(state, DAY * 10);
     expect(result.state.originalTree.alive).toBe(false);
   });
 });

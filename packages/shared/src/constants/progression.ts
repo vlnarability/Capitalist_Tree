@@ -41,6 +41,21 @@ export const PROVISIONAL_PRESTIGE_LEGACY_MULTIPLIER_PER_TRAIT = 2;
 // is below this threshold.
 export const PROVISIONAL_PRESTIGE_GENERATION_MIN_DURATION_DAYS = 120;
 
+// PROVISIONAL (GDD §17: Prestige and Generational Progression — §11.2 Genetic
+// Legacy / GAP-19 reproduction-seeding)
+//
+// Genetic-legacy points granted per seed planted via the `plant-seed` action
+// (GAP-19 / GDD §11.2 — the seed production → planting loop). The BiologySystem
+// produces seeds (`seed-dispersed`, fed by `alloc.reproduction`); `plant-seed`
+// consumes one + credits this many points to `prestige.geneticLegacyPoints` — a
+// mid-generation earning mechanism that supplements the generation-end bonus
+// (`PROVISIONAL_PRESTIGE_BASE_LEGACY_POINTS_PER_GENERATION` = 10 + 2/trait). A
+// mature tree produces ~2-3 seeds/sim-year, so seeds add a modest supplement to
+// the generation bonus (the generation-end reset remains the main earner). The
+// points fund `unlock-research` (GDD §11.2 — genetic legacy unlocks research).
+// Tunable — the per-seed reward rate.
+export const PROVISIONAL_PROGRESSION_LEGACY_POINTS_PER_SEED = 1;
+
 // PROVISIONAL (GDD §17: Prestige and Generational Progression — §11.3)
 //
 // Fraction (0–1) of unlocked research that is PRESERVED across a prestige
@@ -77,3 +92,19 @@ export const PROVISIONAL_TRAIT_MAGNITUDE_DEFAULT = 0.75;
 // biodiversity, generation count — so running it every tick is wasteful).
 // 60 ticks = 60 simulation minutes = 1 real minute at 1x speed.
 export const PROVISIONAL_ACHIEVEMENT_CHECK_INTERVAL_TICKS = 60;
+
+// ---------------------------------------------------------------------------
+// P11 (W18 / RV4-F-M6): shared achievement + objective thresholds. Pre-fix,
+// the achievement (achievements.ts) + objective (objectives.ts) evaluators
+// each declared their OWN local threshold constants — they drifted: the
+// achievement's DESTRUCTION_FOREST_MAX was 0.1 while the objective's
+// DESTRUCTION_THRESHOLD (used for both biodiversity + forest) was 0.2. These
+// shared constants ensure both evaluators read identical thresholds so the
+// "great-restoration" achievement + objective + the "last-tree" pair measure
+// the same bar.
+// ---------------------------------------------------------------------------
+
+/** Restoration threshold (GDD §12 The Great Restoration): indicators ≥ this. */
+export const PROVISIONAL_RESTORATION_THRESHOLD = 0.8;
+/** Destruction threshold (GDD §12 The Last Tree): indicators ≤ this. */
+export const PROVISIONAL_DESTRUCTION_THRESHOLD = 0.2;

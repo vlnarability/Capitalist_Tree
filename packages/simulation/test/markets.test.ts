@@ -78,8 +78,8 @@ function buy(state: GameState, marketId: string, quantity: number): GameState {
 }
 
 describe('content — market definitions (P3b — GDD §8.5)', () => {
-  it('registers exactly 5 commodity markets', () => {
-    expect(ALL_MARKETS).toHaveLength(5);
+  it('registers all 8 GDD §8.5 commodity markets', () => {
+    expect(ALL_MARKETS).toHaveLength(8);
     const ids = ALL_MARKETS.map((m) => m.id);
     expect(ids).toEqual([
       'market:water',
@@ -87,6 +87,10 @@ describe('content — market definitions (P3b — GDD §8.5)', () => {
       'market:seeds',
       'market:food',
       'market:energy',
+      // P13-A / GAP-22: the three formerly-deferred markets.
+      'market:equipment',
+      'market:labor',
+      'market:land',
     ]);
   });
 
@@ -119,9 +123,9 @@ describe('content — market definitions (P3b — GDD §8.5)', () => {
 });
 
 describe('initial state — markets + accounts seeded (P3b)', () => {
-  it('economy.markets has 5 entries with price === basePrice', () => {
+  it('economy.markets has 8 entries with price === basePrice', () => {
     const s = freshState();
-    expect(s.economy.markets).toHaveLength(5);
+    expect(s.economy.markets).toHaveLength(8);
     for (const m of s.economy.markets) {
       const def = findMarketById(m.id);
       expect(def).toBeDefined();
@@ -280,7 +284,7 @@ describe('pricing model — pure functions (TDD §10.6)', () => {
     });
 
     it('returns the average of per-market price/base ratios (uniform weights)', () => {
-      // 3 markets at 1.0x, 2 markets at 2.0x → (3 + 4) / 5 = 1.4
+      // 3 markets at 1.0x, 5 markets at 2.0x → (3 + 10) / 8 = 1.625
       const markets: MarketState[] = ALL_MARKETS.map((def, idx) => ({
         id: def.id,
         commodityId: def.commodityId,
@@ -293,7 +297,7 @@ describe('pricing model — pure functions (TDD §10.6)', () => {
         lastPriceUpdate: 0,
       }));
       const baseById = new Map(ALL_MARKETS.map((m) => [m.id, parseAmount(m.basePrice, '')]));
-      expect(computeInflationIndex(markets, baseById)).toBeCloseTo(1.4, 6);
+      expect(computeInflationIndex(markets, baseById)).toBeCloseTo(1.625, 6);
     });
 
     it('returns 1.0 for empty markets (defensive)', () => {
@@ -783,5 +787,75 @@ describe('EconomySystem integration — market updates via engine.advance', () =
     // Note: due to floating-point smoothing, there may be tiny residual moves;
     // the assertion is that we're not generating a flood of events.
     expect(priceChanges.length).toBeLessThanOrEqual(5);
+  });
+});
+
+describe('applyPurchase — subsidy rebate (P13-B / GAP-25)', () => {
+  it('issues a rebate when an active subsidy targets the purchased commodity', () => {
+    // Set a 20% water-conservation subsidy (targets resource:water).
+    let state = freshState();
+    state = engine.executeAction(state, {
+      type: 'set-government-policy',
+      payload: { policy: { subsidies: [{ type: 'subsidy:water-conservation', rate: 0.2 }] }, tick: 0 },
+    }).state;
+    const cashBefore = state.player.personalCash;
+    // market:water basePrice = '10' minor/L. Buy 100 L → totalCost = 1000,
+    // rebate = 200, net cost = 800. Player balance: cashBefore - 1000 + 200.
+    const result = engine.executeAction(state, {
+      type: 'purchase',
+      payload: { marketId: 'market:water', quantity: 100 },
+    });
+    expect(BigInt(result.state.player.personalCash)).toBe(BigInt(cashBefore) - 800n);
+    // A subsidy-rebate notification + a rebate transaction-recorded event.
+    expect(result.events.some((e) => e.type === 'notification' && (e.payload as { code?: string }).code === 'subsidy-rebate')).toBe(true);
+    const txs = result.events.filter((e) => e.type === 'transaction-recorded');
+    // One for the purchase, one for the rebate.
+    expect(txs.length).toBe(2);
+  });
+
+  it('issues no rebate when no active subsidy targets the commodity', () => {
+    // A water-conservation subsidy does NOT target resource:energy.
+    let state = freshState();
+    state = engine.executeAction(state, {
+      type: 'set-government-policy',
+      payload: { policy: { subsidies: [{ type: 'subsidy:water-conservation', rate: 0.2 }] }, tick: 0 },
+    }).state;
+    const cashBefore = state.player.personalCash;
+    const result = engine.executeAction(state, {
+      type: 'purchase',
+      payload: { marketId: 'market:energy', quantity: 10 },
+    });
+    // No rebate — full cost debited, no subsidy-rebate event.
+    expect(result.events.some((e) => e.type === 'notification' && (e.payload as { code?: string }).code === 'subsidy-rebate')).toBe(false);
+    const txs = result.events.filter((e) => e.type === 'transaction-recorded');
+    expect(txs.length).toBe(1); // purchase only
+    // Player balance only reflects the purchase (no rebate credit).
+    const unitPrice = BigInt(state.economy.markets.find((m) => m.id === 'market:energy')!.price);
+    expect(BigInt(result.state.player.personalCash)).toBe(BigInt(cashBefore) - unitPrice * 10n);
+  });
+
+  it('caps the combined rebate rate at 1 (fully-discounted purchase)', () => {
+    // Two subsidies both targeting resource:water, rates 0.6 + 0.6 = 1.2 → capped 1.0.
+    let state = freshState();
+    state = engine.executeAction(state, {
+      type: 'set-government-policy',
+      payload: {
+        policy: {
+          subsidies: [
+            { type: 'subsidy:water-conservation', rate: 0.6 },
+            { type: 'subsidy:sapling-planting', rate: 0.6 }, // targets seeds, not water — should NOT stack
+          ],
+        },
+        tick: 0,
+      },
+    }).state;
+    // Only water-conservation targets water → rate 0.6, not 1.2.
+    const cashBefore = state.player.personalCash;
+    const result = engine.executeAction(state, {
+      type: 'purchase',
+      payload: { marketId: 'market:water', quantity: 100 },
+    });
+    // totalCost = 1000, rebate = 600, net = 400.
+    expect(BigInt(result.state.player.personalCash)).toBe(BigInt(cashBefore) - 400n);
   });
 });

@@ -21,8 +21,8 @@
     "test": "vitest run --root ../../"
   },
   "dependencies": {
-    "@capitalist-tree/shared": "workspace:*",
     "@capitalist-tree/content": "workspace:*",
-    "zod": "^3.23.8"
+    "@capitalist-tree/shared": "workspace:*",
+    "zod": "^4.6.7"
   }
 }

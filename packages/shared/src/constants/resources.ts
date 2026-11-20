@@ -51,9 +51,45 @@ export const PROVISIONAL_RESOURCE_EVAPORATION_BASE_TEMP_C = 15;
 // simulation day, expressed as a fraction of the species' daily water
 // requirement scaled by `roots.absorptionCapacity`. This caps uptake so a
 // small root cannot drain a saturated soil in a single step (Liebig-style
-// capacity limit). 1.5 means a full root system can take up to 150% of the
-// daily need — headroom for refilling the internal water buffer.
-export const PROVISIONAL_RESOURCE_MAX_UPTAKE_FRACTION = 1.5;
+// capacity limit). Also reused by the nutrient balance (nutrients.ts) as the
+// same headroom factor for nutrient uptake.
+//
+// P12-C redesign follow-up: raised from 1.5 to 5.0. At 1.5, with the sapling's
+// rootAbsorptionCapacity (0.3 for White Oak, 0.25 for Eastern Hemlock — and
+// note roots.absorptionCapacity is never updated as roots.development grows,
+// a separate follow-up), the effective uptake cap was MAX × rootAbs = 0.45×
+// (oak) / 0.375× (hemlock) of the daily consumption. For water this was fine
+// (the stored buffer stayed far above the daily need → waterFactor stayed
+// high), but for NUTRIENTS it meant the tree absorbed only 45% of what it
+// consumed → the tree's internal nutrient pool depleted below the species'
+// requirement within ~90 days → nutrientFactor < 0.5 → nutrient stress →
+// stress climbed to 1.0 → reserves+stress mortality fired at ~5mo, before the
+// wear path's ~6mo onset (defeating the DR-1 6-12mo target). At 5.0, the
+// effective cap is 1.5× (oak) / 1.25× (hemlock) of consumption → the tree
+// refills its nutrient pool faster than it drains → nutrientFactor stays
+// >= 0.5 → no nutrient stress → the wear path drives the chronic-neglect
+// death at ~6-12mo. Water is unaffected (waterFactor was already high).
+export const PROVISIONAL_RESOURCE_MAX_UPTAKE_FRACTION = 5.0;
+
+// PROVISIONAL (GAP-17 / DR-11 — Phase 3 deferred follow-up (a): climate-level
+// water-stress Liebig factor, `biology/photosynthesis.ts computeClimateWaterStressFactor`).
+//
+// The effective root-zone collection area (m²) a mature tree draws precipitation
+// from — wider than the canopy. Scales the climate's daily precipitation
+// (mm/day ≈ L/day/m²) to a whole-tree supply (L/day) comparable to the species'
+// waterRequirement. Calibrated so the default (White Oak in temperate, 750 mm/yr,
+// demand 50 L/day) has supply ≈ demand → no stress (the biology tests' baseline
+// is unchanged): (750/365) × 25 = 51.4 L/day ≈ 50 L/day demand.
+export const PROVISIONAL_CLIMATE_WATER_COLLECTION_AREA_M2 = 25; // m²
+
+// PROVISIONAL (GAP-17 / DR-11 — Phase 3 deferred follow-up (a)).
+//
+// The drought-tolerance discount for species NATIVE to the climate: native
+// species are adapted to their climate's precipitation (the date palm tolerates
+// BWh's 100 mm/yr), so they experience only this fraction of the base
+// water-stress — the regional drought shows as a MILD growth penalty, not death.
+// Non-native species experience the full base stress (they're not adapted).
+export const PROVISIONAL_CLIMATE_WATER_NATIVE_TOLERANCE = 0.2; // native feels 20% of base stress
 
 // PROVISIONAL (GDD §17: detailed resource simulation equations)
 //
@@ -152,17 +188,29 @@ export const PROVISIONAL_RESOURCE_ORGANIC_MATTER_REPLENISH_PER_DAY = 0.001;
 // Weights sum to 1.0. Stubbed factors contribute their full weight so the
 // derived health stays in a sensible range until P6+ extends them.
 export const PROVISIONAL_RESOURCE_SOIL_HEALTH_WEIGHTS = Object.freeze({
-  organicMatter: 0.25,
-  nutrients: 0.30,
-  moisture: 0.20,
-  contamination: 0.15,
-  // Extension-point stubs (TDD §8.3 "Potential variables" — pH, compaction,
-  // microbial activity). They contribute full weight (1.0) until P6+.
+  organicMatter: 0.22,
+  nutrients: 0.26,
+  moisture: 0.17,
+  contamination: 0.13,
+  // P12-D (GAP-20): pH, compaction, + microbial activity are now MODELED
+  // (resources/soil.ts phFraction / compactionFraction / microbialFraction)
+  // — no longer stubs. Weights redistributed from the P2 majors to give each
+  // a meaningful contribution (a fully compacted or microbe-dead soil loses
+  // ~0.06 health). All weights are @provisional (GDD §17) — P12-C's
+  // design-promise bot re-tunes them against the 5/25/100yr balance targets.
   ph: 0.10,
-  compaction: 0.0, // reserved — schema field exists, weight is 0 until modeled
-  microbial: 0.0, // reserved — schema field exists, weight is 0 until modeled
+  compaction: 0.06,
+  microbial: 0.06,
 });
 export type SoilHealthWeights = typeof PROVISIONAL_RESOURCE_SOIL_HEALTH_WEIGHTS;
+
+// P12-D (GAP-20): pH dynamics for the soil-health derivation. Most nutrients
+// are maximally available near pH 6.5 (slightly acidic); strongly acidic
+// (< ~5) or alkaline (> ~8) soils lock up N/P/K + reduce microbial function.
+// phFraction is a symmetric tent around the ideal: 1.0 at PH_IDEAL, declining
+// linearly to 0 at PH_IDEAL ± PH_TOLERANCE. @provisional (GDD §17).
+export const PROVISIONAL_RESOURCE_SOIL_PH_IDEAL = 6.5;
+export const PROVISIONAL_RESOURCE_SOIL_PH_TOLERANCE = 2.0;
 
 // PROVISIONAL (GDD §17: detailed resource simulation equations)
 //
@@ -325,3 +373,25 @@ export const PROVISIONAL_WEATHER_DAMAGE_INTENSITY_THRESHOLD = 0.6;
 // Future tuning can differentiate per condition (storm damages structure,
 // frost damages foliage, etc.).
 export const PROVISIONAL_WEATHER_DAMAGE_SEVERITY_SCALE = 0.5;
+
+// PROVISIONAL (GDD §5.6 "Physical destruction" / P12-C neglect-death tuning).
+//
+// Fraction of current leaves lost when a weather-damage episode fires, scaled
+// by the episode's severity: `leafLoss = currentLeaves × severity × FRACTION`.
+// At severity ~0.5 + FRACTION 0.15, each episode strips ~7.5% of the canopy;
+// over ~5 episodes per 60-day prune window, the canopy drops to ~67% —
+// significant defoliation that cuts photosynthesis + reserve accumulation
+// without instantly bare-ing the tree.
+//
+// P12-C context: pre-P12-C, weather damage's ONLY mechanical impact was via
+// the damage-stress path (STRESS_DAMAGE_PER_DAY × activeDamage × stepDays,
+// counting ALL damage records). That made the weather damage (~0.09/day →
+// activeDamage ~5.4) the dominant neglect-death driver, killing the idle tree
+// in ~2 months — 3-6× too fast vs the DR-1 6-12 month target. P12-C moves the
+// weather damage's mechanical impact to defoliation (this constant) + excludes
+// `weather:*` records from the stress count (biology/stress.ts), so the
+// infestations (pest/disease, ~0.035/day → activeDamage ~2.1, just above the
+// recovery threshold of 2) become the RELIABLE neglect-death driver at ~9
+// months. The weather damage still wounds the tree (canopy loss → reduced
+// photosynthesis → slower reserve accrual) without dwarfing the infestations.
+export const PROVISIONAL_WEATHER_DAMAGE_LEAF_LOSS_FRACTION = 0.15;

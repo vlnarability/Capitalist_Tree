@@ -43,6 +43,10 @@ import {
   growthFactor,
   SEVERE_DEFOLIATION_FRACTION,
 } from '../src/biology/index.js';
+import {
+  applyTraitEffects,
+  defaultBiologyParameters,
+} from '../src/progression/trait-effects.js';
 import { Rng } from '../src/rng.js';
 import {
   testTree,
@@ -130,6 +134,66 @@ describe('photosynthesis — Liebig limiting factors (TDD §7.2)', () => {
     const warm = photosynthesisForStep(tree, warmCtx);
     expect(cold).toBeGreaterThan(0);
     expect(cold).toBeLessThan(warm);
+  });
+
+  // --------------------------------------------------------------------------
+  // P11 (W4 / RV2-2): photosynthesis reads the current WEATHER temperature
+  // (which fluctuates with frost/heat-wave conditions), not the slowly-
+  // evolving climate baseline (`environment.globalTemperature`). Pre-fix, a
+  // frost event dropped `weather.temperature` below the species' minimum but
+  // photosynthesis kept reading the ~18 °C climate average — frost never
+  // reduced photosynthesis and GDD §5.6 "extreme environmental conditions"
+  // was unreachable.
+  // --------------------------------------------------------------------------
+  it('reads weather.temperature for the Liebig factor (frost reduces production)', () => {
+    const tree = testTree({ water: { stored: 50, capacity: 50 } });
+    // Climate average = 18 °C (the neutralEnvironment default). Weather is a
+    // mild frost at 9.5 °C — above the species minimum (5 °C) but well below
+    // the optimum (22 °C). The temperature factor at 9.5 °C is ~0.26 vs ~0.76
+    // at 18 °C, so production should drop substantially.
+    const ctxNoWeather = testContext(); // no weather → falls back to globalTemp
+    const ctxFrost = {
+      ...testContext(),
+      weather: {
+        condition: 'frost' as const,
+        temperature: 9.5,
+        intensity: 0.8,
+        prevCondition: null,
+        daysInCondition: 0,
+      },
+    };
+    const baselineProduction = photosynthesisForStep(tree, ctxNoWeather);
+    const frostProduction = photosynthesisForStep(tree, ctxFrost);
+    expect(frostProduction).toBeGreaterThan(0); // still above 0 (9.5 > minimum 5)
+    expect(frostProduction).toBeLessThan(baselineProduction); // reduced vs climate avg
+  });
+
+  it('weather temperature at/below species minimum → zero photosynthesis', () => {
+    const tree = testTree({ water: { stored: 50, capacity: 50 } });
+    // 4 °C — below White Oak's minimum (5 °C). temperatureFactor = 0.
+    const ctxBelowMinimum = {
+      ...testContext(),
+      weather: {
+        condition: 'frost' as const,
+        temperature: 4,
+        intensity: 0.9,
+        prevCondition: null,
+        daysInCondition: 0,
+      },
+    };
+    const production = photosynthesisForStep(tree, ctxBelowMinimum);
+    expect(production).toBe(0);
+  });
+
+  it('falls back to environment.globalTemperature when weather is absent (backward compat)', () => {
+    const tree = testTree({ water: { stored: 50, capacity: 50 } });
+    // No weather field on the context → uses environment.globalTemperature.
+    // This preserves the pre-P11 behavior for callers that build a context
+    // without weather (e.g. unit tests, hand-built states).
+    const ctx = testContext(); // no weather
+    const production = photosynthesisForStep(tree, ctx);
+    // At globalTemp=18 °C (in range, above minimum), production > 0.
+    expect(production).toBeGreaterThan(0);
   });
 });
 
@@ -230,10 +294,14 @@ describe('energy allocation (TDD §7.3) — survival-first', () => {
     const alloc = allocateEnergy(tree, production, ctx);
     expect(alloc.maintenance).toBeGreaterThan(0);
     expect(alloc.surplus).toBeGreaterThan(0);
-    expect(alloc.rootGrowth + alloc.trunkGrowth + alloc.branchGrowth + alloc.leafGrowth + alloc.reserveStorage)
+    // DR-4: heightGrowth is now a separate bucket (was part of trunkGrowth).
+    // GAP-19: reproduction is now a real bucket (was a 0.0 stub). The sum of
+    // all growth buckets + reproduction + reserveStorage = surplus.
+    expect(alloc.rootGrowth + alloc.heightGrowth + alloc.trunkGrowth + alloc.branchGrowth + alloc.leafGrowth + alloc.reproduction + alloc.reserveStorage)
       .toBeCloseTo(alloc.surplus, 5);
-    // Reproduction is a stub.
-    expect(alloc.reproduction).toBe(0);
+    // GAP-19: reproduction now gets a fraction of the surplus (weight 0.05).
+    expect(alloc.reproduction).toBeGreaterThan(0);
+    expect(alloc.reproduction).toBeCloseTo(alloc.surplus * 0.05, 5);
   });
 
   it('winter dormancy for deciduous: zero leaf growth', () => {
@@ -295,6 +363,101 @@ describe('growth (TDD §7.6) — asymptotic toward species ceiling', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// P11 (W9 / RV4-F-M7): genetic trait effects wired into growth.
+//
+// Pre-P11, `applyTraitEffects` was defined + unit-tested but never called by
+// the BiologySystem — the genetics subsystem was non-functional despite
+// passing its own unit tests. The wiring passes trait-adjusted
+// BiologyParameters into `applyGrowth`, so activating `trait:rapid-growth`
+// (which raises `growthRateMultiplier` by +20% at magnitude 1.0) measurably
+// increases structural growth.
+// ---------------------------------------------------------------------------
+describe('growth — genetic trait effects (P11 W9 / RV4-F-M7)', () => {
+  it('rapid-growth trait measurably increases height growth vs neutral', () => {
+    const ctx = testContext();
+    // A sapling with room to grow (low fraction complete → high growth factor)
+    // so the trait multiplier has visible headroom to act on.
+    const tree = testTree({
+      structure: {
+        height: 0.5,
+        trunkDiameter: 0.05,
+        branchDevelopment: 1,
+        structuralIntegrity: 1,
+      },
+    });
+    const alloc = allocateEnergy(tree, 1000, ctx);
+    const maxLeaves = maxSupportedLeaves(tree);
+
+    // Neutral params (no traits) — the baseline.
+    const neutralGrowth = applyGrowth(tree, ctx, alloc, maxLeaves);
+
+    // rapid-growth at magnitude 1.0 → growthRateMultiplier = 1.2 (+20%).
+    const traitParams = applyTraitEffects(defaultBiologyParameters(), [
+      { traitId: 'trait:rapid-growth', active: true, generation: 1, magnitude: 1 },
+    ]);
+    const traitGrowth = applyGrowth(tree, ctx, alloc, maxLeaves, traitParams);
+
+    // Height grew in both cases (sanity — the test setup produces real growth).
+    expect(neutralGrowth.height).toBeGreaterThan(tree.structure.height);
+    // The trait grew MORE height than neutral — the +20% multiplier is live.
+    expect(traitGrowth.height).toBeGreaterThan(neutralGrowth.height);
+    // The delta is ~20% of the neutral delta (within a tolerance for the
+    // asymptotic cap clamping at the species maximum).
+    const neutralDelta = neutralGrowth.height - tree.structure.height;
+    const traitDelta = traitGrowth.height - tree.structure.height;
+    expect(traitDelta).toBeGreaterThan(neutralDelta * 1.15); // ≥ +15% (allow clamp slack)
+  });
+
+  it('a deactivated rapid-growth trait has NO effect (only expressed traits apply)', () => {
+    const ctx = testContext();
+    const tree = testTree({
+      structure: {
+        height: 0.5,
+        trunkDiameter: 0.05,
+        branchDevelopment: 1,
+        structuralIntegrity: 1,
+      },
+    });
+    const alloc = allocateEnergy(tree, 1000, ctx);
+    const maxLeaves = maxSupportedLeaves(tree);
+
+    const neutralGrowth = applyGrowth(tree, ctx, alloc, maxLeaves);
+    // Same trait, but active: false → applyTraitEffects skips it.
+    const inactiveParams = applyTraitEffects(defaultBiologyParameters(), [
+      { traitId: 'trait:rapid-growth', active: false, generation: 1, magnitude: 1 },
+    ]);
+    const inactiveGrowth = applyGrowth(tree, ctx, alloc, maxLeaves, inactiveParams);
+
+    // Identical to neutral — the deactivated trait contributes nothing.
+    expect(inactiveGrowth.height).toBe(neutralGrowth.height);
+    expect(inactiveGrowth.trunkDiameter).toBe(neutralGrowth.trunkDiameter);
+  });
+
+  it('default params (no traits) produce identical growth to the pre-P11 call', () => {
+    // Backward-compat: callers that omit the params arg get the neutral
+    // default, which must match passing defaultBiologyParameters() explicitly.
+    const ctx = testContext();
+    const tree = testTree({
+      structure: {
+        height: 0.5,
+        trunkDiameter: 0.05,
+        branchDevelopment: 1,
+        structuralIntegrity: 1,
+      },
+    });
+    const alloc = allocateEnergy(tree, 1000, ctx);
+    const maxLeaves = maxSupportedLeaves(tree);
+
+    const omitted = applyGrowth(tree, ctx, alloc, maxLeaves);
+    const explicit = applyGrowth(tree, ctx, alloc, maxLeaves, defaultBiologyParameters());
+
+    expect(omitted.height).toBe(explicit.height);
+    expect(omitted.trunkDiameter).toBe(explicit.trunkDiameter);
+    expect(omitted.branchDevelopment).toBe(explicit.branchDevelopment);
+  });
+});
+
 describe('reserves (TDD §7.4)', () => {
   it('reserve capacity scales with biomass', () => {
     const sapling = testTree({
@@ -333,6 +496,91 @@ describe('reserves (TDD §7.4)', () => {
     expect(biomassScore(sapling, SPECIES)).toBeGreaterThanOrEqual(0);
     expect(biomassScore(sapling, SPECIES)).toBeLessThan(0.5);
     expect(biomassScore(mature, SPECIES)).toBeCloseTo(4, 1);
+  });
+});
+
+/**
+ * DR-4 (docs/reviews/DECISIONS.md): height + diameter grow from INDEPENDENT
+ * energy buckets, decoupling them (RV2-3: both driven by alloc.trunkGrowth).
+ * The split is species-specific (heightDiameterSplit). An allometric constraint
+ * (maxSlendernessRatio) prevents unrealistic slenderness — a tree must add
+ * girth before it can add height beyond the sustainable bound.
+ */
+describe('DR-4 — independent height + diameter growth (RV2-3 decoupled)', () => {
+  // Helper: a White Oak variant with a custom height/diameter split.
+  const speciesWithSplit = (split: number) => ({ ...SPECIES, heightDiameterSplit: split });
+
+  it('allocateEnergy splits the structural bucket into height + diameter by heightDiameterSplit', () => {
+    const ctx = testContext({ species: speciesWithSplit(0.4) });
+    const tree = testTree({
+      foliage: { currentLeaves: 1000, leafCapacity: 2000 },
+      energy: { reserves: 100, production: 0, consumption: 0 },
+    });
+    const alloc = allocateEnergy(tree, 1000, ctx);
+    // heightGrowth + trunkGrowth = the structural bucket (both > 0).
+    const structural = alloc.heightGrowth + alloc.trunkGrowth;
+    expect(structural).toBeGreaterThan(0);
+    // The split: height gets 40%, diameter gets 60%.
+    expect(alloc.heightGrowth / structural).toBeCloseTo(0.4, 5);
+    expect(alloc.trunkGrowth / structural).toBeCloseTo(0.6, 5);
+  });
+
+  it('a height-favoring split grows height more than a diameter-favoring split (and vice versa)', () => {
+    const base = testTree({
+      structure: { height: 1, trunkDiameter: 0.2, branchDevelopment: 1, structuralIntegrity: 1 },
+    });
+    // Height-favoring split (0.8) → more height growth.
+    const tallCtx = testContext({ species: speciesWithSplit(0.8) });
+    const tallGrowth = applyGrowth(base, tallCtx, allocateEnergy(base, 1000, tallCtx), maxSupportedLeaves(base));
+    // Diameter-favoring split (0.2) → more diameter growth.
+    const wideCtx = testContext({ species: speciesWithSplit(0.2) });
+    const wideGrowth = applyGrowth(base, wideCtx, allocateEnergy(base, 1000, wideCtx), maxSupportedLeaves(base));
+
+    expect(tallGrowth.height).toBeGreaterThan(wideGrowth.height);
+    expect(wideGrowth.trunkDiameter).toBeGreaterThan(tallGrowth.trunkDiameter);
+  });
+
+  it('allometric clamp halts height growth for an already-slender tree (no shrink)', () => {
+    // height 20, diameter 0.2 → ratio 100, well over White Oak's maxSlendernessRatio (40).
+    // The cap is diameter × 40 = 8 < current height 20, so height growth is halted.
+    const thinTree = testTree({
+      structure: { height: 20, trunkDiameter: 0.2, branchDevelopment: 1, structuralIntegrity: 1 },
+    });
+    const ctx = testContext(); // White Oak: maxSlendernessRatio 40
+    const alloc = allocateEnergy(thinTree, 1000, ctx);
+    const growth = applyGrowth(thinTree, ctx, alloc, maxSupportedLeaves(thinTree));
+    // The clamp never shrinks the tree: height stays at 20 (no growth, no shrink).
+    expect(growth.height).toBe(20);
+    // Diameter still grows normally (the clamp only affects height).
+    expect(growth.trunkDiameter).toBeGreaterThan(0.2);
+  });
+
+  it('allometric clamp does NOT bite for a well-proportioned sapling', () => {
+    // height 1, diameter 0.2 → ratio 5, well under the bound (40).
+    const tree = testTree({
+      structure: { height: 1, trunkDiameter: 0.2, branchDevelopment: 1, structuralIntegrity: 1 },
+    });
+    const ctx = testContext();
+    const alloc = allocateEnergy(tree, 1000, ctx);
+    const growth = applyGrowth(tree, ctx, alloc, maxSupportedLeaves(tree));
+    // Height grows normally (not clamped) + stays within the slenderness bound.
+    expect(growth.height).toBeGreaterThan(1);
+    expect(growth.height).toBeLessThanOrEqual(growth.trunkDiameter * SPECIES.maxSlendernessRatio + 1e-9);
+  });
+
+  it('a tree at the slenderness cap grows height only as diameter permits', () => {
+    // height 8, diameter 0.2 → ratio 40 = exactly the cap. Height can grow only
+    // if diameter grows first (raising the cap). With a 0.4 split, diameter
+    // grows, raising the cap, so height can grow a little.
+    const tree = testTree({
+      structure: { height: 8, trunkDiameter: 0.2, branchDevelopment: 1, structuralIntegrity: 1 },
+    });
+    const ctx = testContext();
+    const alloc = allocateEnergy(tree, 1000, ctx);
+    const growth = applyGrowth(tree, ctx, alloc, maxSupportedLeaves(tree));
+    // Height grows, but never beyond the NEW cap (grown diameter × ratio).
+    expect(growth.height).toBeGreaterThan(8);
+    expect(growth.height).toBeLessThanOrEqual(growth.trunkDiameter * SPECIES.maxSlendernessRatio + 1e-9);
   });
 });
 
@@ -439,12 +687,16 @@ describe('mortality (GDD §5.6) — repeated defoliation', () => {
   it('repeated severe defoliation raises mortality risk', () => {
     // Use a full-day step so the per-day death probability is meaningful.
     // stepDays = 1.0 → DEATH_DAILY_PROBABILITY applies at full strength.
+    // P12-C follow-up #2: DEATH_DEFOLIATION_COUNT raised 2→4, so the test now
+    // uses 4 recent severe-defoliations to trigger the mortality check.
     const ctx = testContext({ stepSeconds: SECONDS_PER_DAY });
     const now = 100 * SECONDS_PER_DAY;
     const tree = testTree({
       damage: [
         { type: 'severe-defoliation', severity: 0.7, appliedAt: now - 5 * SECONDS_PER_DAY },
         { type: 'severe-defoliation', severity: 0.7, appliedAt: now - 10 * SECONDS_PER_DAY },
+        { type: 'severe-defoliation', severity: 0.7, appliedAt: now - 20 * SECONDS_PER_DAY },
+        { type: 'severe-defoliation', severity: 0.7, appliedAt: now - 30 * SECONDS_PER_DAY },
       ],
       stress: 0.95,
       energy: { reserves: 5, production: 0, consumption: 0 },

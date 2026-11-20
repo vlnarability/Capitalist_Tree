@@ -25,6 +25,27 @@ import {
 } from '@capitalist-tree/shared';
 import type { BiologyContext } from './types.js';
 import type { EnergyAllocation } from './energy-allocation.js';
+import type { BiologyParameters } from '../progression/trait-effects.js';
+
+/**
+ * The neutral biology parameter set (every multiplier 1.0). Used as the
+ * default when no trait-adjusted parameters are supplied — keeps the
+ * pre-P9c callers' behavior unchanged.
+ */
+const NEUTRAL_PARAMS: BiologyParameters = {
+  growthRateMultiplier: 1,
+  earlyGrowthMultiplier: 1,
+  structuralGrowthMultiplier: 1,
+  maxGrowthMultiplier: 1,
+  productionCapacityMultiplier: 1,
+  energyProductionMultiplier: 1,
+  waterDemandMultiplier: 1,
+  droughtResistanceMultiplier: 1,
+  reservesCapacityMultiplier: 1,
+  pestVulnerabilityMultiplier: 1,
+  frostSurvivalMultiplier: 1,
+  warmClimatePerformanceMultiplier: 1,
+};
 
 /**
  * Asymptotic growth factor in [0, 1] for a single dimension.
@@ -55,6 +76,15 @@ export function growthFactor(fractionComplete: number): number {
  * The growth factor slows growth near the ceiling.
  *
  * Returns the new value, clamped at `maximum` (NEVER exceeds the ceiling).
+ *
+ * DR-4 (was P11 W27 / RV2-3): height + diameter now grow from INDEPENDENT
+ * energy buckets (`alloc.heightGrowth` vs `alloc.trunkGrowth`), split per the
+ * species' `heightDiameterSplit`. The shared asymptotic `growthFactor`
+ * (1 − frac)^EXPONENT still governs each dimension's curve (both height + trunk
+ * slow near their ceilings) — a dedicated height-specific S-curve (fast juvenile
+ * extension, then plateau) remains @provisional for a later phase. The coupling
+ * RV2-3 flagged (both driven by one bucket) is resolved; the shared growth-factor
+ * approximation is documented as a separate, intentional simplification.
  */
 export function growDimension(
   current: number,
@@ -62,14 +92,20 @@ export function growDimension(
   eu: number,
   speciesGrowthRate: number,
   ctx: BiologyContext,
+  /** P11 (W9/RV4-F-M7): trait-adjusted growth multiplier. Defaults to neutral. */
+  params: BiologyParameters = NEUTRAL_PARAMS,
 ): number {
   if (maximum <= 0 || eu <= 0) return current;
   const frac = current / maximum;
   const factor = growthFactor(frac);
+  // P11 (W9): apply the trait-adjusted growthRateMultiplier (e.g. rapid-growth
+  // raises it, pest-resistance lowers it). The multiplier composes onto the
+  // species' baseline growthRate multiplicatively (see trait-effects stacking).
   const delta =
     eu *
     PROVISIONAL_BIOLOGY_GROWTH_CONVERSION_MULTIPLIER *
     speciesGrowthRate *
+    params.growthRateMultiplier *
     factor *
     ctx.stepDays;
   // delta is in metres (height/trunk) or dimensionless (branch/root) per step.
@@ -107,14 +143,22 @@ export function applyGrowth(
   alloc: EnergyAllocation,
   /** Maximum leaves the tree can support this step (from seasons.maxSupportedLeaves). */
   maxLeaves: number,
+  /** P11 (W9/RV4-F-M7): trait-adjusted biology parameters. Defaults to neutral. */
+  params: BiologyParameters = NEUTRAL_PARAMS,
 ): GrowthResult {
   const sp = ctx.species;
-  const height = growDimension(
+  // DR-4: height + diameter grow from INDEPENDENT energy buckets. Height uses
+  // alloc.heightGrowth; diameter uses alloc.trunkGrowth (diameter-only now).
+  // This decouples them (RV2-3: both used alloc.trunkGrowth) — a tree can now
+  // grow taller while adding relatively little girth, or vice versa, per the
+  // species' heightDiameterSplit.
+  const heightGrown = growDimension(
     tree.structure.height,
     sp.maximumHeight,
-    alloc.trunkGrowth,
+    alloc.heightGrowth,
     sp.growthRate,
     ctx,
+    params,
   );
   const trunkDiameter = growDimension(
     tree.structure.trunkDiameter,
@@ -122,6 +166,22 @@ export function applyGrowth(
     alloc.trunkGrowth,
     sp.growthRate,
     ctx,
+    params,
+  );
+  // DR-4 allometric constraint: a tree cannot grow taller than
+  // `trunkDiameter × maxSlendernessRatio`. If height growth would push the
+  // ratio above the species' sustainable bound, cap height growth at the bound
+  // — the tree must add girth before it can add height (a spindly tree is
+  // structurally unstable). The cap never SHRINKS the tree: if the current
+  // height already exceeds the cap (an already-slender tree), height growth is
+  // simply halted (max with current height) until diameter catches up.
+  // Guarded against zero diameter (a sapling with no measured girth yet is
+  // exempt until it has some).
+  const slendernessCap =
+    trunkDiameter > 0 ? trunkDiameter * sp.maxSlendernessRatio : Infinity;
+  const height = Math.max(
+    tree.structure.height,
+    Math.min(heightGrown, slendernessCap),
   );
   const branchDevelopment = growDimension(
     tree.structure.branchDevelopment,
@@ -129,8 +189,9 @@ export function applyGrowth(
     alloc.branchGrowth,
     sp.growthRate,
     ctx,
+    params,
   );
-  const rootDevelopment = tree.roots.development + alloc.rootGrowth * sp.rootDevelopmentRate * ctx.stepDays;
+  const rootDevelopment = tree.roots.development + alloc.rootGrowth * sp.rootDevelopmentRate * params.growthRateMultiplier * ctx.stepDays;
 
   // Leaf growth with accumulator: each step adds the fractional leaf-equivalent
   // of `alloc.leafGrowth` to the existing progress. When progress crosses 1.0,

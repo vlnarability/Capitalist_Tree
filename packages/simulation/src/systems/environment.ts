@@ -81,6 +81,7 @@ import {
   stepFreshwater,
   stepSoil,
   stepBiodiversity,
+  stepIndicators,
   deriveEnergyCapacity,
   applyBaselineEnergyConsumption,
   PROVISIONAL_ENV_BASELINE_TEMP_C,
@@ -100,7 +101,38 @@ const FOREST_COVERAGE_MATURITY_WEIGHT = 0.3;
 // @provisional — age in sim days at which the tree counts as fully mature for
 // the coverage mapping. 10 years (3650 days) for a temperate oak; tunable.
 const FOREST_COVERAGE_MATURITY_DAYS = 3650;
+// P11 (W17 / RV4-F-M10): saplings (age < this) are exempt from deforestation
+// stress. Pre-fix, a leafless sapling (canopy=0, maturity=0) got forestCoverage
+// = 0.1 (the floor) → 90% deforestation stress → biodiversity crashed
+// immediately, even though a young tree isn't "deforested." Saplings now get a
+// baseline coverage representing "young forest, not deforested."
+const SAPLING_AGE_DAYS = 90;
+const SAPLING_FOREST_COVERAGE_BASELINE = 0.3;
 
+/**
+ * Derive `forestCoverage` in [0, 1] from the originalTree's biology outputs.
+ *
+ * READ ONLY — does not modify the tree. Uses canopy fullness + age-based
+ * maturity. Pure: takes the tree, returns the coverage.
+ *
+ * P11 (W17): saplings (age < SAPLING_AGE_DAYS) get a baseline coverage so they
+ * don't drive deforestation stress while they're still establishing.
+ */
+function deriveForestCoverage(tree: GameState['originalTree']): number {
+  // P11 (W17): exempt young trees — a sapling isn't deforested, just young.
+  if (tree.ageDays < SAPLING_AGE_DAYS) {
+    return SAPLING_FOREST_COVERAGE_BASELINE;
+  }
+  const canopy = tree.foliage.leafCapacity > 0
+    ? Math.min(1, tree.foliage.currentLeaves / tree.foliage.leafCapacity)
+    : 0;
+  const maturity = Math.min(1, tree.ageDays / FOREST_COVERAGE_MATURITY_DAYS);
+  const coverage =
+    FOREST_COVERAGE_FLOOR +
+    FOREST_COVERAGE_CANOPY_WEIGHT * canopy +
+    FOREST_COVERAGE_MATURITY_WEIGHT * maturity;
+  return Math.max(0, Math.min(1, coverage));
+}
 // Ecosystem resilience weights (sum to 1.0). @provisional (GDD §17: detailed
 // resource simulation equations) — the relative influence of biodiversity,
 // forest coverage, and soil health on ecosystem resilience (GDD §10.1
@@ -119,24 +151,6 @@ const BIODIVERSITY_WARN = 0.3; // index below → warning
 const BIODIVERSITY_CRITICAL = 0.15; // index below → critical
 const SOIL_HEALTH_WARN = 0.3; // health below → warning
 const SOIL_HEALTH_CRITICAL = 0.15; // health below → critical
-
-/**
- * Derive `forestCoverage` in [0, 1] from the originalTree's biology outputs.
- *
- * READ ONLY — does not modify the tree. Uses canopy fullness + age-based
- * maturity. Pure: takes the tree, returns the coverage.
- */
-function deriveForestCoverage(tree: GameState['originalTree']): number {
-  const canopy = tree.foliage.leafCapacity > 0
-    ? Math.min(1, tree.foliage.currentLeaves / tree.foliage.leafCapacity)
-    : 0;
-  const maturity = Math.min(1, tree.ageDays / FOREST_COVERAGE_MATURITY_DAYS);
-  const coverage =
-    FOREST_COVERAGE_FLOOR +
-    FOREST_COVERAGE_CANOPY_WEIGHT * canopy +
-    FOREST_COVERAGE_MATURITY_WEIGHT * maturity;
-  return Math.max(0, Math.min(1, coverage));
-}
 
 /**
  * Derive `ecosystemResilience` in [0, 1] from biodiversity + forestCoverage +
@@ -159,78 +173,108 @@ function deriveEcosystemResilience(env: GameState['world']['environment']): numb
  * Emit `notification` events when key environmental thresholds cross (GDD §10.3
  * environmental feedback creates secondary consequences). Reuses the existing
  * `notification` SimulationEvent variant — no new schema (P7a froze shared).
+ *
+ * P11 (W15 / RV4-F-M8): throttled to threshold CROSSINGS + severity
+ * escalations. Pre-fix, this emitted a notification EVERY tick the value was
+ * in a threshold band — a sustained anomaly flooded the event log. Now it
+ * emits only when the value transitions INTO a band (OK→warn, OK→critical,
+ * warn→critical). Recovery (warn→OK, critical→warn) does NOT emit (the
+ * improvement is its own reward; no need to spam). Comparing `beforeEnv` vs
+ * `afterEnv` avoids any schema change (no persisted "last notified" field).
  */
+type SeverityBand = 0 | 1 | 2; // 0 = OK, 1 = warn, 2 = critical
+
+/** Classify a value into a severity band given warn + critical thresholds
+ *  (lower-is-worse semantics: value < critical → 2, < warn → 1, else 0). */
+function bandLower(value: number, warn: number, critical: number): SeverityBand {
+  if (value < critical) return 2;
+  if (value < warn) return 1;
+  return 0;
+}
+
+/** Classify a value into a severity band (higher-is-worse semantics). */
+function bandHigher(value: number, warn: number, critical: number): SeverityBand {
+  if (value > critical) return 2;
+  if (value > warn) return 1;
+  return 0;
+}
+
 function pushEnvironmentNotifications(
-  env: GameState['world']['environment'],
+  beforeEnv: GameState['world']['environment'],
+  afterEnv: GameState['world']['environment'],
+  /** The output GameState being built (`next`). Read `next.eventState.
+   *  environment.lastSoilHealthBand` (the previous tick's persisted band —
+   *  `next.eventState` is shared by reference from the input state, so it
+   *  holds the prior tick's value) + write this-tick's band back via a new
+   *  eventState object (immutably, to preserve purity). */
+  next: GameState,
   now: number,
   events: SimulationEvent[],
 ): void {
-  const tempAnomaly = env.globalTemperature - PROVISIONAL_ENV_BASELINE_TEMP_C;
-  if (tempAnomaly > TEMP_ANOMALY_CRITICAL_C) {
+  // Temperature anomaly (higher-is-worse).
+  const tempBeforeBand = bandHigher(
+    beforeEnv.globalTemperature - PROVISIONAL_ENV_BASELINE_TEMP_C,
+    TEMP_ANOMALY_WARN_C,
+    TEMP_ANOMALY_CRITICAL_C,
+  );
+  const tempAfterAnomaly = afterEnv.globalTemperature - PROVISIONAL_ENV_BASELINE_TEMP_C;
+  const tempAfterBand = bandHigher(tempAfterAnomaly, TEMP_ANOMALY_WARN_C, TEMP_ANOMALY_CRITICAL_C);
+  if (tempAfterBand > tempBeforeBand) {
     events.push({
       type: 'notification',
       at: now,
       payload: {
-        severity: 'critical',
+        severity: tempAfterBand === 2 ? 'critical' : 'warning',
         code: 'environment-temperature-anomaly',
-        message: `Global temperature anomaly at +${tempAnomaly.toFixed(1)} °C above baseline.`,
-      },
-    });
-  } else if (tempAnomaly > TEMP_ANOMALY_WARN_C) {
-    events.push({
-      type: 'notification',
-      at: now,
-      payload: {
-        severity: 'warning',
-        code: 'environment-temperature-anomaly',
-        message: `Global temperature anomaly at +${tempAnomaly.toFixed(1)} °C above baseline.`,
+        message: `Global temperature anomaly at +${tempAfterAnomaly.toFixed(1)} °C above baseline.`,
       },
     });
   }
 
-  if (env.biodiversity.index < BIODIVERSITY_CRITICAL) {
+  // Biodiversity (lower-is-worse).
+  const bioBeforeBand = bandLower(beforeEnv.biodiversity.index, BIODIVERSITY_WARN, BIODIVERSITY_CRITICAL);
+  const bioAfterBand = bandLower(afterEnv.biodiversity.index, BIODIVERSITY_WARN, BIODIVERSITY_CRITICAL);
+  if (bioAfterBand > bioBeforeBand) {
     events.push({
       type: 'notification',
       at: now,
       payload: {
-        severity: 'critical',
+        severity: bioAfterBand === 2 ? 'critical' : 'warning',
         code: 'environment-biodiversity-low',
-        message: `Biodiversity index at ${(env.biodiversity.index * 100).toFixed(0)}%.`,
-      },
-    });
-  } else if (env.biodiversity.index < BIODIVERSITY_WARN) {
-    events.push({
-      type: 'notification',
-      at: now,
-      payload: {
-        severity: 'warning',
-        code: 'environment-biodiversity-low',
-        message: `Biodiversity index at ${(env.biodiversity.index * 100).toFixed(0)}%.`,
+        message: `Biodiversity index at ${(afterEnv.biodiversity.index * 100).toFixed(0)}%.`,
       },
     });
   }
 
-  if (env.soil.health < SOIL_HEALTH_CRITICAL) {
+  // Soil health (lower-is-worse). W15 follow-up (RV4-F-M8): soil.health is
+  // recomputed by the ResourceSystem (slot #4) BEFORE the EnvironmentSystem
+  // (slot #10) runs, so beforeEnv.soil.health is already this-tick's value —
+  // a within-step before/after comparison cannot detect a previous-tick →
+  // this-tick escalation (a sustained-low soil.health emitted nothing).
+  // Instead compare this-tick's band against the PERSISTED last band from
+  // eventState.environment.lastSoilHealthBand (survives save/load → no re-fire
+  // after the first post-load notification of a sustained-critical state).
+  const prevEnvState = next.eventState as { environment?: { lastSoilHealthBand?: number } };
+  const prevSoilBand = prevEnvState.environment?.lastSoilHealthBand ?? 0;
+  const soilAfterBand = bandLower(afterEnv.soil.health, SOIL_HEALTH_WARN, SOIL_HEALTH_CRITICAL);
+  if (soilAfterBand > prevSoilBand) {
     events.push({
       type: 'notification',
       at: now,
       payload: {
-        severity: 'critical',
+        severity: soilAfterBand === 2 ? 'critical' : 'warning',
         code: 'environment-soil-health-low',
-        message: `Soil health at ${(env.soil.health * 100).toFixed(0)}%.`,
-      },
-    });
-  } else if (env.soil.health < SOIL_HEALTH_WARN) {
-    events.push({
-      type: 'notification',
-      at: now,
-      payload: {
-        severity: 'warning',
-        code: 'environment-soil-health-low',
-        message: `Soil health at ${(env.soil.health * 100).toFixed(0)}%.`,
+        message: `Soil health at ${(afterEnv.soil.health * 100).toFixed(0)}%.`,
       },
     });
   }
+  // Persist this-tick's band for next tick's crossing comparison. Create a
+  // NEW eventState object — next.eventState is shared by reference from the
+  // input state, so mutating it in place would break purity (Rule 4).
+  next.eventState = {
+    ...next.eventState,
+    environment: { lastSoilHealthBand: soilAfterBand },
+  };
 }
 
 export const environmentSystem: System = {
@@ -332,8 +376,25 @@ export const environmentSystem: System = {
       stored: applyBaselineEnergyConsumption(env, dtSeconds),
     };
 
+    // 10c. P13-A / GAP-21 additional indicators (airQuality, oceanHealth,
+    //      wetlandCoverage, nutrientRunoff). Reads atmosphere (step 3),
+    //      temperature (step 5), soil nutrients (step 8), + landUse (set by
+    //      the AutomationSystem #9 this tick). Relaxes toward driver-derived
+    //      targets; nutrientRunoff accumulates + decays.
+    const indicators = stepIndicators(env, dtSeconds);
+    env.airQuality = indicators.airQuality;
+    env.oceanHealth = indicators.oceanHealth;
+    env.wetlandCoverage = indicators.wetlandCoverage;
+    env.nutrientRunoff = indicators.nutrientRunoff;
+
     // 11. Threshold notifications (GDD §10.3 environmental feedback).
-    pushEnvironmentNotifications(env, ctx.now, events);
+    // P11 (W15): pass before + after so notifications fire only on threshold
+    // crossings / severity escalations, not every tick. W15 follow-up: pass
+    // `next` so the soil.health check can read + persist the previous-tick
+    // band from eventState.environment.lastSoilHealthBand (soil.health is set
+    // by ResourceSystem before this system runs, so a within-step before/after
+    // comparison can't detect a previous-tick → this-tick escalation).
+    pushEnvironmentNotifications(state.world.environment, env, next, ctx.now, events);
 
     return { state: next, events };
   },

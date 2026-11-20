@@ -189,6 +189,10 @@ export function baseState(overrides: Partial<GameState> = {}): GameState {
     },
     history: { snapshots: [], archive: [] },
     rngState: [0, 0, 0, 0],
+    // DR-6: new sims + the fixture initialize at v2 (non-root-consuming fork).
+    // The fixture mirrors the current GameState shape so idempotency tests
+    // see the rngVersion field.
+    rngVersion: 2,
     rngStreams: { weather: [0, 0, 0, 0] },
     scheduler: { events: [] },
     // P10a (v13): EventSystem state (slot #12). The full v13 shape is
@@ -223,6 +227,7 @@ export function baseState(overrides: Partial<GameState> = {}): GameState {
         governmentPolicy: {
           environmentalRegulations: 0.3,
           carbonTaxRate: 0,
+          tariffRate: 0,
           subsidies: [],
         },
         monetaryPolicy: {
@@ -231,6 +236,18 @@ export function baseState(overrides: Partial<GameState> = {}): GameState {
           moneySupplyGrowth: 0.03,
         },
         globalMarketIndices: {},
+      },
+      // P11 (W8): persisted objective completion (v15+).
+      objectives: {
+        completed: [],
+      },
+      // P11 (W15 follow-up): persisted last soil-health band (v16+). Populated
+      // explicitly so the deep-equal round-trip holds (same pattern as the
+      // other eventState fields) — otherwise the v15→v16 migration would add
+      // it on a migrated save + the idempotency tests (migrate vN→CURRENT,
+      // expect no field changes) would fail.
+      environment: {
+        lastSoilHealthBand: 0,
       },
     },
   };

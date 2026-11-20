@@ -43,7 +43,12 @@ import type {
   GameState,
   TransactionRecord,
 } from '@capitalist-tree/shared';
-import { PROVISIONAL_ECONOMY_AUTHORITY_ACCOUNT_ID } from '@capitalist-tree/shared';
+import {
+  PROVISIONAL_ECONOMY_AUTHORITY_ACCOUNT_ID,
+  PROVISIONAL_ECONOMY_MAX_TRANSACTIONS,
+  PROVISIONAL_ECONOMY_MAX_PROCESSED_REQUEST_IDS,
+} from '@capitalist-tree/shared';
+import { capTail } from '../deep-copy.js';
 import {
   InsufficientFundsError,
   InvalidAmountError,
@@ -148,7 +153,13 @@ export function conservationDiscrepancy(
   const balances = sumBalances(state);
   const sinks = parseAmount(state.economy.totalSinks, 'totalSinks');
   const issued = parseAmount(state.economy.totalIssued, 'totalIssued');
-  const initial = parseAmount(initialSupply, 'initialSupply');
+  // P11 (W14 / RV3-3): prefer the persisted `state.economy.initialSupply`
+  // (the authoritative starting supply, survived save/load). Fall back to the
+  // caller-supplied param for backward compatibility with pre-v14 saves /
+  // hand-built states that haven't migrated yet. This makes the function
+  // usable on a LOADED save without the original config.
+  const persistedInitial = state.economy.initialSupply ?? initialSupply;
+  const initial = parseAmount(persistedInitial, 'initialSupply');
   return balances + sinks - initial - issued;
 }
 
@@ -170,7 +181,11 @@ export function markRequestProcessed(
     ...state,
     economy: {
       ...state.economy,
-      processedRequestIds: [...state.economy.processedRequestIds, requestId],
+      // P11 (W12 / RV5-F2): cap the idempotency set to bound save size.
+      processedRequestIds: capTail(
+        [...state.economy.processedRequestIds, requestId],
+        PROVISIONAL_ECONOMY_MAX_PROCESSED_REQUEST_IDS,
+      ),
     },
   };
 }
@@ -266,12 +281,25 @@ function applyTransferToAccounts(
  * updates apply or neither (throws on validation failure, state untouched).
  *
  * If `params.requestId` is set, the transaction is tagged with it AND the
- * requestId is added to `processedRequestIds` (idempotency).
+ * requestId is added to `processedRequestIds` (idempotency). P11 (RV3-1): a
+ * replayed transfer with an already-processed requestId is a no-op — the
+ * state is returned unchanged, no money moves, no duplicate transaction is
+ * recorded. This makes `transfer()` symmetric with `requestIssuance`.
  *
  * Returns the new state. Throws on validation failure.
  */
 export function transfer(state: GameState, params: TransferParams): GameState {
   const amount = validateAmount(params.amount);
+
+  // P11 (RV3-1): idempotency pre-check. If a requestId is supplied AND it has
+  // already been processed, this is a replayed transfer — return the state
+  // unchanged. Pre-fix, `transfer()` only marked the requestId as processed
+  // AFTER applying the transfer, so a replay with the same requestId re-moved
+  // the money and re-recorded the transaction (double-spend). `requestIssuance`
+  // was already replay-safe; this makes `transfer()` symmetric.
+  if (params.requestId !== undefined && isRequestProcessed(state, params.requestId)) {
+    return state;
+  }
 
   if (params.sourceAccount === params.destinationAccount) {
     throw new SelfTransferError(params.sourceAccount);
@@ -333,7 +361,12 @@ export function transfer(state: GameState, params: TransferParams): GameState {
     economy: {
       ...state.economy,
       accounts: newAccounts,
-      transactions: [...state.economy.transactions, record],
+      // P11 (W12 / RV5-F2): cap transactions to the most recent N to bound
+      // save size on long runs (100-year run → millions of entries pre-cap).
+      transactions: capTail(
+        [...state.economy.transactions, record],
+        PROVISIONAL_ECONOMY_MAX_TRANSACTIONS,
+      ),
       monetarySupply: newSupply.toString(10),
       totalIssued: newTotalIssued.toString(10),
       totalSinks: newTotalSinks.toString(10),
@@ -360,7 +393,11 @@ export function recordTransaction(
     ...state,
     economy: {
       ...state.economy,
-      transactions: [...state.economy.transactions, record],
+      // P11 (W12 / RV5-F2): cap transactions to bound save size.
+      transactions: capTail(
+        [...state.economy.transactions, record],
+        PROVISIONAL_ECONOMY_MAX_TRANSACTIONS,
+      ),
     },
   };
 }

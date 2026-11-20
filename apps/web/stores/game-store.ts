@@ -78,13 +78,15 @@
  * `commitSimState`).
  */
 import { create } from 'zustand';
-import { engine } from '@capitalist-tree/simulation';
+import { engine, OBJECTIVE_IDS } from '@capitalist-tree/simulation';
+import type { ObjectiveId } from '@capitalist-tree/simulation';
 import type {
   GameAction,
   GameState,
   OfflineSummary,
   SimulationEvent,
 } from '@capitalist-tree/shared';
+import { Locale, DEFAULT_LOCALE } from '@capitalist-tree/content';
 import {
   PROVISIONAL_UI_DEFAULT_CURRENCY_VISUAL_ID,
   PROVISIONAL_UI_DEFAULT_TAB,
@@ -92,6 +94,7 @@ import {
   PROVISIONAL_UI_MAX_NOTIFICATIONS,
 } from '../lib/constants';
 import type { UiAction } from '../lib/actions';
+import { simulationEventsToNotifications } from '../lib/format/event-to-notification';
 
 // ----------------------------------------------------------------------------
 // Public types.
@@ -162,6 +165,14 @@ export interface GameUiState {
    */
   readonly reducedMotionOverride: 'auto' | 'on' | 'off';
   /**
+   * P13-C — the selected UI locale (BCP-47 tag). Resolved by the
+   * `@capitalist-tree/content` i18n table via `t(key, locale)`. Defaults to
+   * `DEFAULT_LOCALE` ('en'); the `setLocale` mutator changes it. UI-only — NOT
+   * part of the saved GameState (a locale switch re-renders, it doesn't mutate
+   * simState). See `packages/content/src/i18n/index.ts`.
+   */
+  readonly locale: Locale;
+  /**
    * P6d2 — the "while you were away" summary parked by the catch-up-on-load
    * trigger (`lib/persistence/offline-catch-up-trigger.ts`) when a stale save
    * is loaded and `runOfflineCatchUp` produced a non-zero-chunk summary. The
@@ -175,6 +186,30 @@ export interface GameUiState {
    * reference.
    */
   readonly pendingOfflineSummary: OfflineSummary | null;
+  /**
+   * P11 (W11 / RV5-F1): the Web Worker offline catch-up progress, or `null`
+   * when no catch-up is running. `{completed, total}` is updated after each
+   * chunk via `postMessage` from the worker so the UI can render a progress
+   * bar (30-day absence ≈ 1800 chunks — without this the main thread froze
+   * for minutes). `total=0` means the catch-up is zero-chunk (about to
+   * complete). UI-only — NOT part of the saved GameState.
+   */
+  readonly catchUpProgress: { completed: number; total: number } | null;
+  /**
+   * GAP-36 (GDD §12 — endings): the objective id whose completion ending is
+   * currently parked for the EndingScreen to render, or `null` when no ending
+   * modal is shown. Set by `commitSimState` when an objective newly completes
+   * (the previous simState's `eventState.objectives.completed` gains an id not
+   * present before); cleared by `clearPendingEnding` (the modal's Continue).
+   *
+   * UI-only — NOT part of the saved GameState. On load the previous simState is
+   * `null`, so already-completed objectives do NOT re-trigger the ending (the
+   * player already saw it). Completion itself IS persisted
+   * (`eventState.objectives.completed`, W8) — this field is only the transient
+   * "surface it once" signal. Rule 6: lives on the `ui` slice, so parking /
+   * clearing it never touches `simState`'s reference.
+   */
+  readonly pendingEnding: ObjectiveId | null;
 }
 
 /**
@@ -202,6 +237,8 @@ export interface GameStoreState {
   setAdvancedView: (enabled: boolean) => void;
   setSelectedTab: (tab: string) => void;
   setCurrencyCosmetic: (currencyId: string) => void;
+  /** P13-C — set the UI locale (re-renders the UI in the chosen language). */
+  setLocale: (locale: Locale) => void;
   /**
    * P5d — set the in-game reduced-motion override. `'auto'` follows the OS
    * `prefers-reduced-motion` setting; `'on'` / `'off'` force the value.
@@ -221,6 +258,16 @@ export interface GameStoreState {
    * click). UI mutator only.
    */
   clearPendingOfflineSummary: () => void;
+  /**
+   * GAP-36 — clear the parked ending (the EndingScreen's Continue click). UI
+   * mutator only; `simState` is referentially unchanged.
+   */
+  clearPendingEnding: () => void;
+  /**
+   * P11 (W11) — set the Web Worker catch-up progress (`null` = not running).
+   * UI mutator only — drives the progress bar while the worker runs chunks.
+   */
+  setCatchUpProgress: (progress: { completed: number; total: number } | null) => void;
 
   // --- UI-only action dispatch (symmetric to `dispatch` for `UiAction`) ---
   applyUiAction: (action: UiAction) => void;
@@ -332,7 +379,10 @@ export function initialGameUiState(): GameUiState {
     notifications: [],
     selectedCurrencyId: PROVISIONAL_UI_DEFAULT_CURRENCY_VISUAL_ID,
     reducedMotionOverride: 'auto',
+    locale: DEFAULT_LOCALE,
     pendingOfflineSummary: null,
+    pendingEnding: null,
+    catchUpProgress: null,
   };
 }
 
@@ -380,6 +430,11 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
       simState: result.state,
       events: appendBounded(get().events, result.events, PROVISIONAL_UI_MAX_EVENT_LOG),
     });
+    // P11 (W25): bridge significant SimulationEvents → UI notifications.
+    const notes = simulationEventsToNotifications(result.events);
+    for (const n of notes) {
+      get().pushNotification(n);
+    }
     return result.events;
   },
 
@@ -394,10 +449,34 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
    * can publish without coupling to the store's internals.
    */
   commitSimState: (state, events) => {
+    // GAP-36: capture the previous simState BEFORE the swap so we can detect
+    // newly-completed objectives (an id in `state.eventState.objectives.completed`
+    // absent from `prev`). Only meaningful when prev is non-null — on the
+    // initial load prev is null and `completed` is already populated, so we
+    // must NOT treat that as new (else every reload re-fires every ending).
+    const prev = get().simState;
     set({
       simState: state,
       events: appendBounded(get().events, events ?? [], PROVISIONAL_UI_MAX_EVENT_LOG),
     });
+    // P11 (W25): bridge significant SimulationEvents → UI notifications.
+    const notes = simulationEventsToNotifications(events ?? []);
+    for (const n of notes) {
+      get().pushNotification(n);
+    }
+    // GAP-36: surface an ending when an objective newly completes. Don't
+    // clobber an already-pending ending (if two complete in one tick, the
+    // second stays recorded in `completed` + shows on the ObjectivesPanel).
+    if (prev !== null && get().ui.pendingEnding === null) {
+      const prevCompleted = new Set(prev.eventState.objectives.completed);
+      const validIds = OBJECTIVE_IDS as readonly string[];
+      for (const id of state.eventState.objectives.completed) {
+        if (!prevCompleted.has(id) && validIds.includes(id)) {
+          set((s) => ({ ui: { ...s.ui, pendingEnding: id as ObjectiveId } }));
+          break;
+        }
+      }
+    }
   },
 
   setEngineStatus: (status) => set({ engineStatus: status }),
@@ -418,6 +497,10 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
 
   setCurrencyCosmetic: (currencyId) =>
     set((s) => ({ ui: { ...s.ui, selectedCurrencyId: currencyId } })),
+
+  /** P13-C — set the UI locale. UI mutator only; `simState` unchanged (rule 6). */
+  setLocale: (locale) =>
+    set((s) => ({ ui: { ...s.ui, locale } })),
 
   /**
    * P5d — set the in-game reduced-motion override. `'auto'` follows the OS
@@ -462,6 +545,14 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
 
   clearPendingOfflineSummary: () =>
     set((s) => ({ ui: { ...s.ui, pendingOfflineSummary: null } })),
+
+  // --- GAP-36: pending ending (UI mutator — never touch simState) ---
+
+  clearPendingEnding: () => set((s) => ({ ui: { ...s.ui, pendingEnding: null } })),
+
+  // P11 (W11) — Web Worker catch-up progress (drives the progress bar).
+  setCatchUpProgress: (progress) =>
+    set((s) => ({ ui: { ...s.ui, catchUpProgress: progress } })),
 
   // --- UI-only action dispatch ---
   //

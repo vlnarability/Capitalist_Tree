@@ -782,6 +782,75 @@ describe('actions — operate-business', () => {
       }),
     ).toThrow(UnknownBusinessError);
   });
+
+  // --------------------------------------------------------------------------
+  // P11 — RV3-2 regression: the infinite-money exploit. Before the fix, the
+  // handler used `payload.tick` as `now`, so a player could dispatch
+  // `operate-business` with a forward-dated tick (e.g. STEP) and then
+  // `advance(STEP)` — the BusinessSystem would re-run production at the SAME
+  // `now`, double-injecting demand/revenue. The fix: the handler ignores
+  // `payload.tick` and uses `state.clock.elapsedSeconds` as the authoritative
+  // `now`, so the action and the system never collide on the same timestamp.
+  // --------------------------------------------------------------------------
+  it('ignores a player-supplied forward-dated tick (RV3-2 exploit closed)', () => {
+    let state = freshState();
+    state = engine.executeAction(state, {
+      type: 'purchase-business',
+      payload: { businessTypeId: WATER_EXTRACTION_PLANT.id },
+    }).state;
+    const businessId = state.businesses[0]!.id;
+
+    // Exploit attempt: dispatch operate-business with tick = STEP (forward-
+    // dated), then advance the engine by STEP. Pre-fix, both ran at now=STEP
+    // → double demand-injection. Post-fix, the action runs at now=0 (the
+    // engine's clock) and the advance runs the system at now=STEP — no
+    // collision, no duplicate revenue.
+    const actionResult = engine.executeAction(state, {
+      type: 'operate-business',
+      // Send a forward-dated tick — the handler must IGNORE it.
+      payload: { businessId, tick: STEP * 1000 },
+    });
+    const actionEvents = operatedEvent(actionResult.events);
+
+    // Then advance the engine by one STEP. The BusinessSystem runs once at
+    // now=STEP. Pre-fix this would re-run at the same now=STEP the action
+    // used (because the action used payload.tick=STEP), double-counting.
+    const advanceResult = engine.advance(actionResult.state, STEP);
+    const advanceEvents = advanceResult.events.filter(
+      (e) => e.type === 'business-operated',
+    );
+
+    // The action produced exactly one business-operated event (manual op).
+    expect(actionEvents).toBeDefined();
+    // The advance produced AT MOST one business-operated event for this
+    // business (the system's per-tick run). If the exploit were live, the
+    // action's revenue would have been booked at now=STEP and the system
+    // would book it AGAIN at now=STEP — we'd see duplicate revenue. Assert
+    // conservation still holds (no money created from nothing).
+    expect(
+      conservationDiscrepancy(advanceResult.state, INITIAL_SUPPLY),
+    ).toBe(0n);
+    // Sanity: the advance produced 0 or 1 operated events for this business.
+    const forThisBusiness = advanceEvents.filter(
+      (e) => e.payload?.businessId === businessId,
+    );
+    expect(forThisBusiness.length).toBeLessThanOrEqual(1);
+  });
+
+  it('operates without a tick field at all (payload.tick now optional)', () => {
+    let state = freshState();
+    state = engine.executeAction(state, {
+      type: 'purchase-business',
+      payload: { businessTypeId: WATER_EXTRACTION_PLANT.id },
+    }).state;
+    const businessId = state.businesses[0]!.id;
+    // No tick field — schema accepts it (optional), handler uses engine clock.
+    const result = engine.executeAction(state, {
+      type: 'operate-business',
+      payload: { businessId },
+    });
+    expect(operatedEvent(result.events)).toBeDefined();
+  });
 });
 
 describe('actions — sell-business', () => {
@@ -1030,6 +1099,106 @@ describe('actions — set-business-status', () => {
   });
 });
 
+describe('actions — restructure-ownership (P13-A / GAP-23)', () => {
+  it('changes the ownership structure + emits events', () => {
+    let state = freshState();
+    state = engine.executeAction(state, {
+      type: 'purchase-business',
+      payload: { businessTypeId: WATER_EXTRACTION_PLANT.id },
+    }).state;
+    const businessId = state.businesses[0]!.id;
+    expect(state.businesses[0]!.ownership.structure).toBe('sole-proprietorship');
+
+    const result = engine.executeAction(state, {
+      type: 'restructure-ownership',
+      payload: { businessId, structure: 'corporation' },
+    });
+    expect(result.state.businesses[0]!.ownership.structure).toBe('corporation');
+    // share preserved.
+    expect(result.state.businesses[0]!.ownership.share).toBe(1);
+    // system + notification events.
+    expect(result.events.some((e) => e.type === 'system')).toBe(true);
+    expect(result.events.some((e) => e.type === 'notification')).toBe(true);
+  });
+
+  it('is idempotent (no event when restructuring to the current structure)', () => {
+    let state = freshState();
+    state = engine.executeAction(state, {
+      type: 'purchase-business',
+      payload: { businessTypeId: WATER_EXTRACTION_PLANT.id },
+    }).state;
+    const businessId = state.businesses[0]!.id;
+    const result = engine.executeAction(state, {
+      type: 'restructure-ownership',
+      payload: { businessId, structure: 'sole-proprietorship' }, // already sole-prop
+    });
+    expect(result.events).toHaveLength(0);
+  });
+
+  it('cycles through all six GDD §8.3 structures', () => {
+    let state = freshState();
+    state = engine.executeAction(state, {
+      type: 'purchase-business',
+      payload: { businessTypeId: WATER_EXTRACTION_PLANT.id },
+    }).state;
+    const businessId = state.businesses[0]!.id;
+    const structures = [
+      'corporation',
+      'cooperative',
+      'sustainable-enterprise',
+      'non-profit',
+      'state-owned',
+      'sole-proprietorship',
+    ] as const;
+    for (const structure of structures) {
+      state = engine.executeAction(state, {
+        type: 'restructure-ownership',
+        payload: { businessId, structure },
+      }).state;
+      expect(state.businesses[0]!.ownership.structure).toBe(structure);
+    }
+  });
+
+  it('scales the valuation by the new org type\'s valuationMultiplier (P13-A / GAP-23)', () => {
+    let state = freshState();
+    state = engine.executeAction(state, {
+      type: 'purchase-business',
+      payload: { businessTypeId: WATER_EXTRACTION_PLANT.id },
+    }).state;
+    const businessId = state.businesses[0]!.id;
+    const baseValuation = BigInt(state.businesses[0]!.valuation);
+
+    // sole-prop (mult 1.0) → corporation (mult 1.2): valuation × 1.2.
+    const corp = engine.executeAction(state, {
+      type: 'restructure-ownership',
+      payload: { businessId, structure: 'corporation' },
+    });
+    expect(BigInt(corp.state.businesses[0]!.valuation)).toBe(
+      BigInt(Math.floor((Number(baseValuation) * 1.2) / 1.0)),
+    );
+
+    // corporation (1.2) → non-profit (0.75): valuation × 0.75 / 1.2.
+    const nonprofit = engine.executeAction(corp.state, {
+      type: 'restructure-ownership',
+      payload: { businessId, structure: 'non-profit' },
+    });
+    const corpVal = BigInt(corp.state.businesses[0]!.valuation);
+    expect(BigInt(nonprofit.state.businesses[0]!.valuation)).toBe(
+      BigInt(Math.floor((Number(corpVal) * 0.75) / 1.2)),
+    );
+  });
+
+  it('throws UnknownBusinessError for an unknown business id', () => {
+    const state = freshState();
+    expect(() =>
+      engine.executeAction(state, {
+        type: 'restructure-ownership',
+        payload: { businessId: 'no-such-business', structure: 'corporation' },
+      }),
+    ).toThrow(UnknownBusinessError);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // originalTree guard (GDD §16.1 / §16.2)
 // ---------------------------------------------------------------------------
@@ -1109,7 +1278,7 @@ describe('BusinessSystem — registry slot #8', () => {
       now: state.clock.elapsedSeconds + STEP,
       stepSeconds: STEP,
       dayOfYear: state.clock.day,
-      rng: Rng.fromState(state.rngState),
+      rng: Rng.fromState(state.rngState, state.rngVersion),
     };
     const result = businessSystem.execute(state, ctx);
     const ev = result.events.find((e) => e.type === 'business-bankrupt');
@@ -1130,7 +1299,7 @@ describe('BusinessSystem — registry slot #8', () => {
       now: SECONDS_PER_DAY,
       stepSeconds: SECONDS_PER_DAY,
       dayOfYear: 1,
-      rng: Rng.fromState(state.rngState),
+      rng: Rng.fromState(state.rngState, state.rngVersion),
     };
     const result = businessSystem.execute(state, ctx);
     const business = result.state.businesses.find((b) => b.id === businessId)!;
@@ -1155,7 +1324,7 @@ describe('determinism + purity', () => {
       now: state.clock.elapsedSeconds + STEP,
       stepSeconds: STEP,
       dayOfYear: state.clock.day,
-      rng: Rng.fromState(state.rngState),
+      rng: Rng.fromState(state.rngState, state.rngVersion),
     };
     const r1 = businessSystem.execute(state, ctx);
     const r2 = businessSystem.execute(state, ctx);
@@ -1186,7 +1355,7 @@ describe('determinism + purity', () => {
       now: state.clock.elapsedSeconds + STEP,
       stepSeconds: STEP,
       dayOfYear: state.clock.day,
-      rng: Rng.fromState(state.rngState),
+      rng: Rng.fromState(state.rngState, state.rngVersion),
     };
     // Should not throw — the system deep-copies on entry.
     expect(() => businessSystem.execute(frozen, ctx)).not.toThrow();
@@ -1210,7 +1379,7 @@ describe('determinism + purity', () => {
 describe('BusinessSystem — RNG fork deferred (R-P8-N: zero root draws)', () => {
   it('execute() consumes ZERO root RNG draws (rng state unchanged)', () => {
     const initial = freshState(42);
-    const rng = Rng.fromState(initial.rngState);
+    const rng = Rng.fromState(initial.rngState, initial.rngVersion);
     const before = rng.getState();
     const ctx: SystemContext = {
       now: initial.clock.elapsedSeconds + STEP,
@@ -1230,7 +1399,11 @@ describe('BusinessSystem — RNG fork deferred (R-P8-N: zero root draws)', () =>
     const full = engine.advance(initial, STEP);
     // Manually replay one step WITHOUT the BusinessSystem to isolate its
     // root-RNG contribution (mirrors runOneStep's RNG threading).
-    const rng = Rng.fromState(initial.rngState);
+    const rng = Rng.fromState(initial.rngState, initial.rngVersion);
+    // DR-6 v2: mirror runOneStep's per-tick root nonce so the manual replay
+    // advances the root identically to the full engine (under v2 the nonce
+    // is the only root advancement; under v1 the forks advanced it).
+    if (rng.forkVersion === 2) rng.next();
     const ctx: SystemContext = {
       now: initial.clock.elapsedSeconds + STEP,
       stepSeconds: STEP,
@@ -1255,7 +1428,7 @@ describe('BusinessSystem — RNG fork deferred (R-P8-N: zero root draws)', () =>
       type: 'purchase-business',
       payload: { businessTypeId: WATER_EXTRACTION_PLANT.id },
     }).state;
-    const rng = Rng.fromState(withBusiness.rngState);
+    const rng = Rng.fromState(withBusiness.rngState, withBusiness.rngVersion);
     const ctx: SystemContext = {
       now: withBusiness.clock.elapsedSeconds + STEP,
       stepSeconds: STEP,

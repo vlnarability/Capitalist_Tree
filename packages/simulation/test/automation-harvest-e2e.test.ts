@@ -199,7 +199,8 @@ function eventsOfType(events: readonly SimulationEvent[], type: string): Simulat
 describe('automated harvesting e2e', () => {
   it('full chain: automation fires harvest → issuance queued → next-tick economy drain → player credited', () => {
     const requestedLeaves = 10;
-    // leafDenominationMinor = '100' (=$1.00/leaf); 10 leaves → 1000 minor units.
+    // leafDenominationMinor (P12-C follow-up #3 raised 100→1000, =$10/leaf);
+    // 10 leaves → 10000 minor units.
     const expectedIssuance = BigInt(requestedLeaves) * BigInt(WHITE_OAK.leafDenominationMinor);
     const harvesterCost = BigInt(HARVESTER_T1.cost); // 1000 minor units
 
@@ -269,7 +270,7 @@ describe('automated harvesting e2e', () => {
     const txns = eventsOfType(r2.events, 'transaction-recorded');
     expect(txns.length).toBeGreaterThanOrEqual(1);
 
-    // Player credited the issuance amount (cash went up by 1000).
+    // Player credited the issuance amount (cash went up by expectedIssuance).
     const cashAfterDrain = BigInt(state.player.personalCash);
     expect(cashAfterDrain - cashAfterPurchase).toBe(expectedIssuance);
 
@@ -428,9 +429,13 @@ describe('automated harvesting e2e', () => {
     // Sanity: the chain completed — an issuance was authorized on tick 2.
     const authorized = eventsOfType(a.events, 'issuance-authorized');
     expect(authorized.length).toBe(1);
-    // The issuance amount is deterministic: 10 leaves × '100' = '1000'.
+    // The issuance amount is deterministic: 10 leaves × leafDenominationMinor.
+    // (P12-C follow-up #3 raised the denomination 100 → 1000, so 10 leaves →
+    // '10000'.)
     if (authorized[0]!.type === 'issuance-authorized') {
-      expect(authorized[0]!.payload.amount).toBe('1000');
+      expect(authorized[0]!.payload.amount).toBe(
+        String(BigInt(10) * BigInt(WHITE_OAK.leafDenominationMinor)),
+      );
     }
   });
 

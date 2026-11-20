@@ -80,6 +80,8 @@ import {
 } from '../../lib/format/describe';
 import { ProgressBar } from '../common/ProgressBar';
 import { Stat } from '../common/Stat';
+import { InfoHint } from '../common/InfoHint';
+import { getExplanation } from '@capitalist-tree/content';
 
 // ----------------------------------------------------------------------------
 // Constants for the per-day BiologyContext. The panel displays per-day rates
@@ -318,8 +320,12 @@ export function BiologyPanel({ className }: BiologyPanelProps = {}): ReactElemen
         data-testid="biology-photosynthesis"
       >
         <div className="flex items-baseline justify-between">
-          <span className="text-[10px] uppercase tracking-wider text-slate-500">
+          <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-slate-500">
             Photosynthesis
+            <InfoHint
+              label={getExplanation('biology-photosynthesis').label}
+              explanation={getExplanation('biology-photosynthesis').text}
+            />
           </span>
           <span className="tabular-nums text-lg font-semibold text-emerald-300">
             {metrics.production.toFixed(2)} eu/day
@@ -371,8 +377,12 @@ export function BiologyPanel({ className }: BiologyPanelProps = {}): ReactElemen
         className="flex flex-col gap-2"
         data-testid="biology-energy-allocation"
       >
-        <span className="text-[10px] uppercase tracking-wider text-slate-500">
+        <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-slate-500">
           Energy allocation (eu/day)
+          <InfoHint
+            label={getExplanation('biology-energy-allocation').label}
+            explanation={getExplanation('biology-energy-allocation').text}
+          />
         </span>
         <p
           className="text-xs text-slate-400"
@@ -409,8 +419,12 @@ export function BiologyPanel({ className }: BiologyPanelProps = {}): ReactElemen
 
       {/* Stress + damage. */}
       <section className="flex flex-col gap-2" data-testid="biology-stress">
-        <span className="text-[10px] uppercase tracking-wider text-slate-500">
+        <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-slate-500">
           Stress factors
+          <InfoHint
+            label={getExplanation('biology-stress').label}
+            explanation={getExplanation('biology-stress').text}
+          />
         </span>
         <div className="flex flex-col gap-1">
           <div className="flex items-baseline justify-between">
@@ -452,8 +466,12 @@ export function BiologyPanel({ className }: BiologyPanelProps = {}): ReactElemen
         className="flex flex-col gap-1"
         data-testid="biology-sustainable-harvest"
       >
-        <span className="text-[10px] uppercase tracking-wider text-slate-500">
+        <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-slate-500">
           Sustainable harvest estimate (GDD §5.4)
+          <InfoHint
+            label={getExplanation('biology-sustainable-harvest').label}
+            explanation={getExplanation('biology-sustainable-harvest').text}
+          />
         </span>
         <Stat
           label="Recommended leaves / day"

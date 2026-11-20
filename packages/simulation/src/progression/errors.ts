@@ -98,6 +98,31 @@ export class InsufficientGeneticLegacyError extends Error {
 }
 
 /**
+ * `InsufficientSeedsError` — thrown by the `plant-seed` action handler (GAP-19 /
+ * GDD §11.2 Genetic Legacy) when the tree has no seeds to plant
+ * (`tree.seeds === 0`). The tree must first produce seeds via the BiologySystem's
+ * `seed-dispersed` flow (fed by `alloc.reproduction`, gated on the fruiting age)
+ * before the player can plant one. Thrown rather than silently no-op'ping so the
+ * caller can surface "no seeds to plant yet" to the player.
+ */
+export class InsufficientSeedsError extends Error {
+  readonly treeId: string;
+  readonly seedsAvailable: number;
+
+  constructor(treeId: string, seedsAvailable: number) {
+    super(
+      `Cannot plant a seed from tree "${treeId}": it has ${seedsAvailable} seeds. ` +
+        `The tree must first produce seeds (the BiologySystem seed-dispersed flow, ` +
+        `fed by alloc.reproduction, gated on the fruiting age) before planting ` +
+        `(GAP-19 / GDD §11.2 Genetic Legacy).`,
+    );
+    this.name = 'InsufficientSeedsError';
+    this.treeId = treeId;
+    this.seedsAvailable = seedsAvailable;
+  }
+}
+
+/**
  * An `activate-trait` / `deactivate-trait` action referenced an unknown
  * `traitId` — no GeneticTraitDefinition with that id is registered in
  * `packages/content/src/progression/genetics/`. Thrown so the caller gets a

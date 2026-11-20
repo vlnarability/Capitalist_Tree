@@ -88,6 +88,21 @@ export const PROVISIONAL_GOVERNMENT_POLICY_INTERVAL_DAYS = 30;
 export const PROVISIONAL_MONETARY_POLICY_INTERVAL_DAYS = 30;
 
 // ---------------------------------------------------------------------------
+// P13-B / GAP-25 — lobbying (GDD §3.3 "Influence governments + regulations")
+//
+// The `lobby-government` action debits a fixed cost from the player to the
+// authority account (political spend) + nudges one policy lever by a bounded
+// rate. The cost + rate are PROVISIONAL — tuned so lobbying is a meaningful
+// but not dominant lever (a player can shift a field from 0 to 1 in ~20
+// lobby actions = ~$2000, a mid-game expense).
+// ---------------------------------------------------------------------------
+
+/** Cost per `lobby-government` action, in bigint minor currency units ($100). */
+export const PROVISIONAL_LOBBY_COST_MINOR = 10_000;
+/** Per-action nudge on the target policy field (0.05 → 5 percentage points). */
+export const PROVISIONAL_LOBBY_INFLUENCE_RATE = 0.05;
+
+// ---------------------------------------------------------------------------
 // Regional aggregation + irreversibility (GDD §10.1, §10.2, §10.3)
 // ---------------------------------------------------------------------------
 
@@ -114,3 +129,35 @@ export const PROVISIONAL_REGIONAL_AGGREGATION_WEIGHTS = 'population' as 'populat
 // ecosystem's collapse is self-reinforcing. PROVISIONAL — final threshold
 // depends on playtesting.
 export const PROVISIONAL_SPECIES_EXTINCTION_THRESHOLD = 0.2;
+
+// ---------------------------------------------------------------------------
+// P11 (W12 / RV5-F2): bounded event history. Pre-fix,
+// `eventState.scheduler.history` grew unboundedly — every concluded event
+// was appended permanently. A long run with frequent stochastic events
+// could accumulate thousands of entries, bloating saves. The cap keeps the
+// most recent N entries (tail); older entries are pruned when exceeded.
+// ---------------------------------------------------------------------------
+
+/** Max concluded-event history entries kept (most recent). @provisional. */
+export const PROVISIONAL_EVENT_MAX_HISTORY = 1000;
+
+// P11 (W16 / RV4-F-M9): saturation cap for `speciesExtinctionRate`. Pre-fix,
+// the rate accumulated without bound in `evolveRegions` (every region below
+// the extinction threshold added EXTINCTION_RATE × days per tick). Over a
+// long run this could reach thousands, which is meaningless (extinction is
+// already total at 1.0) and bloats the indicator. Capped at 1.0.
+export const PROVISIONAL_EVENT_SPECIES_EXTINCTION_RATE_CAP = 1.0;
+
+// ---------------------------------------------------------------------------
+// P11 (W6 / RV4-F-H3): player→regional bridge. The player's land is modeled
+// via P7 `world.environment` (single-block), but the P10 regional model
+// (`eventState.global.regions`) has no player region reference. W6 designates
+// the first seeded region (the most populous) as the player's "home region"
+// — player extraction/restoration/emissions actions write environmental
+// deltas there, which `evolveRegions` then propagates to pollution/soil/
+// water/forest/biodiversity and `aggregateGlobalIndicators` rolls into the
+// global averages. No schema migration needed (convention by id).
+// ---------------------------------------------------------------------------
+
+/** The region player actions affect (extraction/restoration/emissions). */
+export const PLAYER_HOME_REGION_ID = 'region:temperate-lowlands';

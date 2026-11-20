@@ -73,3 +73,81 @@ export const biologyNotificationEventSchema = z.object({
   }),
 });
 export type BiologyNotificationEvent = z.infer<typeof biologyNotificationEventSchema>;
+
+/**
+ * P12-B (GAP-18): a pest or disease infestation took hold on the tree.
+ *
+ * Emitted by the BiologySystem when `rollInfestation` appends a `pest` or
+ * `disease` damage record. The damage record itself drives the stress/
+ * mortality path (via `tree.damage.length`); this event is the hand-off for
+ * the UI (NotificationsPanel) + the event log.
+ */
+export const infestationEventSchema = z.object({
+  type: z.literal('infestation'),
+  at: z.number().int().nonnegative(),
+  payload: z.object({
+    treeId: z.string().min(1),
+    /** Whether this is a pest or a disease infestation. */
+    kind: z.enum(['pest', 'disease']),
+    /** Severity in [0, 1] — uniform in [MIN, MAX] (see biology constants). */
+    severity: z.number().min(0).max(1),
+  }),
+});
+export type InfestationEvent = z.infer<typeof infestationEventSchema>;
+
+/**
+ * `seed-dispersed` event (GAP-19 / GDD §11.2 — reproduction / seeding).
+ *
+ * Emitted by the BiologySystem when the tree's `seedGrowthProgress` accumulator
+ * (fed by `alloc.reproduction`) reaches 1.0 AND the tree is past its fruiting
+ * age (`ageDays >= species.matureAgeDays ×
+ * PROVISIONAL_BIOLOGY_REPRODUCTION_FRUITING_AGE_FRACTION`). Carries the seed
+ * yield this event, the tree's total seed count after, + the reset accumulator
+ * value (0). A future `plant-seed` action (GDD §11.2 Genetic Legacy) will
+ * consume the accumulated `tree.seeds` to establish offspring trees.
+ */
+export const seedDispersedEventSchema = z.object({
+  type: z.literal('seed-dispersed'),
+  at: z.number().int().nonnegative(),
+  payload: z.object({
+    /** The tree that produced + dispersed the seeds. */
+    treeId: z.string().min(1),
+    /** Seeds produced by THIS dispersal event (= SEED_YIELD). */
+    seedsProduced: z.number().int().positive(),
+    /** The tree's total seed count after this event (monotonic). */
+    seedsTotal: z.number().int().nonnegative(),
+    /** `seedGrowthProgress` after the reset (0 — the accumulator emptied). */
+    seedGrowthProgressAfter: z.number().min(0).max(1),
+  }),
+});
+export type SeedDispersedEvent = z.infer<typeof seedDispersedEventSchema>;
+
+/**
+ * `seed-planted` event (GAP-19 / GDD §11.2 — Genetic Legacy: the seed production
+ * → planting loop).
+ *
+ * Emitted by the `plant-seed` action handler when the player plants a seed: the
+ * tree's `seeds` count is decremented by 1 + `PROVISIONAL_PROGRESSION_LEGACY_
+ * POINTS_PER_SEED` genetic-legacy points are credited to
+ * `prestige.geneticLegacyPoints`. Carries the seeds consumed (always 1), the
+ * tree's remaining seed count, the points gained, + the resulting genetic-legacy
+ * balance (bigint minor-units string — TDD §10.1, same precision discipline as
+ * `research-unlocked` / `generation-established`).
+ */
+export const seedPlantedEventSchema = z.object({
+  type: z.literal('seed-planted'),
+  at: z.number().int().nonnegative(),
+  payload: z.object({
+    /** The tree that planted the seed (consumed it from its `seeds` accumulator). */
+    treeId: z.string().min(1),
+    /** Seeds consumed by THIS planting (always 1 — one seed per action). */
+    seedsConsumed: z.number().int().positive(),
+    /** The tree's remaining seed count after this action. */
+    seedsRemaining: z.number().int().nonnegative(),
+    /** Genetic-legacy points gained this action (the per-seed reward). */
+    legacyPointsGained: z.number().int().nonnegative(),
+    /** The prestige balance after the credit (bigint minor-units string). */
+    geneticLegacyPointsAfter: z.string(),
+  }),
+});
+export type SeedPlantedEvent = z.infer<typeof seedPlantedEventSchema>;
