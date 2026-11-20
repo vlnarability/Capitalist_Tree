@@ -306,7 +306,21 @@ Per RV7's P11/P12/P13 phasing. Titles and one-paragraph scope only; full prompts
 >   done; soil depth (GAP-20) done (9016f53 — pH/compaction/microbial promoted
 >   from P2 stubs into modeled dynamics, feeding soil health); analytics
 >   (GAP-31) remains.
-> - **11–12 (P13-A/B): UNCHANGED.** Large features.
+> - **11 (P13-A): DONE.** Environmental indicators + markets + org-type
+>   incentives (GAP-21, GAP-22, GAP-23) implemented in `bf8d5f4`. GAP-21
+>   (environmental indicators): the four long-horizon indicators — `airQuality`,
+>   `oceanHealth`, `wetlandCoverage`, `nutrientRunoff` — are stepped each tick by
+>   `stepIndicators` (`packages/simulation/src/environment/indicators.ts`, wired
+>   into the EnvironmentSystem at slot 10c) with sensitivities in
+>   `constants/environment.ts`; tested in `environment.test.ts`. UI surface added
+>   this turn: an `IndicatorsSection` in `EnvironmentPanel` (advanced view)
+>   displays all four with tone-tinted Stats + air/ocean health ProgressBars;
+>   tested in `panels.test.tsx`. GAP-22 (markets) + GAP-23 (org-types): the labor
+>   market (`packages/content/src/markets/labor.ts`) + org-type structures
+>   (corporation/cooperative, `packages/content/src/businesses/org-types.ts`)
+>   are present with tests (`markets.test.ts`, `business-market.test.ts`) —
+>   implemented in `bf8d5f4`, not deeply re-verified this turn.
+> - **12 (P13-B): UNCHANGED.** Large features.
 > - **13 (P13-C productization): IN FLIGHT.** CSP headers (W30) + perf gate
 >   (W29) + cross-browser E2E (GAP-37) done; Zod 4 (DR-7) + i18n scaffold +
 >   audio/art remain. (GAP-37 re-verified: the `b9db3c8` commit — firefox +
