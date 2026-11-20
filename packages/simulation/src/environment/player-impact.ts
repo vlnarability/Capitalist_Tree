@@ -20,9 +20,17 @@
  *
  * Pure: returns a new state; the input is never mutated.
  */
-import type { GameState } from '@capitalist-tree/shared';
+import type { GameState, SimulationEvent } from '@capitalist-tree/shared';
 import type { EnvironmentalImpact } from '@capitalist-tree/shared';
-import { PLAYER_HOME_REGION_ID } from '@capitalist-tree/shared';
+import {
+  PLAYER_HOME_REGION_ID,
+  PROVISIONAL_CARBON_TAX_PRICE_PER_UNIT,
+  PROVISIONAL_ECONOMY_AUTHORITY_ACCOUNT_ID,
+  PROVISIONAL_ECONOMY_CATEGORY_CARBON_TAX,
+  PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID,
+  PROVISIONAL_ENV_REG_EFFECTIVENESS,
+} from '@capitalist-tree/shared';
+import { transfer } from '../economy/ledger.js';
 
 /** Clamp a value to [0, 1]. */
 function clamp01(n: number): number {
@@ -99,18 +107,30 @@ export function applyPlayerEnvironmentalImpact(
   const footprint = industrialFootprint(impact);
   const s = PLAYER_IMPACT_SCALES;
 
+  // P13-B / GAP-25: `governmentPolicy.environmentalRegulations` (0-1) caps
+  // industrial pollution output (GDD §3.3). The mitigation factor scales the
+  // pollution + industrialActivity DELTAS (not the direct land/water/soil/
+  // biodiversity impacts — those are resource extraction, not pollution).
+  // At reg=0 → mitigation=1 (no curbing); at reg=1 → mitigation=
+  // (1 - EFFECTIVENESS) = 0.2 (deltas cut 80%). @provisional.
+  const envReg = state.eventState.global.governmentPolicy.environmentalRegulations;
+  const mitigation = 1 - envReg * PROVISIONAL_ENV_REG_EFFECTIVENESS;
+
   const industrialActivity = clamp01(
-    home.industrialActivity + footprint * s.industrialActivity,
+    home.industrialActivity + footprint * s.industrialActivity * mitigation,
   );
   const pollution = {
-    air: Math.max(0, home.pollution.air + impact.pollution * s.pollutionAir),
+    air: Math.max(
+      0,
+      home.pollution.air + impact.pollution * s.pollutionAir * mitigation,
+    ),
     water: Math.max(
       0,
-      home.pollution.water + impact.pollution * s.pollutionAir * 0.5,
+      home.pollution.water + impact.pollution * s.pollutionAir * 0.5 * mitigation,
     ),
     soil: Math.max(
       0,
-      home.pollution.soil + impact.pollution * s.pollutionAir * 0.3,
+      home.pollution.soil + impact.pollution * s.pollutionAir * 0.3 * mitigation,
     ),
   };
   const forestCoverage = clamp01(
@@ -146,4 +166,72 @@ export function applyPlayerEnvironmentalImpact(
       },
     },
   };
+}
+
+/**
+ * Apply the carbon tax for a player action's carbon emissions (P13-B / GAP-25
+ * — GDD §3.3 "Influence governments and environmental regulations"). Charges
+ * `impact.carbonEmissions × governmentPolicy.carbonTaxRate ×
+ * PROVISIONAL_CARBON_TAX_PRICE_PER_UNIT` (minor units) from `player:personal`
+ * → `authority` (sunk as a carbon-tax payment). No-op when `carbonEmissions`
+ * or `carbonTaxRate` is zero — so the default `carbonTaxRate = 0` leaves all
+ * existing action behaviour unchanged.
+ *
+ * Throws `InsufficientFundsError` (from the underlying `transfer`) if the
+ * player cannot cover the tax — consistent with the `purchase` / import
+ * tariff paths. In practice the charge is small (emissions × rate × $1); the
+ * caller (operate-business / harvest) surfaces the failure as an action error.
+ *
+ * Pure: returns a new state + a `transaction-recorded` event when a tax was
+ * charged. Never mutates the input.
+ */
+export function applyCarbonTax(
+  state: GameState,
+  impact: EnvironmentalImpact,
+  timestamp: number,
+): { state: GameState; events: SimulationEvent[] } {
+  const carbonTaxRate = state.eventState.global.governmentPolicy.carbonTaxRate;
+  if (carbonTaxRate <= 0 || impact.carbonEmissions <= 0) {
+    return { state, events: [] };
+  }
+  const amount = BigInt(
+    Math.floor(
+      impact.carbonEmissions * carbonTaxRate * PROVISIONAL_CARBON_TAX_PRICE_PER_UNIT,
+    ),
+  );
+  if (amount <= 0n) return { state, events: [] };
+  const afterTransfer = transfer(state, {
+    sourceAccount: PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID,
+    destinationAccount: PROVISIONAL_ECONOMY_AUTHORITY_ACCOUNT_ID,
+    amount: amount.toString(10),
+    category: PROVISIONAL_ECONOMY_CATEGORY_CARBON_TAX,
+    description: `Carbon tax: ${impact.carbonEmissions} emissions × ${(carbonTaxRate * 100).toFixed(1)}%`,
+    timestamp,
+  });
+  // Mirror the new player:personal account balance to `player.personalCash`
+  // (P3a's coupling — `transfer()` moves account balances; the denormalized
+  // `player.personalCash` field must be synced explicitly, as applyPurchase /
+  // applyImport / applyExport do).
+  const playerAccount = afterTransfer.economy.accounts.find(
+    (a) => a.id === PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID,
+  );
+  const playerBalanceAfter =
+    playerAccount?.balance ?? afterTransfer.player.personalCash;
+  const next =
+    playerBalanceAfter !== afterTransfer.player.personalCash
+      ? {
+          ...afterTransfer,
+          player: { ...afterTransfer.player, personalCash: playerBalanceAfter },
+        }
+      : afterTransfer;
+  const events: SimulationEvent[] = [
+    {
+      type: 'transaction-recorded',
+      at: timestamp,
+      payload: {
+        record: next.economy.transactions[next.economy.transactions.length - 1]!,
+      },
+    },
+  ];
+  return { state: next, events };
 }

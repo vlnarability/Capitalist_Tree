@@ -477,3 +477,37 @@ export const PROVISIONAL_LABOR_MIN_HEALTH_TO_WORK = 0.15;
 /** Transaction category label for wage-labor issuance. Free-form string
  * (matches the existing free-form business categories). */
 export const PROVISIONAL_ECONOMY_CATEGORY_LABOR = 'labor';
+
+// ──────────────────────────────────────────────────────────────────────
+// Government + monetary policy depth (P13-B / GAP-25 — GDD §6.2 monetary
+// authority, §3.3 "Influence governments and environmental regulations",
+// §15 governments / central banking).
+//
+// These constants make the policy levers in `governmentPolicy` /
+// `monetaryPolicy` bite: `environmentalRegulations` mitigates industrial
+// pollution, `carbonTaxRate` prices carbon emissions, and `interestRate`
+// anchors loan rates to the central-bank policy rate. @provisional per
+// GDD §17 — calibrate from playtesting.
+// ──────────────────────────────────────────────────────────────────────
+
+/** Effectiveness of `governmentPolicy.environmentalRegulations` at curbing
+ * industrial pollution output (0 = no effect even at reg=1; 1 = reg=1 fully
+ * eliminates pollution deltas). 0.8 → at reg=1, pollution + industrialActivity
+ * deltas are cut by 80%. @provisional (GDD §3.3 / §17). */
+export const PROVISIONAL_ENV_REG_EFFECTIVENESS = 0.8;
+
+/** Price per unit of `EnvironmentalImpact.carbonEmissions` charged as the
+ * carbon tax (= carbonEmissions × `governmentPolicy.carbonTaxRate` × this),
+ * in bigint minor currency units. $1.00 = 100 minor per emission unit.
+ * Sunk player:personal → authority. @provisional (GDD §3.3 / §17). */
+export const PROVISIONAL_CARBON_TAX_PRICE_PER_UNIT = 100;
+
+/** Loan rate spread over the central-bank policy rate: a loan's `interestRate`
+ * = `monetaryPolicy.interestRate` + this spread (credit-risk premium). 0.02 =
+ * +2% over the policy rate. Anchoring loan rates to `monetaryPolicy.interestRate`
+ * makes the central-bank lever bite (raising the policy rate raises borrowing
+ * costs). @provisional (GDD §6.2 / §17). */
+export const PROVISIONAL_LOAN_SPREAD_OVER_POLICY_RATE = 0.02;
+
+/** Transaction category label for the carbon-tax sink. Free-form string. */
+export const PROVISIONAL_ECONOMY_CATEGORY_CARBON_TAX = 'carbon-tax';

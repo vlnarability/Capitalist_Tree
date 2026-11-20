@@ -902,13 +902,38 @@ describe('actions — take-loan', () => {
     expect(business.cash).toBe('20000');
     expect(business.liabilities).toHaveLength(1);
     expect(business.liabilities[0]!.principal).toBe('20000');
-    expect(business.liabilities[0]!.interestRate).toBe(0.05);
+    expect(business.liabilities[0]!.interestRate).toBe(0.07); // P13-B / GAP-25: anchored to monetaryPolicy.interestRate (0.05 default) + PROVISIONAL_LOAN_SPREAD_OVER_POLICY_RATE (0.02) = 0.07, NOT the payload's 0.05.
     // Conservation: issuance +20000, totalIssued +20000. Liability offsets on
     // the balance sheet (assets − liabilities unchanged by issuance).
     expect(conservationDiscrepancy(result.state, INITIAL_SUPPLY)).toBe(0n);
     // Liabilities + cash balance: cash(20000) − liabilities(20000) = 0 net
     // (the loan is new money offset by the debt).
     expect(parseAmount(business.cash, 'cash') - sumLiabilities(business)).toBe(0n);
+  });
+
+  it('P13-B / GAP-25: anchors the loan rate to monetaryPolicy.interestRate + spread (ignores the payload rate)', () => {
+    let state = freshState();
+    state = engine.executeAction(state, {
+      type: 'purchase-business',
+      payload: { businessTypeId: WATER_EXTRACTION_PLANT.id },
+    }).state;
+    const businessId = state.businesses[0]!.id;
+    // Raise the central-bank policy rate to 15%.
+    state = engine.executeAction(state, {
+      type: 'set-monetary-policy',
+      payload: { policy: { interestRate: 0.15 }, tick: 0 },
+    }).state;
+    // Take a loan with a payload interestRate of 0.01 — the handler MUST
+    // ignore it + anchor to 0.15 + spread 0.02 = 0.17.
+    const result = engine.executeAction(state, {
+      type: 'take-loan',
+      payload: { businessId, principal: '20000', interestRate: 0.01, dueAt: 100000 },
+    });
+    const business = result.state.businesses.find((b) => b.id === businessId)!;
+    expect(business.liabilities[0]!.interestRate).toBeCloseTo(0.17, 6);
+    // The loan-taken event reports the anchored rate too.
+    const ev = result.events.find((e) => e.type === 'loan-taken');
+    expect(ev!.payload.interestRate).toBeCloseTo(0.17, 6);
   });
 });
 

@@ -337,10 +337,26 @@ Per RV7's P11/P12/P13 phasing. Titles and one-paragraph scope only; full prompts
 >   mounted in `app/page.tsx`. Tests: +4 arbitrage (events.test.ts — import
 >   cost = foreign price not market price; food import cheaper than domestic;
 >   export revenue = foreign price; neutral-multiplier water) + 7 TradePanel
->   UI. GAP-25 (government depth): `governmentPolicy` (tariffRate, subsidies)
->   + `monetaryPolicy` (interestRate, inflationTarget) + the
->   `set-government-policy` / `set-monetary-policy` actions are present from
->   `f8def74` / `e3afa02` — not deeply re-verified this turn.
+>   UI.
+>   GAP-25 (government depth) — DONE (this turn): the schema + wired actions
+>   (`set-government-policy` / `set-monetary-policy` / `lobby-government`) +
+>   `PolicyPanel` UI + subsidies/tariff effects were already present from
+>   `f8def74` / `e3afa02`, BUT four policy levers had NO game effect — they were
+>   settable (UI + actions) + auto-adjusted (EventSystem) but didn't bite. This
+>   turn made three of them bite: (1) `environmentalRegulations` mitigates the
+>   pollution + industrialActivity deltas in `applyPlayerEnvironmentalImpact`
+>   (× `1 - reg × PROVISIONAL_ENV_REG_EFFECTIVENESS`); (2) `carbonTaxRate`
+>   charges `carbonEmissions × rate × price` player:personal → authority via a
+>   new pure `applyCarbonTax` helper, hooked into `operate-business` (no-op at
+>   the default rate=0); (3) `interestRate` anchors every new loan's rate to
+>   `monetaryPolicy.interestRate + PROVISIONAL_LOAN_SPREAD_OVER_POLICY_RATE` in
+>   the take-loan handler (the player-supplied payload rate is ignored). New
+>   constants in `shared/constants/economy.ts`. Tests: +2 env-reg mitigation,
+>   +3 carbon-tax (charge / no-op-at-rate-0 / no-op-at-emissions-0), +1
+>   interestRate-anchoring; 2 existing tests updated (take-loan rate 0.05→0.07;
+>   W5 test neutralizes env-reg). `inflationTarget` + `moneySupplyGrowth`
+>   remain display-only levers (future: hook into the authority's issuance
+>   cadence) — noted as follow-up.
 > - **13 (P13-C productization): IN FLIGHT.** CSP headers (W30) + perf gate
 >   (W29) + cross-browser E2E (GAP-37) done; Zod 4 (DR-7) + i18n scaffold +
 >   audio/art remain. (GAP-37 re-verified: the `b9db3c8` commit — firefox +

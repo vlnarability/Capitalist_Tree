@@ -64,6 +64,7 @@ import {
   PROVISIONAL_BUSINESS_VALUATION_HAIRCUT,
   PROVISIONAL_ECONOMY_AUTHORITY_ACCOUNT_ID,
   PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID,
+  PROVISIONAL_LOAN_SPREAD_OVER_POLICY_RATE,
   PROVISIONAL_SIMULATION_STEP_SECONDS,
 } from '@capitalist-tree/shared';
 import { getBusinessTypeById, getOrgTypeIncentives } from '@capitalist-tree/content';
@@ -77,7 +78,10 @@ import {
 } from '../economy/ledger.js';
 import { operateBusiness } from './production.js';
 import { sumLiabilities, parseBusinessAmount } from './accounting.js';
-import { applyPlayerEnvironmentalImpact } from '../environment/player-impact.js';
+import {
+  applyCarbonTax,
+  applyPlayerEnvironmentalImpact,
+} from '../environment/player-impact.js';
 import {
   UnknownBusinessError,
   UnknownBusinessTypeError,
@@ -366,7 +370,19 @@ export const operateBusinessHandler: ActionListener<OperateBusinessAction> = (
     result.state,
     business.environmentalImpact,
   );
-  return { state: withImpact, events: result.events };
+  // P13-B / GAP-25: charge the carbon tax on the operation's emissions
+  // (`governmentPolicy.carbonTaxRate × carbonEmissions × price` → authority).
+  // No-op when `carbonTaxRate = 0` (the default) — preserves existing
+  // behaviour + the existing operate-business tests.
+  const withCarbonTax = applyCarbonTax(
+    withImpact,
+    business.environmentalImpact,
+    now,
+  );
+  return {
+    state: withCarbonTax.state,
+    events: [...result.events, ...withCarbonTax.events],
+  };
 };
 
 /**
@@ -524,7 +540,16 @@ export const sellBusinessHandler: ActionListener<SellBusinessAction> = (
  * (state, action).
  */
 export const takeLoanHandler: ActionListener<TakeLoanAction> = (state, action) => {
-  const { businessId, principal, interestRate, dueAt, label } = action.payload;
+  const { businessId, principal, dueAt, label } = action.payload;
+  // P13-B / GAP-25: anchor the loan rate to the central-bank policy rate
+  // (`monetaryPolicy.interestRate` + a credit-risk spread), NOT the
+  // player-supplied payload `interestRate`. This makes the monetary-policy
+  // lever bite — raising `monetaryPolicy.interestRate` raises borrowing costs
+  // across every new loan. The payload field is kept in the schema for
+  // backward-compat but ignored here. GDD §6.2 / §8.4.
+  const interestRate =
+    state.eventState.global.monetaryPolicy.interestRate +
+    PROVISIONAL_LOAN_SPREAD_OVER_POLICY_RATE;
   const business = requireBusiness(state, businessId);
   const definition = requireBusinessType(business.type);
   requireSupportedAction(definition, 'take-loan', businessId);

@@ -14,7 +14,10 @@ import { engine } from '../src/index.js';
 import { DEFAULT_GAME_CONFIG } from '../src/initial-state.js';
 import { seedDefaultRegions } from '../src/events/regional.js';
 import { evaluateObjectives } from '../src/events/objectives.js';
-import { applyPlayerEnvironmentalImpact } from '../src/environment/player-impact.js';
+import {
+  applyCarbonTax,
+  applyPlayerEnvironmentalImpact,
+} from '../src/environment/player-impact.js';
 import { PLAYER_HOME_REGION_ID, PROVISIONAL_SIMULATION_STEP_SECONDS as STEP } from '@capitalist-tree/shared';
 import { createBusinessFromDefinition } from '../src/business/actions.js';
 import { WATER_EXTRACTION_PLANT, FARM } from '@capitalist-tree/content';
@@ -141,7 +144,23 @@ describe('P11 W5 — last-tree objective reachable (RV4-F-H1)', () => {
   });
 
   it('the population-weighted aggregate (W5 fix) crosses 0.6 where unweighted would not', () => {
-    const { state, businessId } = stateWithBusinessAndRegions(WATER_EXTRACTION_PLANT);
+    const { state: base, businessId } = stateWithBusinessAndRegions(WATER_EXTRACTION_PLANT);
+    // P13-B / GAP-25: neutralize `environmentalRegulations` (default 0.3 now
+    // mitigates the industrialActivity delta via the new env-reg curbing) so
+    // this W5 test isolates the population-weighting fix from the policy lever.
+    const state = {
+      ...base,
+      eventState: {
+        ...base.eventState,
+        global: {
+          ...base.eventState.global,
+          governmentPolicy: {
+            ...base.eventState.global.governmentPolicy,
+            environmentalRegulations: 0,
+          },
+        },
+      },
+    };
     // Operate extraction to raise the home region's industrialActivity.
     let s = state;
     for (let i = 0; i < 40; i++) {
@@ -166,5 +185,134 @@ describe('P11 W5 — last-tree objective reachable (RV4-F-H1)', () => {
         ? regions.reduce((a, r) => a + r.industrialActivity, 0) / regions.length
         : 0;
     expect(unweighted).toBeLessThan(0.6);
+  });
+});
+
+describe('environmentalRegulations mitigates industrial pollution (P13-B / GAP-25)', () => {
+  /** Override governmentPolicy.environmentalRegulations on a state. Pure. */
+  function withEnvReg(state: GameState, envReg: number): GameState {
+    return {
+      ...state,
+      eventState: {
+        ...state.eventState,
+        global: {
+          ...state.eventState.global,
+          governmentPolicy: {
+            ...state.eventState.global.governmentPolicy,
+            environmentalRegulations: envReg,
+          },
+        },
+      },
+    };
+  }
+
+  const FOOTPRINT_IMPACT = {
+    carbonEmissions: 0,
+    waterConsumption: 0,
+    soilDegradation: 0,
+    pollution: 0.4,
+    landDisturbance: 0,
+    biodiversityImpact: 0,
+  };
+
+  it('at reg=1 cuts the pollution + industrialActivity deltas by EFFECTIVENESS (80%)', () => {
+    const base = freshState();
+    const baseHome = base.eventState.global.regions.find(
+      (r) => r.id === PLAYER_HOME_REGION_ID,
+    )!;
+    const baseAir = baseHome.pollution.air;
+    const after0 = applyPlayerEnvironmentalImpact(withEnvReg(base, 0), FOOTPRINT_IMPACT);
+    const after1 = applyPlayerEnvironmentalImpact(withEnvReg(base, 1), FOOTPRINT_IMPACT);
+    const home0 = after0.eventState.global.regions.find(
+      (r) => r.id === PLAYER_HOME_REGION_ID,
+    )!;
+    const home1 = after1.eventState.global.regions.find(
+      (r) => r.id === PLAYER_HOME_REGION_ID,
+    )!;
+    const delta0 = home0.pollution.air - baseAir; // ~20 (0.4 × scale 50)
+    const delta1 = home1.pollution.air - baseAir; // ~4 (× mitigation 0.2)
+    expect(delta1).toBeCloseTo(delta0 * 0.2, 6); // 80% cut at reg=1
+    // industrialActivity delta is also curbed by the same mitigation factor.
+    expect(home1.industrialActivity).toBeLessThan(home0.industrialActivity);
+  });
+
+  it('at reg=0 applies the full pollution delta (no curbing)', () => {
+    const base = freshState();
+    const baseHome = base.eventState.global.regions.find(
+      (r) => r.id === PLAYER_HOME_REGION_ID,
+    )!;
+    const after = applyPlayerEnvironmentalImpact(withEnvReg(base, 0), FOOTPRINT_IMPACT);
+    const home = after.eventState.global.regions.find(
+      (r) => r.id === PLAYER_HOME_REGION_ID,
+    )!;
+    // mitigation = 1 at reg=0 → full delta = 0.4 × 50 = 20.
+    expect(home.pollution.air - baseHome.pollution.air).toBeCloseTo(0.4 * 50, 6);
+  });
+});
+
+describe('applyCarbonTax (P13-B / GAP-25)', () => {
+  /** Override governmentPolicy.carbonTaxRate on a state. Pure. */
+  function withCarbonTax(state: GameState, rate: number): GameState {
+    return {
+      ...state,
+      eventState: {
+        ...state.eventState,
+        global: {
+          ...state.eventState.global,
+          governmentPolicy: {
+            ...state.eventState.global.governmentPolicy,
+            carbonTaxRate: rate,
+          },
+        },
+      },
+    };
+  }
+
+  const EMISSIONS_IMPACT = {
+    carbonEmissions: 50,
+    waterConsumption: 0,
+    soilDegradation: 0,
+    pollution: 0,
+    landDisturbance: 0,
+    biodiversityImpact: 0,
+  };
+
+  it('charges carbonEmissions × rate × price from player:personal → authority', () => {
+    const state = withCarbonTax(freshState(), 0.1);
+    const playerBefore = BigInt(state.player.personalCash);
+    // 50 emissions × 0.1 rate × 100 minor/unit = 500 minor debited.
+    const result = applyCarbonTax(state, EMISSIONS_IMPACT, 1000);
+    expect(BigInt(result.state.player.personalCash)).toBe(playerBefore - 500n);
+    expect(result.events.some((e) => e.type === 'transaction-recorded')).toBe(true);
+    const tx =
+      result.state.economy.transactions[result.state.economy.transactions.length - 1]!;
+    expect(tx.category).toBe('carbon-tax');
+  });
+
+  it('is a no-op when carbonTaxRate = 0 (the default) — same reference, no event', () => {
+    const base = freshState(); // carbonTaxRate defaults to 0
+    const playerBefore = BigInt(base.player.personalCash);
+    const result = applyCarbonTax(base, EMISSIONS_IMPACT, 1000);
+    expect(result.state).toBe(base); // unchanged — same reference
+    expect(result.events).toHaveLength(0);
+    expect(BigInt(result.state.player.personalCash)).toBe(playerBefore);
+  });
+
+  it('is a no-op when carbonEmissions = 0 (e.g. harvest-leaves)', () => {
+    const state = withCarbonTax(freshState(), 0.1);
+    const result = applyCarbonTax(
+      state,
+      {
+        carbonEmissions: 0,
+        waterConsumption: 0,
+        soilDegradation: 0,
+        pollution: 0.002,
+        landDisturbance: 0.003,
+        biodiversityImpact: 0.001,
+      },
+      1000,
+    );
+    expect(result.state).toBe(state); // unchanged
+    expect(result.events).toHaveLength(0);
   });
 });
