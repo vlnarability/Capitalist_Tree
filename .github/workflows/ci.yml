@@ -1,9 +1,10 @@
 # CI — continuous integration for The Capitalist Tree (GAP-32, P12-D).
 #
-# Runs on every push and pull request to p11-remediation and main. Verifies
-# the full monorepo: install (frozen lockfile), typecheck, lint, unit/integration
-# tests (vitest across all packages + repo-root acceptance tests), and a
-# production build of every package + the web app.
+# Runs on every push (all branches — feature branches get the full CI gate,
+# not just main) and on pull requests to main. Verifies the full monorepo:
+# install (frozen lockfile), typecheck, lint, unit/integration tests (vitest
+# across all packages + repo-root acceptance tests), and a production build
+# of every package + the web app.
 #
 # The test step uses the root `pnpm test` script, which sets
 # `NODE_OPTIONS='--max-old-space-size=4096'` (the simulation's long-running
@@ -19,10 +20,14 @@
 name: CI
 
 on:
+  # No `branches` filter on push → runs on EVERY branch push (feature branches
+  # like gap-* / p* / docs/* get the full gate, not just main). This lets the
+  # agent run a fast local subset (touched tests + typecheck) per turn and rely
+  # on CI for the full regression. `concurrency.cancel-in-progress` below keeps
+  # repeated re-pushes cheap (a new push cancels the superseded run).
   push:
-    branches: [main, p11-remediation]
   pull_request:
-    branches: [main, p11-remediation]
+    branches: [main]
 
 # Cancel superseded runs on the same ref (saves CI minutes when a branch is
 # pushed to repeatedly).
