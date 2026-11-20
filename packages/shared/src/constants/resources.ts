@@ -71,6 +71,26 @@ export const PROVISIONAL_RESOURCE_EVAPORATION_BASE_TEMP_C = 15;
 // death at ~6-12mo. Water is unaffected (waterFactor was already high).
 export const PROVISIONAL_RESOURCE_MAX_UPTAKE_FRACTION = 5.0;
 
+// PROVISIONAL (GAP-17 / DR-11 — Phase 3 deferred follow-up (a): climate-level
+// water-stress Liebig factor, `biology/photosynthesis.ts computeClimateWaterStressFactor`).
+//
+// The effective root-zone collection area (m²) a mature tree draws precipitation
+// from — wider than the canopy. Scales the climate's daily precipitation
+// (mm/day ≈ L/day/m²) to a whole-tree supply (L/day) comparable to the species'
+// waterRequirement. Calibrated so the default (White Oak in temperate, 750 mm/yr,
+// demand 50 L/day) has supply ≈ demand → no stress (the biology tests' baseline
+// is unchanged): (750/365) × 25 = 51.4 L/day ≈ 50 L/day demand.
+export const PROVISIONAL_CLIMATE_WATER_COLLECTION_AREA_M2 = 25; // m²
+
+// PROVISIONAL (GAP-17 / DR-11 — Phase 3 deferred follow-up (a)).
+//
+// The drought-tolerance discount for species NATIVE to the climate: native
+// species are adapted to their climate's precipitation (the date palm tolerates
+// BWh's 100 mm/yr), so they experience only this fraction of the base
+// water-stress — the regional drought shows as a MILD growth penalty, not death.
+// Non-native species experience the full base stress (they're not adapted).
+export const PROVISIONAL_CLIMATE_WATER_NATIVE_TOLERANCE = 0.2; // native feels 20% of base stress
+
 // PROVISIONAL (GDD §17: detailed resource simulation equations)
 //
 // Initial soil water content (L) for the starting plot. Below capacity so a

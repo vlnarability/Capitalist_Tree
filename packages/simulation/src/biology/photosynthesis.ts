@@ -29,7 +29,7 @@
  * The function is PURE: it takes the current tree + environment and returns the
  * production in eu/day. Callers multiply by stepDays.
  */
-import type { TreeState, TreeSpecies } from '@capitalist-tree/shared';
+import type { ClimateBaseline, TreeState, TreeSpecies } from '@capitalist-tree/shared';
 import {
   PROVISIONAL_BIOLOGY_CO2_SATURATION_PPM,
   PROVISIONAL_BIOLOGY_DAY_LIGHT_FACTOR,
@@ -38,6 +38,8 @@ import {
   PROVISIONAL_BIOLOGY_MAX_PHOTOSYNTHESIS_RATE,
   PROVISIONAL_BIOLOGY_NIGHT_PHOTOSYNTHESIS_FRACTION,
   PROVISIONAL_BIOLOGY_SEASONAL_CONDITION_WEIGHT,
+  PROVISIONAL_CLIMATE_WATER_COLLECTION_AREA_M2,
+  PROVISIONAL_CLIMATE_WATER_NATIVE_TOLERANCE,
   PROVISIONAL_DAY_END_FRACTION,
   PROVISIONAL_DAY_START_FRACTION,
 } from '@capitalist-tree/shared';
@@ -87,6 +89,54 @@ export function lightFactor(timeOfDay: number): number {
 export function waterFactor(tree: TreeState, dailyWaterNeedL: number): number {
   if (dailyWaterNeedL <= 0) return 1;
   return Math.min(1, tree.water.stored / dailyWaterNeedL);
+}
+
+/**
+ * Climate-level water-stress Liebig factor in [0, 1] — GAP-17 (DR-11) Phase 3
+ * deferred follow-up (a): the regional precipitation-vs-demand deficit that the
+ * per-plot soil-water cap decouples from the tree's buffer (§6 bullet 2: "when
+ * demand > supply, the tree experiences drought stress"). This is a SIGNAL (a
+ * 0-1 Liebig factor), NOT a water transfer — it preserves the mass-conservation
+ * invariant `resources/water.ts` asserts (no water is created or destroyed).
+ *
+ *   factor = 1 − stress
+ *   stress = (1 − clamp(supply / demand, 0, 1)) × nativeTolerance
+ *
+ * - **supply** = the climate's effective daily precipitation (annualMm / 365 →
+ *   mm/day ≈ L/day/m²) scaled by the tree's root-zone collection area
+ *   (`PROVISIONAL_CLIMATE_WATER_COLLECTION_AREA_M²`). A mature tree collects
+ *   from a wider root zone than its canopy.
+ * - **demand** = the tree's current foliage-scaled daily water need (L/day). A
+ *   sapling with few leaves has low demand → little stress; a mature tree with
+ *   full canopy has high demand → more stress under the same climate.
+ * - **nativeTolerance** = 1 for non-native species,
+ *   `PROVISIONAL_CLIMATE_WATER_NATIVE_TOLERANCE` for native species. Native
+ *   species are drought-adapted to their climate's precipitation (the date palm
+ *   tolerates BWh), so they experience only a fraction of the base stress — the
+ *   regional drought shows as a MILD growth penalty, not death.
+ *
+ * Calibrated so the default (White Oak in temperate, 750 mm/yr, demand 50 L/day)
+ * has supply ≈ demand → factor ≈ 1 (no stress — the biology tests' baseline is
+ * unchanged). The date palm in BWh (100 mm/yr, demand 42, native) → factor ~0.83
+ * (a mild penalty that makes the regional drought show at the tree level, closing
+ * the gap where its `water.stored` filled to near-capacity with no tree-level
+ * stress). The date palm in Af (2400 mm/yr) → factor 1 (plenty of water).
+ *
+ * Pure: a deterministic function of (species, climate, dailyWaterDemandL).
+ */
+export function computeClimateWaterStressFactor(
+  species: TreeSpecies,
+  climate: ClimateBaseline,
+  dailyWaterDemandL: number,
+): number {
+  if (dailyWaterDemandL <= 0) return 1; // no demand → no stress
+  const dailySupplyL =
+    (climate.precipitation.annualMm / 365) * PROVISIONAL_CLIMATE_WATER_COLLECTION_AREA_M2;
+  const ratio = dailySupplyL / dailyWaterDemandL;
+  const baseStress = 1 - Math.max(0, Math.min(1, ratio));
+  const native = species.nativeKoppenCodes.includes(climate.koppenCode);
+  const stress = native ? baseStress * PROVISIONAL_CLIMATE_WATER_NATIVE_TOLERANCE : baseStress;
+  return Math.max(0, Math.min(1, 1 - stress));
 }
 
 /**
@@ -219,10 +269,22 @@ export function photosynthesisForStep(tree: TreeState, ctx: BiologyContext): num
   // conditions" was unreachable. Fall back to the climate value when weather
   // is absent (backward compat for callers that build a context without it).
   const temperatureC = ctx.weather?.temperature ?? ctx.environment.globalTemperature;
+  // GAP-17 (DR-11) Phase 3 deferred follow-up (a): the climate-level water-stress
+  // Liebig factor — the regional precipitation-vs-demand deficit the per-plot
+  // soil-water cap decouples from the tree's buffer (§6 bullet 2: "when demand >
+  // supply, the tree experiences drought stress"). A SIGNAL (not a water
+  // transfer) → preserves the mass-conservation invariant. Falls back to 1 (no
+  // stress) when the context carries no climate (backward compat for callers
+  // that build a context without it, + for the legacy climate:temperate base
+  // before the BiologySystem threads the effective climate through).
+  const climateWaterStress = ctx.climate
+    ? computeClimateWaterStressFactor(ctx.species, ctx.climate, dailyWater)
+    : 1;
   const liebig = Math.min(
     lightFactor(ctx.timeOfDay),
     temperatureFactor(temperatureC, ctx.species.temperatureRange),
     waterFactor(tree, dailyWater),
+    climateWaterStress,
     co2Factor(ctx.environment.atmosphere.co2Concentration),
     nutrientFactor(tree.nutrients, ctx.species.nutrientRequirement),
     leafHealth(tree.stress),
