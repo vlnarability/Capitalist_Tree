@@ -305,7 +305,21 @@ Per RV7's P11/P12/P13 phasing. Titles and one-paragraph scope only; full prompts
 > - **10 (P12-D soil depth + analytics + CI/CD): PARTIAL.** CI/CD (GAP-32)
 >   done; soil depth (GAP-20) done (9016f53 — pH/compaction/microbial promoted
 >   from P2 stubs into modeled dynamics, feeding soil health); analytics
->   (GAP-31) remains.
+>   (GAP-31) Phase 1 DONE (0e7781d — local-only, on-device per DR-13: new
+>   `packages/analytics` [versioned `AnalyticsEvent` schema, `AnalyticsEmitter`
+>   + `noopEmitter`, `AnalyticsStore` + `InMemoryAnalyticsStore`,
+>   `createCollector` — fire-and-forget, never throws, swallows store failures;
+>   14 tests] + apps/web `IndexedDbAnalyticsStore` [SEPARATE DB
+>   `capitalist-tree-analytics` so analytics storage can never risk the save
+>   blob; retention cap] + pure `mapSimulationEventToAnalytics` bridge
+>   [high-signal only: tree-died, weather-damage, objective-achieved,
+>   season-changed] + collector singleton wired into `game-store`
+>   dispatch/commitSimState + `useSimulationLoop` boot `initAnalytics` +
+>   save-loaded/save-load-failed emits. Zero sim coupling — Approach B: the
+>   collector subscribes to the existing SimulationEvent stream rather than the
+>   sim calling a new emitter, so the sim stays pure + analytics is a no-op in
+>   unit tests. Phase 2 [aggregation/sampling + ErrorBoundary capture] + Phase 3
+>   [observability panel] remain).
 > - **11 (P13-A): DONE.** Environmental indicators + markets + org-type
 >   incentives (GAP-21, GAP-22, GAP-23) implemented in `bf8d5f4`. GAP-21
 >   (environmental indicators): the four long-horizon indicators — `airQuality`,
