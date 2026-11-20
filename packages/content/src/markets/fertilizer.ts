@@ -22,6 +22,10 @@ export const FERTILIZER_MARKET: MarketDefinition = {
   basePrice: '500', // $5.00 / unit (PROVISIONAL — matches BALANCED_10_10_10.costMinor)
   category: 'consumable',
   unit: 'unit',
+  // P13-B / GAP-24: fertilizer is pricier abroad (1.1×) — synthetic NPK is
+  // a manufactured good; the player's region has a fertilizer plant edge, so
+  // exporting surplus earns a premium. PROVISIONAL per GDD §17.
+  foreignPriceMultiplier: 1.1,
   description:
     'Balanced 10-10-10 NPK fertilizer. Apply via the apply-fertilizer action ' +
     '(P2) with fertilizerId "fertilizer:balanced-10-10-10". P3c will wire ' +

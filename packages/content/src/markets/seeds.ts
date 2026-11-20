@@ -16,6 +16,9 @@ export const SEEDS_MARKET: MarketDefinition = {
   basePrice: '200', // $2.00 / packet (PROVISIONAL)
   category: 'consumable',
   unit: 'packet',
+  // P13-B / GAP-24: seeds are cheaper abroad (0.9×) — foreign seed nurseries
+  // operate at scale; a mild import incentive. PROVISIONAL per GDD §17.
+  foreignPriceMultiplier: 0.9,
   description:
     'Seed packets for planting additional trees (P7+ expansion). No ' +
     'apply-seeds action yet — P3b defines the market so the inflation ' +

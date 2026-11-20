@@ -320,7 +320,27 @@ Per RV7's P11/P12/P13 phasing. Titles and one-paragraph scope only; full prompts
 >   (corporation/cooperative, `packages/content/src/businesses/org-types.ts`)
 >   are present with tests (`markets.test.ts`, `business-market.test.ts`) —
 >   implemented in `bf8d5f4`, not deeply re-verified this turn.
-> - **12 (P13-B): UNCHANGED.** Large features.
+> - **12 (P13-B): GAP-24 DONE (this turn); GAP-25 largely present.**
+>   GAP-24 (international trade): the sim layer (`applyImport` / `applyExport`
+>   in `markets.ts`, wired via the `import-commodity` / `export-commodity`
+>   handlers) + tariffRate were already in `f8def74` / `e3afa02`, but import /
+>   export settled at the DOMESTIC market price — so import (price + tariff)
+>   was never rational vs buying local. This turn added the missing piece:
+>   content-defined `foreignPriceMultiplier` per `MarketDefinition` +
+>   `computeForeignUnitPrice(def)` helper; `applyImport` / `applyExport` now
+>   settle at the FOREIGN (world) price = `basePrice × foreignPriceMultiplier`,
+>   decoupled from the domestic supply/demand price → cross-region arbitrage
+>   (food 0.8× base import beats domestic; energy 1.2× base export pays a
+>   premium). `importCommodity` / `exportCommodity` action factories in
+>   `lib/actions.ts`; `TradePanel` UI in the advanced view (per-commodity
+>   domestic vs foreign price, held inventory, import/export buttons, tariff);
+>   mounted in `app/page.tsx`. Tests: +4 arbitrage (events.test.ts — import
+>   cost = foreign price not market price; food import cheaper than domestic;
+>   export revenue = foreign price; neutral-multiplier water) + 7 TradePanel
+>   UI. GAP-25 (government depth): `governmentPolicy` (tariffRate, subsidies)
+>   + `monetaryPolicy` (interestRate, inflationTarget) + the
+>   `set-government-policy` / `set-monetary-policy` actions are present from
+>   `f8def74` / `e3afa02` — not deeply re-verified this turn.
 > - **13 (P13-C productization): IN FLIGHT.** CSP headers (W30) + perf gate
 >   (W29) + cross-browser E2E (GAP-37) done; Zod 4 (DR-7) + i18n scaffold +
 >   audio/art remain. (GAP-37 re-verified: the `b9db3c8` commit — firefox +

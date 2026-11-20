@@ -22,6 +22,10 @@ export const EQUIPMENT_MARKET: MarketDefinition = {
   basePrice: '20000', // $200 / unit (PROVISIONAL — matches PROVISIONAL_MARKET_PRICE_EQUIPMENT)
   category: 'equipment',
   unit: 'unit',
+  // P13-B / GAP-24: equipment is pricier abroad (1.15×) — manufactured
+  // machinery commands a foreign premium; exporting surplus equipment earns
+  // 15%. PROVISIONAL per GDD §17.
+  foreignPriceMultiplier: 1.15,
   description:
     'Durable equipment (pumps, harvesters, tools) that improves productivity. ' +
     'The commodityId matches the EQUIPMENT_FACTORY output; a future ' +

@@ -16,6 +16,10 @@ export const ENERGY_MARKET: MarketDefinition = {
   basePrice: '50', // $0.50 / kWh-equiv (PROVISIONAL)
   category: 'consumable',
   unit: 'kWh',
+  // P13-B / GAP-24: energy is pricier abroad (1.2×) — the player's region
+  // has cheap renewables, so exporting surplus energy (or energy-dense
+  // goods) earns a 20% premium. PROVISIONAL per GDD §17.
+  foreignPriceMultiplier: 1.2,
   description:
     "Energy (utilities) for the player (living expense, GDD §7.1). P3c's " +
     'pay-expense action will consume from this market; P3b defines the ' +

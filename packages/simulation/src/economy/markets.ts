@@ -128,7 +128,12 @@ import {
   PROVISIONAL_ECONOMY_MONETARY_CONDITIONS_ELASTICITY,
   PROVISIONAL_ECONOMY_INFLATION_RATE_ANNUALIZATION,
 } from '@capitalist-tree/shared';
-import { findMarketById, getSubsidyRateForCommodity, type MarketDefinition } from '@capitalist-tree/content';
+import {
+  computeForeignUnitPrice,
+  findMarketById,
+  getSubsidyRateForCommodity,
+  type MarketDefinition,
+} from '@capitalist-tree/content';
 import { transfer, parseAmount } from './ledger.js';
 
 /** Error thrown by `applyPurchase` when the market id is unknown. */
@@ -674,14 +679,22 @@ export interface ImportResult {
 /**
  * Apply an `import-commodity` action (P13-B / GAP-24 — GDD §15 international
  * trade). Buys `quantity` of the market's commodity from the foreign/external
- * counterparty at the current domestic market price, plus a tariff surcharge
- * (= baseCost × `governmentPolicy.tariffRate`) sunk to the authority account.
+ * counterparty at the FOREIGN (world) price — `basePrice ×
+ * foreignPriceMultiplier` (content-defined comparative advantage, INDEPENDENT
+ * of the domestic market's supply/demand-driven price) — plus a tariff
+ * surcharge (= baseCost × `governmentPolicy.tariffRate`) sunk to the authority
+ * account.
  *
  *   - baseCost flows player:personal → external:default (the foreign seller).
  *   - tariff flows player:personal → authority (the government), only if > 0.
  *   - inventory is credited at the market's commodityId (like `purchase`).
  *   - the domestic market's supply/demand is NOT adjusted (the good comes from
  *     abroad, not the domestic market stock).
+ *
+ * Import is economically rational when `foreignPrice × (1 + tariffRate) <
+ * domestic market price` — e.g. food (foreign 0.8× base) under a 10% tariff
+ * costs 0.88× base, beating a domestic price at base; or any commodity once
+ * the domestic market price has risen above base via scarcity.
  *
  * Pure: returns a new state, never mutates input. Throws `UnknownMarketError`
  * if the market id is unknown; `InsufficientFundsError` propagates from `transfer`.
@@ -692,7 +705,12 @@ export function applyImport(state: GameState, params: ImportParams): ImportResul
     throw new UnknownMarketError(params.marketId);
   }
 
-  const unitPrice = parseAmount(market.price, 'price');
+  // P13-B / GAP-24: the FOREIGN (world) price — basePrice ×
+  // foreignPriceMultiplier (content-defined comparative advantage), independent
+  // of the domestic market's supply/demand-driven price. Falls back to the
+  // domestic market price only if the market definition is missing (defensive).
+  const def = findMarketById(market.id);
+  const unitPrice = def ? computeForeignUnitPrice(def) : parseAmount(market.price, 'price');
   const quantity = BigInt(params.quantity);
   const baseCost = unitPrice * quantity;
   const tariffRate = state.eventState.global.governmentPolicy.tariffRate;
@@ -812,11 +830,18 @@ export interface ExportResult {
 /**
  * Apply an `export-commodity` action (P13-B / GAP-24 — GDD §15 international
  * trade). Sells `quantity` of the market's commodity from the player's
- * inventory to the foreign/external counterparty at the current domestic market
- * price. The foreign buyer's payment enters the domestic economy (money
+ * inventory to the foreign/external counterparty at the FOREIGN (world) price —
+ * `basePrice × foreignPriceMultiplier` (content-defined comparative advantage,
+ * INDEPENDENT of the domestic market's supply/demand-driven price). The
+ * foreign buyer's payment enters the domestic economy (money
  * creation) — `revenue` is issued from the authority (mint) → `player:personal`.
  * Inventory is debited; the domestic market's supply/demand is NOT adjusted
  * (the good flows abroad, not into the domestic market stock).
+ *
+ * Export is economically rational when `foreignPrice > domestic market price`
+ * — e.g. energy (foreign 1.2× base) beats a domestic price at base by 20%, or
+ * any commodity once the player holds surplus they cannot otherwise liquidate
+ * (the domestic markets are buy-side only — export is the sell-side outlet).
  *
  * Exports carry no tariff (the `tariffRate` lever applies to imports only); a
  * future export-duty lever could be added symmetrically. Pure: returns a new
@@ -837,8 +862,12 @@ export function applyExport(state: GameState, params: ExportParams): ExportResul
   }
 
   // 2. Issue the revenue from the authority (mint) → player (foreign buyer pays
-  //    into the domestic economy = money creation).
-  const unitPrice = parseAmount(market.price, 'price');
+  //    into the domestic economy = money creation). The unit price is the
+  //    FOREIGN (world) price — basePrice × foreignPriceMultiplier — independent
+  //    of the domestic market's supply/demand-driven price. Falls back to the
+  //    domestic market price only if the market definition is missing.
+  const def = findMarketById(market.id);
+  const unitPrice = def ? computeForeignUnitPrice(def) : parseAmount(market.price, 'price');
   const quantity = BigInt(params.quantity);
   const revenue = unitPrice * quantity;
   const afterIssue = transfer(state, {

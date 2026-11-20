@@ -61,7 +61,7 @@ import {
 import type { SystemContext, GameState, ActiveEvent } from '../src/index.js';
 import { Rng } from '../src/rng.js';
 import { DEFAULT_GAME_CONFIG } from '../src/initial-state.js';
-import { DROUGHT } from '@capitalist-tree/content';
+import { computeForeignUnitPrice, DROUGHT, findMarketById } from '@capitalist-tree/content';
 import {
   type GameConfig,
   PROVISIONAL_SIMULATION_STEP_SECONDS,
@@ -1112,6 +1112,94 @@ describe('actions — export-commodity (P13-B / GAP-24)', () => {
         payload: { marketId: 'market:no-such', quantity: 1, tick: 0 },
       }),
     ).toThrow(UnknownMarketError);
+  });
+});
+
+describe('import/export use the FOREIGN price (P13-B / GAP-24 arbitrage)', () => {
+  it('import costs the foreign price (base × multiplier), NOT the domestic market price', () => {
+    // Food: base 1000, foreignPriceMultiplier 0.8 → foreign unit price 800.
+    // Inflate the DOMESTIC food market price to 5000 — import must still cost
+    // 800 × qty (the world price), proving import is decoupled from the
+    // domestic market's supply/demand-driven price.
+    const def = findMarketById('market:food')!;
+    const foreignUnit = computeForeignUnitPrice(def); // 800n
+    expect(foreignUnit).toBe(800n);
+    let state = freshState();
+    state = {
+      ...state,
+      economy: {
+        ...state.economy,
+        markets: state.economy.markets.map((m) =>
+          m.id === 'market:food' ? { ...m, price: '5000' } : m,
+        ),
+      },
+    };
+    const cashBefore = state.player.personalCash;
+    const qty = 10;
+    const result = engine.executeAction(state, {
+      type: 'import-commodity',
+      payload: { marketId: 'market:food', quantity: qty, tick: 1000 },
+    });
+    // No tariff by default → player debited exactly foreignUnit × qty = 8000.
+    expect(BigInt(result.state.player.personalCash)).toBe(
+      BigInt(cashBefore) - foreignUnit * BigInt(qty),
+    );
+  });
+
+  it('import food (0.8× foreign) is cheaper than buying food domestically at base', () => {
+    // Arbitrage: foreign food (800) + 10% tariff (80) = 880/unit < domestic 1000.
+    // Buying 10 food domestically at base 1000 would cost 10000; importing
+    // costs 8800 — the player saves 1200 by trading across borders.
+    let state = freshState();
+    state = engine.executeAction(state, {
+      type: 'set-government-policy',
+      payload: { policy: { tariffRate: 0.1 }, tick: 0 },
+    }).state;
+    const cashBefore = state.player.personalCash;
+    const result = engine.executeAction(state, {
+      type: 'import-commodity',
+      payload: { marketId: 'market:food', quantity: 10, tick: 1000 },
+    });
+    expect(BigInt(result.state.player.personalCash)).toBe(BigInt(cashBefore) - 8800n);
+  });
+
+  it('export revenue is the foreign price (base × multiplier), NOT the domestic market price', () => {
+    // Energy: base 50, foreignPriceMultiplier 1.2 → foreign unit price 60.
+    // Deflate the DOMESTIC energy market price to 10 — export revenue must
+    // still be 60 × qty (the world price), proving export is decoupled.
+    const def = findMarketById('market:energy')!;
+    const foreignUnit = computeForeignUnitPrice(def); // 60n
+    expect(foreignUnit).toBe(60n);
+    let state = freshState();
+    // Stock energy inventory first (import 100 energy @ foreign 60 = 6000).
+    state = engine.executeAction(state, {
+      type: 'import-commodity',
+      payload: { marketId: 'market:energy', quantity: 100, tick: 0 },
+    }).state;
+    // Deflate the domestic energy market price to 10 (must NOT affect export).
+    state = {
+      ...state,
+      economy: {
+        ...state.economy,
+        markets: state.economy.markets.map((m) =>
+          m.id === 'market:energy' ? { ...m, price: '10' } : m,
+        ),
+      },
+    };
+    const cashBefore = state.player.personalCash;
+    const result = engine.executeAction(state, {
+      type: 'export-commodity',
+      payload: { marketId: 'market:energy', quantity: 50, tick: 1000 },
+    });
+    // Revenue = foreignUnit × 50 = 3000 (NOT domestic 10 × 50 = 500).
+    expect(BigInt(result.state.player.personalCash)).toBe(
+      BigInt(cashBefore) + foreignUnit * 50n,
+    );
+  });
+
+  it('water (neutral 1.0 multiplier) foreign price equals its base price', () => {
+    const def = findMarketById('market:water')!;
+    expect(computeForeignUnitPrice(def)).toBe(BigInt(def.basePrice));
   });
 });
 

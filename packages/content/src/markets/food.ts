@@ -17,6 +17,10 @@ export const FOOD_MARKET: MarketDefinition = {
   basePrice: '1000', // $10.00 / unit (PROVISIONAL)
   category: 'consumable',
   unit: 'unit',
+  // P13-B / GAP-24: food is cheaper abroad (0.8×) — the player's plot is a
+  // tree farm, not a food belt, so importing food beats the domestic price
+  // even with a tariff. PROVISIONAL per GDD §17.
+  foreignPriceMultiplier: 0.8,
   description:
     "Food for the player (living expense, GDD §7.1). P3c's pay-expense " +
     'action will consume from this market; P3b defines the market and the ' +

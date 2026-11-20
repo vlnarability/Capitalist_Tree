@@ -92,6 +92,7 @@ import {
   HarvestControls,
   SeedControls,
   PurchaseControls,
+  TradePanel,
   CurrencyCosmeticPicker,
 } from '../components/economy';
 import { AutomationPanel } from '../components/automation';
@@ -403,6 +404,14 @@ export default function HomePage(): ReactElement {
           </Panel>
           <Panel title="Markets" icon="🛒" hint="GDD §8.5">
             <PurchaseControls />
+          </Panel>
+          <Panel
+            title="International Trade"
+            icon="🚢"
+            tone="sky"
+            hint="GDD §15 · GAP-24"
+          >
+            <TradePanel />
           </Panel>
           <Panel title="Transactions" icon="📒" hint="Recent">
             <TransactionsPanel />

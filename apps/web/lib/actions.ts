@@ -52,6 +52,8 @@ import type {
   OperateBusinessAction,
   PayExpenseAction,
   PrestigeResetAction,
+  ExportCommodityAction,
+  ImportCommodityAction,
   PurchaseAction,
   PurchaseBusinessAction,
   PurchaseEquipmentAction,
@@ -232,6 +234,65 @@ export function purchase(marketId: string, quantity: number): PurchaseAction {
     throw new Error(`purchase: quantity must be a positive integer (got ${quantity}).`);
   }
   return { type: 'purchase', payload: { marketId, quantity } };
+}
+
+/**
+ * Build an `import-commodity` action (P13-B / GAP-24 — GDD §15 international
+ * trade). Import `quantity` units of `marketId`'s commodity from the foreign
+ * market at the world price (`basePrice × foreignPriceMultiplier`) plus a
+ * tariff surcharge (= baseCost × `governmentPolicy.tariffRate`). Cash flows
+ * `player:personal` → `external:default` (base) + `authority` (tariff);
+ * inventory is credited at the market's `commodityId`. `tick` is the current
+ * sim second — pass `simState.clock.elapsedSeconds` (mirrors `plantSeed`).
+ */
+export function importCommodity(
+  marketId: string,
+  quantity: number,
+  tick: number,
+): ImportCommodityAction {
+  if (!marketId) {
+    throw new Error('importCommodity: marketId must be a non-empty string.');
+  }
+  if (!Number.isInteger(quantity) || quantity < 1) {
+    throw new Error(
+      `importCommodity: quantity must be a positive integer (got ${quantity}).`,
+    );
+  }
+  if (!Number.isInteger(tick) || tick < 0) {
+    throw new Error(
+      `importCommodity: tick must be a non-negative integer (got ${tick}).`,
+    );
+  }
+  return { type: 'import-commodity', payload: { marketId, quantity, tick } };
+}
+
+/**
+ * Build an `export-commodity` action (P13-B / GAP-24 — GDD §15 international
+ * trade). Sell `quantity` units of `marketId`'s commodity from the player's
+ * inventory to the foreign market at the world price (`basePrice ×
+ * foreignPriceMultiplier`). Revenue is issued from the authority (mint) →
+ * `player:personal` (the foreign buyer's payment enters the domestic economy);
+ * inventory is debited. No tariff on exports. `tick` is the current sim second.
+ */
+export function exportCommodity(
+  marketId: string,
+  quantity: number,
+  tick: number,
+): ExportCommodityAction {
+  if (!marketId) {
+    throw new Error('exportCommodity: marketId must be a non-empty string.');
+  }
+  if (!Number.isInteger(quantity) || quantity < 1) {
+    throw new Error(
+      `exportCommodity: quantity must be a positive integer (got ${quantity}).`,
+    );
+  }
+  if (!Number.isInteger(tick) || tick < 0) {
+    throw new Error(
+      `exportCommodity: tick must be a non-negative integer (got ${tick}).`,
+    );
+  }
+  return { type: 'export-commodity', payload: { marketId, quantity, tick } };
 }
 
 /**

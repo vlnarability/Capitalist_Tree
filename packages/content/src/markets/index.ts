@@ -51,6 +51,18 @@ export { LAND_MARKET } from './land.js';
  * `'consumable'`. Future categories (`'equipment'`, `'labor'`, `'land'`)
  * can have different pricing models (depreciation, wage index, location
  * multiplier) — P3b's pricing model handles all categories uniformly.
+ *
+ * `foreignPriceMultiplier` (P13-B / GAP-24 — GDD §15 international trade) is
+ * the commodity's world-price multiplier relative to its `basePrice` — i.e.
+ * the foreign unit price is `basePrice × foreignPriceMultiplier`. It encodes
+ * static comparative advantage (some commodities are cheaper abroad, some
+ * pricier) so cross-region trade has a price signal independent of the
+ * domestic market's supply/demand. Imports cost `foreignPrice × qty +
+ * tariff`; exports earn `foreignPrice × qty`. A multiplier of 1.0 = neutral
+ * (foreign == base; the only import incentive then is when the *domestic*
+ * market price has risen above base via scarcity). Defaults to 1.0 when
+ * unset. PROVISIONAL per GDD §17; P14+ may make foreign prices dynamic
+ * (a mean-reverting random walk around this anchor).
  */
 export interface MarketDefinition {
   /** Unique market id, e.g. `'market:water'`. */
@@ -65,6 +77,13 @@ export interface MarketDefinition {
   unit: string;
   /** Human-readable description for the UI / docs. */
   description: string;
+  /**
+   * Foreign (world) price as a multiplier of `basePrice` (P13-B / GAP-24).
+   * 1.0 = neutral; <1.0 = cheaper abroad (import incentive); >1.0 = pricier
+   * abroad (export incentive). Optional — defaults to 1.0 via
+   * {@link computeForeignUnitPrice}.
+   */
+  readonly foreignPriceMultiplier?: number;
 }
 
 /** All known markets. Add new markets here. */
@@ -85,6 +104,34 @@ export const ALL_MARKETS: readonly MarketDefinition[] = [
 /** Look up a market by id. Returns the market or `undefined` if unknown. */
 export function findMarketById(marketId: string): MarketDefinition | undefined {
   return ALL_MARKETS.find((m) => m.id === marketId);
+}
+
+/**
+ * The foreign (world) price multiplier for a market — `1.0` when unset (the
+ * neutral default), otherwise the commodity's `foreignPriceMultiplier`.
+ * (P13-B / GAP-24 — GDD §15 international trade.)
+ */
+export function getForeignPriceMultiplier(def: MarketDefinition): number {
+  return def.foreignPriceMultiplier ?? 1.0;
+}
+
+/**
+ * Compute the foreign (world) unit price for a market's commodity, in bigint
+ * minor currency units (P13-B / GAP-24). `basePrice × foreignPriceMultiplier`,
+ * rounded to the nearest minor unit (floored at 1 so a sub-1 multiplier on a
+ * base-1 price can't produce a zero price). The foreign price is INDEPENDENT
+ * of the domestic `MarketState.price` — it is the world price the player
+ * imports at (+ tariff) or exports at (revenue), distinct from the local
+ * market's supply/demand-driven price.
+ *
+ * Pure + deterministic. The `Number(base)` conversion is safe for P3b
+ * magnitudes (< 2^53 minor units).
+ */
+export function computeForeignUnitPrice(def: MarketDefinition): bigint {
+  const base = BigInt(def.basePrice);
+  const multiplier = getForeignPriceMultiplier(def);
+  if (multiplier === 1.0) return base; // fast path — no rounding drift
+  return BigInt(Math.max(1, Math.round(Number(base) * multiplier)));
 }
 
 /** Look up a market by its `commodityId`. Returns the market or `undefined`. */
