@@ -39,6 +39,17 @@ export default defineConfig({
     // (temporarily comment out this exclude line first — vitest applies the
     // exclude even when the file is passed explicitly).
     exclude: [
+      // Don't run tests bundled inside dependencies. The `include` globs above
+      // use `**/` which matches into node_modules, so without this exclude
+      // vitest discovers ~700 irrelevant dep tests (zod ships its own
+      // *.test.ts under node_modules/zod/.../tests/) per run. That ballooned
+      // the test step to >10min + a dep test failure would fail CI for a
+      // reason unrelated to this project. (Vitest's default exclude already
+      // covers node_modules, but the explicit `include` globs here override
+      // discovery — so the exclude must be re-stated explicitly.)
+      '**/node_modules/**',
+      '**/dist/**',
+      '**/.next/**',
       'packages/simulation/test/design-promise-bot.test.ts',
       // DR-1 long-timeframe runner (P12-C follow-up): 1-day steps × multi-year
       // is infeasible inline — the engine runs at ~1-2s/tick at 1-day steps (the

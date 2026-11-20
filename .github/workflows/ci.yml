@@ -80,7 +80,7 @@ jobs:
   e2e:
     name: e2e (Playwright)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -103,8 +103,26 @@ jobs:
       # P13-C (GAP-37): all three engines — chromium, firefox, webkit — so the
       # smoke suite runs cross-browser (one matrix entry per project in
       # playwright.config.ts; a per-browser failure surfaces distinctly).
-      - name: Install Playwright browsers
+      #
+      # Cache the browser binaries (~/.cache/ms-playwright, ~150MB × 3 engines)
+      # keyed on the lockfile — the single biggest e2e cost after the dep
+      # install. On a cache HIT the binaries restore in seconds + we only re-
+      # install the system libs (`playwright install-deps`); on a MISS we
+      # download + install everything (`--with-deps`).
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Install Playwright browsers + system deps
+        if: steps.pw-cache.outputs.cache-hit != 'true'
         run: pnpm --filter web exec playwright install --with-deps chromium firefox webkit
+
+      - name: Install Playwright system deps only (browsers cache hit)
+        if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: pnpm --filter web exec playwright install-deps chromium firefox webkit
 
       - name: Run e2e smoke suite
         run: pnpm --filter web test:e2e
