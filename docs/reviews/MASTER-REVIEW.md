@@ -309,8 +309,18 @@ Per RV7's P11/P12/P13 phasing. Titles and one-paragraph scope only; full prompts
 > - **11–12 (P13-A/B): UNCHANGED.** Large features.
 > - **13 (P13-C productization): IN FLIGHT.** CSP headers (W30) + perf gate
 >   (W29) + cross-browser E2E (GAP-37) done; Zod 4 (DR-7) + i18n scaffold +
->   audio/art remain. (Note: a GAP-37 commit was authored then lost to a sandbox
->   reset — needs reapplication.)
+>   audio/art remain. (GAP-37 re-verified: the `b9db3c8` commit — firefox +
+>   webkit projects in `apps/web/playwright.config.ts` + the CI step that
+>   `playwright install --with-deps chromium firefox webkit` then runs
+>   `test:e2e` (executing all three projects) — IS in HEAD's history
+>   (`git merge-base --is-ancestor b9db3c8 HEAD` = 0); the earlier "lost to a
+>   sandbox reset — needs reapplication" note was stale. Local firefox/webkit
+>   execution isn't possible in this sandbox — the browser binaries downloaded
+>   but `validateDependenciesLinux` fails on missing system libs (libgraphene,
+>   libgst, libmanette, libenchant-2, libGLESv2, …) + there's no passwordless
+>   sudo to apt-install them; CI's `--with-deps` provisions them on the runner.
+>   The smoke spec uses only standard `getByTestId`/`click`/`fill`/`reload` APIs
+>   — no browser-specific code — so it's expected to pass on all three.)
 > - **14 (P13-D): REVISED.** Multiplayer removed (DR-2); monetization scoped
 >   cosmetic-only (DR-3). Remaining P13-D work is cosmetic-content plumbing.
 > - **NEW prompts added by the decisions:** DR-6 (RNG fork versioning +
