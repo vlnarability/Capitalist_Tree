@@ -44,7 +44,7 @@ import {
 import {
   applyHighlandModifier,
   findClimateById,
-  findTransitionMatrix,
+  findOrDeriveTransitionMatrix,
   WEATHER_EVENT_MAP,
 } from '@capitalist-tree/content';
 import type { System, SystemContext, SystemResult } from './system.js';
@@ -103,15 +103,18 @@ export const weatherSystem: System = {
       // Defensive — content package should always ship the default climate.
       return { state: next, events };
     }
-    // GAP-17 (DR-11) Phase 4: apply the highland elevation modifier (lapse
-    // rate 6.5 °C/km) when > 0 — a highland game is colder at altitude. The
-    // modifier returns a new ClimateZone (base untouched) with shifted
-    // seasonalBaseTemp + bumped frostRisk; the shifted temps feed
-    // computeLocalTemperature → the temperature→growth curve. (The transition
-    // matrix stays per-base-zone — runtime frost-risk re-derivation is Phase 5.)
+    // GAP-17 (DR-11) Phase 4 + Phase 5: apply the highland elevation modifier
+    // (lapse rate 6.5 °C/km) when > 0 — a highland game is colder at altitude.
+    // The modifier returns a new ClimateZone (base untouched) with shifted
+    // seasonalBaseTemp + bumped frostRisk. Phase 4: the shifted temps feed
+    // computeLocalTemperature → the temperature→growth curve. Phase 5: the
+    // bumped frostRisk re-derives the transition matrix at runtime
+    // (findOrDeriveTransitionMatrix derives + memoizes for koppenClass 'H') →
+    // MORE frost/snow events at altitude, not just colder temps. The base-zone
+    // matrix (non-highland) still uses the pre-built catalog (unchanged).
     const elevationM = next.world.elevationM ?? 0;
     const climate = elevationM > 0 ? applyHighlandModifier(baseClimate, elevationM) : baseClimate;
-    const matrix = findTransitionMatrix(climateId, next.clock.season);
+    const matrix = findOrDeriveTransitionMatrix(climate, next.clock.season);
     if (!matrix) {
       return { state: next, events };
     }

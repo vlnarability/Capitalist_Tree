@@ -88,6 +88,17 @@ describe('ClimatePicker — climate + species selection', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(onSubmit).not.toHaveBeenCalled();
   });
+
+  it('shows a climate-suitability fit badge on each species card (the right-tree lever)', () => {
+    const { getByTestId } = setup();
+    // Default: white oak in warm-Dfb temperate (native + good temp fit) → fit > 60%.
+    const fitBadge = getByTestId('species-fit-species:white-oak');
+    expect(fitBadge.textContent).toMatch(/fit \d+%/);
+    const pct = parseInt(fitBadge.textContent!.match(/(\d+)%/)![1]!, 10);
+    expect(pct).toBeGreaterThan(60);
+    // The footer summary also carries the fit percentage.
+    expect(getByTestId('climate-picker-footer-summary').textContent).toMatch(/fit \d+%/);
+  });
 });
 
 describe('ClimatePicker — EF (no trees) is unplayable', () => {

@@ -5,7 +5,9 @@ import {
   DATE_PALM,
   DAHURIAN_LARCH,
   WHITE_OAK,
+  applyHighlandModifier,
   findClimateById,
+  findOrDeriveTransitionMatrix,
   findTransitionMatrix,
 } from '@capitalist-tree/content';
 import { SECONDS_PER_DAY } from '../src/systems/time-system.js';
@@ -196,5 +198,55 @@ describe('GAP-17 Phase 4 — highland elevation modifier (lapse rate)', () => {
     const aAfter = engine.advance(a, 3 * SECONDS_PER_DAY).state;
     const bAfter = engine.advance(b, 3 * SECONDS_PER_DAY).state;
     expect(bAfter.world.weather.temperature).toBe(aAfter.world.weather.temperature);
+  });
+});
+
+describe('GAP-17 Phase 5 — runtime frost-risk re-derivation at altitude', () => {
+  it('findOrDeriveTransitionMatrix returns the pre-built matrix for non-highland climates', () => {
+    const cfb = findClimateById('climate:cfb')!;
+    // Cfb (koppenClass 'C', not highland) → the pre-built catalog matrix.
+    expect(findOrDeriveTransitionMatrix(cfb, 'winter')).toBe(findTransitionMatrix('climate:cfb', 'winter'));
+  });
+
+  it('highland Cfb at 1000m bumps frostRisk occasional→regular-winter → winter matrix has higher frost probability', () => {
+    const cfb = findClimateById('climate:cfb')!;
+    expect(cfb.frostRisk).toBe('occasional');
+    // 1000m × 6.5 °C/km = 6.5 °C drop → winter 5 − 6.5 = −1.5 °C (< 0) → bump.
+    const high = applyHighlandModifier(cfb, 1000);
+    expect(high.koppenClass).toBe('H');
+    expect(high.frostRisk).toBe('regular-winter'); // bumped from 'occasional'
+    const seaMatrix = findOrDeriveTransitionMatrix(cfb, 'winter')!;
+    const highMatrix = findOrDeriveTransitionMatrix(high, 'winter')!;
+    // The bumped frostRisk adds +0.20 frost bias in non-summer seasons → every
+    // from-row's frost transition probability is higher at altitude.
+    for (const from of ['sunny', 'cloudy', 'rain'] as const) {
+      expect(highMatrix.transitions[from]!['frost']!).toBeGreaterThan(
+        seaMatrix.transitions[from]!['frost']!,
+      );
+    }
+  });
+
+  it('a derived climate already at regular-winter (Bsk) does NOT gain frost events when bumped to severe (both tiers add +0.20)', () => {
+    const bsk = findClimateById('climate:bsk')!;
+    expect(bsk.frostRisk).toBe('regular-winter');
+    // 1000m × 6.5 = 6.5 °C drop → winter −4 − 6.5 = −10.5 °C (< 0) → bump.
+    const high = applyHighlandModifier(bsk, 1000);
+    expect(high.frostRisk).toBe('severe'); // bumped from 'regular-winter'
+    // Both 'regular-winter' + 'severe' add the same +0.20 frost bias (biasesFor
+    // line 234) → the derived matrix is identical. At altitude the TEMPERATURE
+    // drops (Phase 4) but the frost EVENT frequency doesn't increase for a zone
+    // already at regular-winter. (The matrix differs from the raw BASE_BY_SEASON
+    // only for the hand-tuned climate:temperate, which is a separate case.)
+    const seaMatrix = findOrDeriveTransitionMatrix(bsk, 'winter')!;
+    const highMatrix = findOrDeriveTransitionMatrix(high, 'winter')!;
+    expect(highMatrix.transitions['sunny']!['frost']!).toBe(seaMatrix.transitions['sunny']!['frost']!);
+  });
+
+  it('the highland-derived matrix is memoized (same climate+season → same reference)', () => {
+    const cfb = findClimateById('climate:cfb')!;
+    const high = applyHighlandModifier(cfb, 1000);
+    const a = findOrDeriveTransitionMatrix(high, 'winter');
+    const b = findOrDeriveTransitionMatrix(high, 'winter');
+    expect(a).toBe(b);
   });
 });

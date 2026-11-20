@@ -44,7 +44,7 @@ import {
   HIGHLAND_LAPSE_RATE_C_PER_KM,
 } from '@capitalist-tree/content';
 import type { ClimateBaseline, TreeSpecies } from '@capitalist-tree/shared';
-import { DEFAULT_GAME_CONFIG } from '@capitalist-tree/simulation';
+import { DEFAULT_GAME_CONFIG, computeSpeciesClimateSuitability } from '@capitalist-tree/simulation';
 import { Button } from './Button';
 
 // ----------------------------------------------------------------------------
@@ -166,15 +166,22 @@ function SpeciesCard({
   selected,
   survives,
   showSurvival,
+  suitability,
   onSelect,
 }: {
   species: TreeSpecies;
   selected: boolean;
   survives: boolean;
   showSurvival: boolean;
+  /** GAP-17 Phase 5: 0-1 climate-suitability score (the "right tree" lever). */
+  suitability: number;
   onSelect: () => void;
 }): ReactElement {
   const r = species.temperatureRange;
+  const fitPct = Math.round(suitability * 100);
+  // The fit badge colour signals the lever: green ≥ 0.7, amber 0.4–0.7, rose < 0.4.
+  const fitTone =
+    suitability >= 0.7 ? 'text-emerald-300' : suitability >= 0.4 ? 'text-amber-300' : 'text-rose-300';
   return (
     <button
       type="button"
@@ -190,8 +197,11 @@ function SpeciesCard({
     >
       <span className="flex items-center gap-1.5">
         <span className="text-sm font-medium text-slate-100">{species.name}</span>
+        <span className={`ml-auto text-xs tabular-nums ${fitTone}`} data-testid={`species-fit-${species.id}`}>
+          fit {fitPct}%
+        </span>
         {showSurvival ? (
-          <span className={`ml-auto text-xs ${survives ? 'text-emerald-300' : 'text-rose-300'}`}>
+          <span className={`text-xs ${survives ? 'text-emerald-300' : 'text-rose-300'}`}>
             {survives ? '✓ survives' : '✗ won’t survive'}
           </span>
         ) : null}
@@ -419,6 +429,7 @@ export function ClimatePicker({ open, onClose, onSubmit }: ClimatePickerProps): 
                       selected={s.id === speciesId}
                       survives={speciesSurvives(s, effectiveClimate)}
                       showSurvival={highlandEnabled && elevationM > 0}
+                      suitability={computeSpeciesClimateSuitability(s, effectiveClimate)}
                       onSelect={() => setSpeciesId(s.id)}
                     />
                   ))}
@@ -465,9 +476,9 @@ export function ClimatePicker({ open, onClose, onSubmit }: ClimatePickerProps): 
 
         {/* Footer. */}
         <footer className="mt-4 flex items-center justify-between gap-2 border-t border-slate-800 pt-3">
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-slate-500" data-testid="climate-picker-footer-summary">
             {selectedSpecies
-              ? `Starting: ${selectedClimate.koppenCode} — ${selectedSpecies.name}`
+              ? `Starting: ${selectedClimate.koppenCode} — ${selectedSpecies.name} · fit ${Math.round(computeSpeciesClimateSuitability(selectedSpecies, effectiveClimate) * 100)}%`
               : 'Select a climate + species to start.'}
           </p>
           <div className="flex gap-2">

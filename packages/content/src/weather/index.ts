@@ -24,4 +24,5 @@ export { applyHighlandModifier, HIGHLAND_LAPSE_RATE_C_PER_KM } from './highland.
 export {
   ALL_TRANSITION_MATRICES,
   findTransitionMatrix,
+  findOrDeriveTransitionMatrix,
 } from './transition-matrices.js';

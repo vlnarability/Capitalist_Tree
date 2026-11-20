@@ -425,11 +425,49 @@ hostile one shows stress.
     in submit payload, survival badges) + the highland lapse-rate sim tests in
     `climate-effect-wiring.test.ts` (3 tests — elevationM stamped, ~13 °C
     colder at 2000 m, elevationM 0 identical to sea level).
-- **Phase 5 — highland + cross-zone dynamics** (optional / later). Runtime
-  frost-risk re-derivation of the transition matrix at altitude (more frost/snow
-  events, not just colder temps); the H modifier interacting with the lapse
-  rate across a full elevation gradient; per-species climate-suitability scoring
-  for the "right tree for the right climate" as a gameplay lever.
+- **Phase 5 — highland + cross-zone dynamics (DONE).**
+  - **Runtime frost-risk re-derivation at altitude (DONE).** The WeatherSystem
+    now passes the EFFECTIVE climate (base, or base + `applyHighlandModifier`
+    when `elevationM > 0`) to a new memoized `findOrDeriveTransitionMatrix`
+    (`packages/content/src/weather/transition-matrices.ts`). For non-highland
+    climates it returns the pre-built catalog matrix (unchanged); for
+    highland-modified climates (koppenClass 'H') it derives the matrix at runtime
+    via `deriveMatrix` — the bumped `frostRisk` adds frost/snow bias in
+    non-summer seasons → MORE frost/snow events at altitude, not just colder
+    temps. This closes the Phase-3 deferred gap where the matrix stayed
+    per-base-zone at runtime. Memoized by (id, frostRisk, season). Note: the bump
+    only adds events when it crosses `'occasional'` → `'regular-winter'` (both
+    `'regular-winter'` + `'severe'` add the same +0.20 frost bias in
+    `biasesFor`, so a zone already at `'regular-winter'` gains colder temps but
+    not more frost events — e.g. Cfb at 1000m gains frost, Bsk at 1000m doesn't).
+  - **H modifier × lapse rate across an elevation gradient (DONE in Phase 4).**
+    The lapse rate (6.5 °C/km) is wired into the WeatherSystem
+    (`applyHighlandModifier` when `elevationM > 0`) + the picker's live preview
+    shows the zone-shift (a Cfb at 2000m ≈ a subarctic climate) with per-species
+    survival badges. Phase 5 adds the frost-event re-derivation on top.
+  - **Per-species climate-suitability scoring (DONE — decision lever).**
+    `computeSpeciesClimateSuitability(species, climate)` → 0-1
+    (`packages/simulation/src/biology/suitability.ts`): `0.4 × nativeFit + 0.6 ×
+    tempFit`, where nativeFit is 1 iff the climate's `koppenCode` ∈ the species'
+    `nativeKoppenCodes`, + tempFit is the average `temperatureFactor` over the
+    species' active seasons (deciduous excludes winter; evergreen includes it).
+    Displayed in the picker as a per-species "fit X%" badge (green ≥ 70%, amber
+    40-70%, rose < 40%) + in the footer summary — the "right tree for the right
+    climate" as a DECISION lever. The score differentiates within a climate's
+    native set (e.g. White Oak vs Eastern Hemlock in Dfb).
+  - **Growth-multiplier application (deferred).** Applying the score as a growth
+    multiplier is deferred: the `tempFit` component overlaps the per-tick
+    `temperatureFactor` (which already drives the growth curve), + the
+    `nativeFit` component is flat for all *planted* species (the picker filters
+    to native), so a multiplier would be largely redundant with the existing
+    trait-driven mechanics. A future "plant a non-native / imported species"
+    feature would make the native-bonus lever meaningful.
+  - Tests: 4 matrix re-derivation tests (climate-effect-wiring.test.ts — Cfb
+    gains frost at 1000m, Bsk doesn't, non-highland unchanged, memoization) + 7
+    suitability tests (species-suitability.test.ts — bounds, native > non-native,
+    default scores well, deciduous excludes winter, evergreen includes it,
+    highland shifts the score, within-native differentiation) + 1 picker fit-badge
+    test.
 
 ## 9. Realism summary
 

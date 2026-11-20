@@ -311,3 +311,44 @@ export function findTransitionMatrix(
 ): WeatherTransitionMatrix | undefined {
   return ALL_TRANSITION_MATRICES[climateId]?.[season];
 }
+
+// Module-level cache for highland-derived matrices (koppenClass === 'H'). Keyed
+// by (climateId, frostRisk, season) — the matrix depends only on the Köppen code
+// (preserved from the base by `applyHighlandModifier`), the bumped frostRisk, +
+// the season. The cache is deterministic (same inputs → same matrix) + unbounded
+// only across (id × frostRisk-tier × season) — a small fixed space.
+const highlandMatrixCache = new Map<string, WeatherTransitionMatrix>();
+
+/**
+ * GAP-17 (DR-11) Phase 5: look up OR derive the transition matrix for a
+ * (possibly highland-modified) climate.
+ *
+ * - Non-highland climates (koppenClass !== 'H') use the pre-built catalog
+ *   (`findTransitionMatrix`) — the hand-tuned temperate base + the derived
+ *   Köppen matrices built at module load. Unchanged behaviour.
+ * - Highland-modified climates (koppenClass === 'H', produced by
+ *   `applyHighlandModifier`) carry a bumped `frostRisk` that isn't in the
+ *   pre-built catalog → derive the matrix at runtime via `deriveMatrix` (the
+ *   bumped frostRisk adds frost/snow bias in non-summer seasons → MORE
+ *   frost/snow events at altitude, not just colder temps) + memoize by
+ *   (id, frostRisk, season). This closes the Phase-3 deferred gap where the
+ *   matrix stayed per-base-zone at runtime.
+ *
+ * Pure aside from the cache (deterministic). The caller passes the EFFECTIVE
+ * climate (base, or base + `applyHighlandModifier` when elevationM > 0).
+ */
+export function findOrDeriveTransitionMatrix(
+  climate: ClimateBaseline,
+  season: Season,
+): WeatherTransitionMatrix | undefined {
+  if (climate.koppenClass !== 'H') {
+    return findTransitionMatrix(climate.id, season);
+  }
+  const key = `${climate.id}|${climate.frostRisk}|${season}`;
+  const cached = highlandMatrixCache.get(key);
+  if (cached) return cached;
+  const derived = deriveMatrix(climate, season);
+  validateMatrix(derived);
+  highlandMatrixCache.set(key, derived);
+  return derived;
+}
