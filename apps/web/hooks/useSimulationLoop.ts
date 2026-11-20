@@ -67,6 +67,12 @@ import {
 } from '../lib/constants';
 import { applyCatchUpOnLoadAsync } from '../lib/persistence/offline-catch-up-async';
 import { SaveQuotaExceededError } from '../lib/persistence/indexed-db-storage';
+// GAP-31 (DR-13): local-only analytics. The collector is initialized once at
+// boot (browser only — null in SSR) + records high-signal SimulationEvents via
+// the game store's event-entry points. No-op until init, so SSR/tests are
+// unaffected (design §4: "the emitter is a no-op if no collector is attached").
+import { initAnalytics, recordAnalyticsEvent } from '../lib/analytics/analytics';
+import { createBrowserAnalyticsStore } from '../lib/analytics/indexed-db-analytics-store';
 
 // ----------------------------------------------------------------------------
 // Public types.
@@ -147,6 +153,13 @@ export function useSimulationLoop(
 
     async function boot(): Promise<void> {
       store.setEngineStatus('booting');
+      // GAP-31 (DR-13): install the analytics collector backed by a SEPARATE
+      // IndexedDB database (`capitalist-tree-analytics`) so analytics storage
+      // can never risk the save blob. Null in SSR (no IndexedDB) — analytics
+      // stays a no-op there. Idempotent: re-running in StrictMode just re-creates
+      // the collector (the old one's pending flush drains harmlessly).
+      const analyticsStore = createBrowserAnalyticsStore();
+      if (analyticsStore) initAnalytics(analyticsStore);
       // P11 (W21 / RV5-F4): concurrent-tab protection. Acquire an exclusive
       // Web Lock so two tabs don't both run the simulation + clobber each
       // other's saves. If the lock is unavailable (another tab holds it),
@@ -195,9 +208,21 @@ export function useSimulationLoop(
       if (s) {
         try {
           state = await s.load();
+          if (state) {
+            // GAP-31: record the save-load (out-of-sim gameplay event). The
+            // in-sim time is stamped from the loaded state below via
+            // commitSimState → setAnalyticsSimTime.
+            recordAnalyticsEvent('save-loaded', 'gameplay', {
+              saveId: state.metadata.saveId,
+            });
+          }
         } catch (err) {
           // Don't crash the page — fall through to a fresh initialize.
           console.warn('useSimulationLoop: storage.load() failed, initializing fresh game:', err);
+          // GAP-31: record the load failure (error category — high-signal, rare).
+          recordAnalyticsEvent('save-load-failed', 'error', {
+            message: err instanceof Error ? err.message : String(err),
+          });
           state = null;
         }
       }

@@ -95,6 +95,9 @@ import {
 } from '../lib/constants';
 import type { UiAction } from '../lib/actions';
 import { simulationEventsToNotifications } from '../lib/format/event-to-notification';
+// GAP-31 (DR-13): bridge high-signal SimulationEvents to local-only analytics
+// (separate IndexedDB; no-op until the boot hook initializes the collector).
+import { recordSimEvents, setAnalyticsSimTime } from '../lib/analytics/analytics';
 
 // ----------------------------------------------------------------------------
 // Public types.
@@ -435,6 +438,10 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
     for (const n of notes) {
       get().pushNotification(n);
     }
+    // GAP-31 (DR-13): bridge high-signal events to local-only analytics + keep
+    // the collector's sim-time stamp in sync. No-op until boot initializes it.
+    setAnalyticsSimTime(result.state.clock.elapsedSeconds);
+    recordSimEvents(result.events);
     return result.events;
   },
 
@@ -464,6 +471,10 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
     for (const n of notes) {
       get().pushNotification(n);
     }
+    // GAP-31 (DR-13): bridge high-signal events to local-only analytics + keep
+    // the collector's sim-time stamp in sync. No-op until boot initializes it.
+    setAnalyticsSimTime(state.clock.elapsedSeconds);
+    recordSimEvents(events ?? []);
     // GAP-36: surface an ending when an objective newly completes. Don't
     // clobber an already-pending ending (if two complete in one tick, the
     // second stays recorded in `completed` + shows on the ObjectivesPanel).

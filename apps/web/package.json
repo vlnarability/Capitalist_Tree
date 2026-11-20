@@ -12,6 +12,7 @@
     "test:e2e": "playwright test --config=playwright.config.ts"
   },
   "dependencies": {
+    "@capitalist-tree/analytics": "workspace:*",
     "@capitalist-tree/content": "workspace:*",
     "@capitalist-tree/rendering": "workspace:*",
     "@capitalist-tree/shared": "workspace:*",
