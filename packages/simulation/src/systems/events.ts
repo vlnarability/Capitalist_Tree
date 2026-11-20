@@ -106,7 +106,6 @@
  */
 import type { GameState, SimulationEvent } from '@capitalist-tree/shared';
 import type { System, SystemContext, SystemResult } from './system.js';
-import { deepCopy } from '../deep-copy.js';
 import {
   processScheduledEvents,
   evolveRegions,

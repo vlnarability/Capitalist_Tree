@@ -34,7 +34,6 @@ import {
   useRef,
   useState,
   type ChangeEvent,
-  type KeyboardEvent,
   type ReactElement,
 } from 'react';
 import {
@@ -62,8 +61,6 @@ const CLASS_LABEL: Readonly<Record<KoppenClass, string>> = Object.freeze({
   D: 'Continental',
   E: 'Polar',
 });
-
-const SEASONS = ['spring', 'summer', 'autumn', 'winter'] as const;
 
 /** Group the climate catalog by Köppen class, in display order. Pure. */
 function groupByClass(

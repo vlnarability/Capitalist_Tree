@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import { engine } from '../src/index.js';
 import { DEFAULT_GAME_CONFIG } from '../src/initial-state.js';
 import {
-  DATE_PALM,
   DAHURIAN_LARCH,
   WHITE_OAK,
   applyHighlandModifier,

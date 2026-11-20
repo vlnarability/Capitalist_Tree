@@ -50,7 +50,7 @@ describe('WelcomePanel (GAP-33)', () => {
   });
 
   it('Escape dismisses the modal + persists', () => {
-    const { getByTestId, queryByTestId } = render(<WelcomePanel />);
+    const { queryByTestId } = render(<WelcomePanel />);
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(queryByTestId('welcome-panel')).toBeNull();
     expect(localStorage.getItem(WELCOME_KEY)).toBe('1');

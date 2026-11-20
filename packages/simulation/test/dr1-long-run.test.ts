@@ -38,7 +38,6 @@ const RECOVERY_EXPLOIT_DAYS = 2 * 365;
 // (structuredClone + the full 12-system pipeline per day), so 25yr/100yr need
 // an overnight/detached runner — the 5yr window still verifies the DR-1
 // collapse ≥2yr + recovery ≥1yr targets + financial independence ≤60d.
-const YR = 365;
 // Timeframes in days. The engine runs at ~80-100ms/tick at 1-day steps (cost
 // grows with state size), so 25yr/100yr are infeasible inline (need an
 // overnight/detached runner). 1yr covers the DR-1 collapse ≥2yr lower bound

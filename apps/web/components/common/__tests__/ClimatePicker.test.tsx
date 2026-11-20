@@ -17,7 +17,7 @@
  */
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { cleanup, render, fireEvent, within } from '@testing-library/react';
+import { cleanup, render, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { ClimatePicker, type ClimatePickerSelection } from '../ClimatePicker';
 

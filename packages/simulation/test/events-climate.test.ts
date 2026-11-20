@@ -28,8 +28,6 @@ function cfg(seed: number): GameConfig {
 function freshState(seed = 42): GameState {
   return seedDefaultRegions(engine.initialize(cfg(seed)));
 }
-const STEP = 60; // PROVISIONAL_SIMULATION_STEP_SECONDS
-
 describe('P10c climate feedback — applyClimateFeedback', () => {
   it('drifts regional temperature baselines toward an elevated global temperature (P7↔P10 bridge)', () => {
     const base = freshState();

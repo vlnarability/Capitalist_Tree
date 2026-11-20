@@ -23,7 +23,6 @@ import {
   PROVISIONAL_WEATHER_DAMAGE_SEVERITY_SCALE,
 } from '@capitalist-tree/shared';
 
-const STEP = 60; // PROVISIONAL_SIMULATION_STEP_SECONDS
 const SECONDS_PER_DAY = 24 * 60 * 60;
 
 /**

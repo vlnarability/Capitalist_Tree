@@ -13,14 +13,13 @@ import { describe, it, expect } from 'vitest';
 import { engine } from '../src/index.js';
 import { DEFAULT_GAME_CONFIG } from '../src/initial-state.js';
 import { seedDefaultRegions } from '../src/events/regional.js';
-import { evaluateObjectives } from '../src/events/objectives.js';
 import {
   applyCarbonTax,
   applyPlayerEnvironmentalImpact,
 } from '../src/environment/player-impact.js';
-import { PLAYER_HOME_REGION_ID, PROVISIONAL_SIMULATION_STEP_SECONDS as STEP } from '@capitalist-tree/shared';
+import { PLAYER_HOME_REGION_ID } from '@capitalist-tree/shared';
 import { createBusinessFromDefinition } from '../src/business/actions.js';
-import { WATER_EXTRACTION_PLANT, FARM } from '@capitalist-tree/content';
+import { WATER_EXTRACTION_PLANT } from '@capitalist-tree/content';
 import type { GameState, GameConfig } from '@capitalist-tree/shared';
 import { registerAccount } from '../src/economy/ledger.js';
 

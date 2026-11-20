@@ -48,6 +48,17 @@ export default tseslint.config(
     },
   },
   {
+    // Test files routinely use `any` for mocks/stubs — typing every mock
+    // fully is high-friction + low-value (the types under test are already
+    // checked in the src files). Relax `no-explicit-any` for tests so the
+    // lint signal stays meaningful (unused vars, real type errors) instead
+    // of drowning in mock `any` noise. Src files keep the strict `warn`.
+    files: ['**/*.test.ts', '**/*.test.tsx', '**/test/**/*', '**/tests/**/*'],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
+    },
+  },
+  {
     // P4d: Import-boundary enforcement for the three core packages.
     //
     // Per TDD §3 (import boundary) + rule 6 (rendering reads state, never
