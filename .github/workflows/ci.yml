@@ -13,9 +13,11 @@
 # needs a browser; it is split out so a browser install doesn't slow the
 # core feedback loop.
 #
-# Matrix: Node 20 (LTS) on ubuntu-latest. The engine + package.json declare
+# Matrix: Node 22 (LTS) on ubuntu-latest. The engine + package.json declare
 # `engines.node >= 20`; pnpm 12.18.0 is pinned via `packageManager` and read
-# from there by pnpm/action-setup (no separate version field needed).
+# from there by pnpm/action-setup (no separate version field needed). Bumped
+# from Node 20 (EOL on GitHub Actions runners — the deprecation notice forced
+# the actions to Node 24 while the job stayed on 20, a confusing split).
 
 name: CI
 
@@ -51,10 +53,10 @@ jobs:
         uses: pnpm/action-setup@v4
         # version is read from package.json `packageManager`
 
-      - name: Setup Node 20 (with pnpm store cache)
+      - name: Setup Node 22 (with pnpm store cache)
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
 
       - name: Install (frozen lockfile)
@@ -86,10 +88,10 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
-      - name: Setup Node 20 (with pnpm store cache)
+      - name: Setup Node 22 (with pnpm store cache)
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
 
       - name: Install (frozen lockfile)
