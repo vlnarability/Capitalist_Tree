@@ -105,6 +105,10 @@ import { OfflineModal, CatchUpProgressBar } from '../components/offline';
 // GAP-31 Phase 3: dev-only observability panel (design §5). Gated on IS_DEV so
 // it is never rendered in a production build.
 import { AnalyticsPanel } from '../components/dev/AnalyticsPanel';
+// GAP-28 Pack 1 (DR-3 cosmetic-only): particle flourishes overlay — leaf-fall
+// on harvest, coin-shower on a large harvest, confetti on ending. Fixed,
+// pointer-events-none, reduced-motion-gated. Pure cosmetic (no sim effect).
+import { ParticleFlourishes } from '../components/cosmetics/ParticleFlourishes';
 import { EndingScreen } from '../components/common/EndingScreen';
 import { WelcomePanel } from '../components/common/WelcomePanel';
 
@@ -462,6 +466,11 @@ export default function HomePage(): ReactElement {
           </Panel>
         </div>
       ) : null}
+      {/* GAP-28 Pack 1 (DR-3 cosmetic-only): particle flourishes overlay.
+          Fixed full-screen canvas, pointer-events-none, z-[55] (above the tree
+          + panels, below the dev analytics panel). Reduced-motion-gated inside.
+          No-op until a harvest / ending fires; never affects the sim. */}
+      <ParticleFlourishes />
       {/* GAP-31 Phase 3: dev-only analytics observability panel (design §5).
           The toggle button + panel are NOT rendered in production builds —
           `process.env.NODE_ENV` is inlined at build time, so this branch is
