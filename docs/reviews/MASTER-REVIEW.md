@@ -302,7 +302,7 @@ Per RV7's P11/P12/P13 phasing. Titles and one-paragraph scope only; full prompts
 >   (extractive-vs-sustainable-vs-balanced at 5/25/100yr) + verifying the other
 >   DR-1 targets (financial independence ≤60d, ecological collapse ≥2yr under
 >   sustained exploitation, ecological recovery ≥1yr).
-> - **10 (P12-D soil depth + analytics + CI/CD): PARTIAL.** CI/CD (GAP-32)
+> - **10 (P12-D soil depth + analytics + CI/CD): DONE.** CI/CD (GAP-32)
 >   done; soil depth (GAP-20) done (9016f53 — pH/compaction/microbial promoted
 >   from P2 stubs into modeled dynamics, feeding soil health); analytics
 >   (GAP-31) Phase 1 DONE (0e7781d — local-only, on-device per DR-13: new
@@ -328,9 +328,21 @@ Per RV7's P11/P12/P13 phasing. Titles and one-paragraph scope only; full prompts
 >   + FPS]; `ErrorBoundary.componentDidCatch` → `recordAnalyticsEvent('error-caught')`;
 >   `initAnalytics` resets the cadence + `resetAnalytics()` for test isolation.
 >   +21 tests [3 retention, 6 sim-summary, 5 perf-sampler, 4 analytics-singleton,
->   3 ErrorBoundary]; full suite 101 files / 1852 tests. Phase 3 [observability
->   panel: counts, recent events, summaries, error history, storage usage, JSON
->   export, clear/reset] remains).
+>   3 ErrorBoundary]; full suite 101 files / 1852 tests. Phase 3 DONE (916464a —
+>   observability panel + read API: `getAnalyticsStore` / `queryAnalyticsEvents` /
+>   `countAnalyticsByCategory` / `clearAnalytics` / `exportAnalyticsJson` [no-op +
+>   never throw when no store]; `AnalyticsPanel` in `apps/web/components/dev/` —
+>   modal overlay with the 8 design-§5 sections [counts by category, recent
+>   gameplay, sim-summary latest + chronological trend, tick perf latest/avg/max +
+>   FPS, error history, IndexedDB storage usage via `navigator.storage.estimate`,
+>   Export JSON [client-side Blob download], Clear history [confirm-gated, wipes
+>   ONLY analytics never the save blob]; auto-refresh 5s; never touches simState];
+>   mounted in `page.tsx` behind a 📊 toggle gated on `process.env.NODE_ENV !==
+>   'production'` [tree-shaken from production]; store `query` sort tiebreaker
+>   [timestamp desc + insertion-order/seq desc] so 'most-recent first' is correct
+>   for same-ms emits. +15 tests [7 read-api + 8 AnalyticsPanel]; full suite 103
+>   files / 1867 tests. GAP-31 Phases 1-3 COMPLETE; Phase 4 [deferred external
+>   adapter] only if a future commercial-release decision requires it).
 > - **11 (P13-A): DONE.** Environmental indicators + markets + org-type
 >   incentives (GAP-21, GAP-22, GAP-23) implemented in `bf8d5f4`. GAP-21
 >   (environmental indicators): the four long-horizon indicators — `airQuality`,
