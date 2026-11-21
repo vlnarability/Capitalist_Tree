@@ -395,8 +395,12 @@ Per RV7's P11/P12/P13 phasing. Titles and one-paragraph scope only; full prompts
 >   remain display-only levers (future: hook into the authority's issuance
 >   cadence) — noted as follow-up.
 > - **13 (P13-C productization): IN FLIGHT.** CSP headers (W30) + perf gate
->   (W29) + cross-browser E2E (GAP-37) done; Zod 4 (DR-7) + i18n scaffold +
->   audio/art remain. (GAP-37 re-verified: the `b9db3c8` commit — firefox +
+>   (W29) + cross-browser E2E (GAP-37) done; Zod 4 (DR-7) verified effectively
+>   done (zod is at `^4.6.7` across packages/shared/simulation/analytics with
+>   zero breaking-pattern usage — no `z.preprocess`/`.brand`/`z.coerce`/error-map/
+>   `required_error`/`invalid_type_error` — + the full 1884-test suite passes on
+>   Zod 4; the earlier "in flight" label was stale); i18n scaffold + audio/art
+>   remain. (GAP-37 re-verified: the `b9db3c8` commit — firefox +
 >   webkit projects in `apps/web/playwright.config.ts` + the CI step that
 >   `playwright install --with-deps chromium firefox webkit` then runs
 >   `test:e2e` (executing all three projects) — IS in HEAD's history
@@ -427,7 +431,13 @@ Per RV7's P11/P12/P13 phasing. Titles and one-paragraph scope only; full prompts
 >   Node 20 CI) + the CI Node 20→22 bump below. Local firefox/webkit still can't
 >   run here (missing system libs) — CI's `--with-deps` provisions them.
 > - **14 (P13-D): REVISED.** Multiplayer removed (DR-2); monetization scoped
->   cosmetic-only (DR-3). Remaining P13-D work is cosmetic-content plumbing.
+>   cosmetic-only (DR-3). GAP-28 Pack 1 DONE (1b7a0d1 — particle flourishes
+>   overlay: leaf-fall on harvest, coin-shower on a large harvest, confetti on
+>   ending; pure canvas/CSS, asset-free, reduced-motion-gated; pure
+>   particle-bursts.ts logic + ParticleFlourishes.tsx mounted in page.tsx;
+>   +17 tests; full suite 104 files / 1884 tests). Remaining P13-D work is
+>   further cosmetic-content packs (tree skins, UI themes, currency cosmetics,
+>   ambient particles) per the GAP-28-cosmetics.md list.
 > - **NEW prompts added by the decisions:** DR-6 (RNG fork versioning +
 >   migration), DR-7 (Zod 4 upgrade — now), DR-9 (regression test harness for
 >   RV3-2 + RV4-F-H2).
