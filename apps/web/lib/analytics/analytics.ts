@@ -12,11 +12,17 @@
  * `setAnalyticsSimTime` in `dispatch` / `commitSimState` (the two event-entry
  * points). Out-of-sim events (save-loaded, load errors) call `recordAnalyticsEvent`
  * directly.
+ *
+ * Phase 3: a read-only query API (`queryAnalyticsEvents`, `countAnalyticsByCategory`,
+ * `clearAnalytics`, `exportAnalyticsJson`) backs the observability panel (design §5).
+ * The panel reads the store through these; it never touches `simState` (rule 6).
  */
 import {
   createCollector,
   type AnalyticsCollector,
+  type AnalyticsEvent,
   type AnalyticsEventCategory,
+  type AnalyticsQuery,
   type AnalyticsStore,
 } from '@capitalist-tree/analytics';
 import type { GameState, SimulationEvent } from '@capitalist-tree/shared';
@@ -24,6 +30,9 @@ import { mapSimulationEventToAnalytics } from './bridge.js';
 import { extractSimSummary, isSimSummaryDue } from './sim-summary.js';
 
 let collector: AnalyticsCollector | null = null;
+// The backing store, retained so the observability panel (Phase 3) can query /
+// clear / export without reaching into the collector's closure.
+let analyticsStore: AnalyticsStore | null = null;
 
 /**
  * Create + install the collector backed by `store`. Called once at boot (in the
@@ -33,6 +42,7 @@ let collector: AnalyticsCollector | null = null;
  */
 export function initAnalytics(store: AnalyticsStore): AnalyticsCollector {
   collector = createCollector(store);
+  analyticsStore = store;
   lastSimSummarySeconds = null;
   return collector;
 }
@@ -41,6 +51,7 @@ export function initAnalytics(store: AnalyticsStore): AnalyticsCollector {
  *  StrictMode double-mount hygiene: ensures no state leaks between tests. */
 export function resetAnalytics(): void {
   collector = null;
+  analyticsStore = null;
   lastSimSummarySeconds = null;
 }
 
@@ -122,4 +133,84 @@ export function recordSimSummaryIfDue(state: GameState): boolean {
   recordAnalyticsEvent('sim-summary', 'simulation', extractSimSummary(state));
   lastSimSummarySeconds = elapsed;
   return true;
+}
+
+// ─── Phase 3: read-only query API for the observability panel (design §5) ────
+//
+// The panel reads the store through these. Every function is a no-op (returns
+// empty / zero / null) when no store is installed, + never throws — a storage
+// failure degrades only the panel, not the sim.
+
+/** The backing store (null in SSR / before boot / unit tests). Exposed so the
+ *  panel can call `prune` / `count` directly when needed. */
+export function getAnalyticsStore(): AnalyticsStore | null {
+  return analyticsStore;
+}
+
+/** Query events, most-recent first. Returns `[]` if no store or on failure. */
+export async function queryAnalyticsEvents(
+  q?: AnalyticsQuery,
+): Promise<AnalyticsEvent[]> {
+  if (!analyticsStore) return [];
+  try {
+    return await analyticsStore.query(q);
+  } catch {
+    return [];
+  }
+}
+
+/** Count events per category. Returns zeros if no store. */
+export async function countAnalyticsByCategory(): Promise<
+  Record<AnalyticsEventCategory, number>
+> {
+  const zero = { gameplay: 0, simulation: 0, performance: 0, error: 0 } as Record<
+    AnalyticsEventCategory,
+    number
+  >;
+  if (!analyticsStore) return zero;
+  const safe = async (c: AnalyticsEventCategory): Promise<number> => {
+    try {
+      return await analyticsStore!.count(c);
+    } catch {
+      return 0;
+    }
+  };
+  const [gameplay, simulation, performance, error] = await Promise.all([
+    safe('gameplay'),
+    safe('simulation'),
+    safe('performance'),
+    safe('error'),
+  ]);
+  return { gameplay, simulation, performance, error };
+}
+
+/** Wipe all analytics records (design §7: "never touches the save blob"). */
+export async function clearAnalytics(): Promise<void> {
+  if (!analyticsStore) return;
+  try {
+    await analyticsStore.clear();
+  } catch {
+    // swallow — clearing is best-effort
+  }
+}
+
+/**
+ * Export the full diagnostics dump as a pretty-printed JSON string (design §5:
+ * "Export diagnostics as JSON — a full dump for bug reports / balancing review").
+ * Includes a header with the export timestamp + count, then every event. Returns
+ * `'[]'` if no store or on failure.
+ */
+export async function exportAnalyticsJson(): Promise<string> {
+  if (!analyticsStore) return '[]';
+  try {
+    const events = await analyticsStore.query(); // no limit → all events
+    const dump = {
+      exportedAt: new Date().toISOString(),
+      count: events.length,
+      events,
+    };
+    return JSON.stringify(dump, null, 2);
+  } catch {
+    return '[]';
+  }
 }

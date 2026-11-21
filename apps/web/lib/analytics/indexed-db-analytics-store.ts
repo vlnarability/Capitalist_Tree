@@ -28,6 +28,20 @@ const DB_VERSION = 1;
 const STORE_EVENTS = 'events';
 const DEFAULT_MAX_EVENTS = 5000;
 
+/**
+ * Parse the monotonic seq from an event id (`a-<ts36>-<seq36>`, assigned by the
+ * collector). Used as a tiebreaker when sorting same-timestamp events so the
+ * latest insertion sorts first (mirrors the InMemory store's index tiebreaker).
+ * Returns 0 for any id that doesn't match the expected shape.
+ */
+function seqFromId(id: string): number {
+  const parts = id.split('-');
+  const seq = parts[2];
+  if (seq === undefined) return 0;
+  const n = Number.parseInt(seq, 36);
+  return Number.isNaN(n) ? 0 : n;
+}
+
 let dbPromise: Promise<IDBPDatabase> | null = null;
 
 function getDB(): Promise<IDBPDatabase> {
@@ -74,8 +88,9 @@ export class IndexedDbAnalyticsStore implements AnalyticsStore {
       if (event !== undefined) result = result.filter((e) => e.event === event);
       const since = q?.since;
       if (since !== undefined) result = result.filter((e) => e.timestamp >= since);
-      // most-recent first
-      result.sort((a, b) => b.timestamp - a.timestamp);
+      // most-recent timestamp first; ties broken by the seq encoded in the id
+      // (latest insertion first) — mirrors the InMemory store's index tiebreaker.
+      result.sort((a, b) => b.timestamp - a.timestamp || seqFromId(b.id) - seqFromId(a.id));
       const limit = q?.limit;
       if (limit !== undefined) result = result.slice(0, limit);
       return result;

@@ -59,18 +59,22 @@ export class InMemoryAnalyticsStore implements AnalyticsStore {
   }
 
   async query(q?: AnalyticsQuery): Promise<AnalyticsEvent[]> {
-    let result = this.events.slice();
+    // Pair each event with its insertion index so same-timestamp ties break by
+    // insertion order (latest-inserted first) — "most-recent first" is correct
+    // even when several emits share a millisecond (common in tests / bursts).
+    let result = this.events.map((e, idx) => ({ e, idx }));
     const category = q?.category;
-    if (category !== undefined) result = result.filter((e) => e.category === category);
+    if (category !== undefined) result = result.filter((r) => r.e.category === category);
     const event = q?.event;
-    if (event !== undefined) result = result.filter((e) => e.event === event);
+    if (event !== undefined) result = result.filter((r) => r.e.event === event);
     const since = q?.since;
-    if (since !== undefined) result = result.filter((e) => e.timestamp >= since);
-    // most-recent first
-    result.sort((a, b) => b.timestamp - a.timestamp);
+    if (since !== undefined) result = result.filter((r) => r.e.timestamp >= since);
+    // most-recent timestamp first; ties → latest insertion first.
+    result.sort((a, b) => b.e.timestamp - a.e.timestamp || b.idx - a.idx);
+    const mapped = result.map((r) => r.e);
     const limit = q?.limit;
-    if (limit !== undefined) result = result.slice(0, limit);
-    return result;
+    if (limit !== undefined) return mapped.slice(0, limit);
+    return mapped;
   }
 
   async count(category?: AnalyticsEventCategory): Promise<number> {

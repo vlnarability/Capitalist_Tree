@@ -50,9 +50,10 @@ describe('PerfSampler', () => {
     for (let i = 1; i <= 6; i++) sampler.recordTick(i, 16.67);
     await flushMicrotasks();
     const events = await store.query({ event: 'tick-perf' });
-    // Emits on tick 2, 4, 6 → 3 samples.
+    // Emits on tick 2, 4, 6 → 3 samples, most-recent first (the store's sort
+    // breaks same-timestamp ties by insertion order, latest first).
     expect(events).toHaveLength(3);
-    expect(events.map((e) => (e.data as { tick: number }).tick)).toEqual([2, 4, 6]);
+    expect(events.map((e) => (e.data as { tick: number }).tick)).toEqual([6, 4, 2]);
   });
 
   it('is a no-op when no collector is initialized (resetAnalytics)', async () => {

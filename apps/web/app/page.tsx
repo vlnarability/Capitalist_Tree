@@ -102,6 +102,9 @@ import { ProgressionPanel } from '../components/progression';
 import { EventsPanel } from '../components/events';
 import { PolicyPanel } from '../components/policy';
 import { OfflineModal, CatchUpProgressBar } from '../components/offline';
+// GAP-31 Phase 3: dev-only observability panel (design §5). Gated on IS_DEV so
+// it is never rendered in a production build.
+import { AnalyticsPanel } from '../components/dev/AnalyticsPanel';
 import { EndingScreen } from '../components/common/EndingScreen';
 import { WelcomePanel } from '../components/common/WelcomePanel';
 
@@ -204,6 +207,9 @@ export default function HomePage(): ReactElement {
   // picks a Köppen zone + a native species (+ optional highland elevation),
   // and `onPickerSubmit` routes the selection through `loop.newGame`.
   const [pickerOpen, setPickerOpen] = useState(false);
+  // GAP-31 Phase 3: the analytics observability panel toggle. Dev-only — the
+  // toggle button + panel are not rendered in production builds.
+  const [analyticsOpen, setAnalyticsOpen] = useState(false);
 
   const onNewGame = useCallback(() => {
     setPickerOpen(true);
@@ -455,6 +461,24 @@ export default function HomePage(): ReactElement {
             <PolicyPanel />
           </Panel>
         </div>
+      ) : null}
+      {/* GAP-31 Phase 3: dev-only analytics observability panel (design §5).
+          The toggle button + panel are NOT rendered in production builds —
+          `process.env.NODE_ENV` is inlined at build time, so this branch is
+          tree-shaken out of a production bundle. */}
+      {process.env.NODE_ENV !== 'production' ? (
+        <>
+          <button
+            type="button"
+            onClick={() => setAnalyticsOpen(true)}
+            className="fixed bottom-4 left-4 z-40 rounded-full border border-slate-700 bg-slate-900/90 px-3 py-2 text-xs text-slate-300 shadow-lg transition-colors hover:bg-slate-800"
+            aria-label="Open analytics observability panel"
+            data-testid="analytics-toggle"
+          >
+            📊
+          </button>
+          <AnalyticsPanel open={analyticsOpen} onClose={() => setAnalyticsOpen(false)} />
+        </>
       ) : null}
     </main>
   );
