@@ -24,7 +24,7 @@ export type {
 } from './schema.js';
 export { noopEmitter } from './emitter.js';
 export type { AnalyticsEmitter } from './emitter.js';
-export { InMemoryAnalyticsStore } from './store.js';
+export { InMemoryAnalyticsStore, DEFAULT_MAX_AGE_MS } from './store.js';
 export type { AnalyticsStore } from './store.js';
-export { createCollector } from './collector.js';
-export type { AnalyticsCollector } from './collector.js';
+export { createCollector, DEFAULT_RETENTION } from './collector.js';
+export type { AnalyticsCollector, RetentionConfig } from './collector.js';

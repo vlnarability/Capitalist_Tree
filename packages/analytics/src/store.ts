@@ -17,6 +17,11 @@ import type {
   AnalyticsQuery,
 } from './schema.js';
 
+/** Default max-age for retained analytics events: 30 wall-clock days (design
+ *  §7: "a maximum age (default e.g. 30 sim-days or N events)"). The collector
+ *  periodically calls `store.prune(DEFAULT_MAX_AGE_MS)` to evict older records. */
+export const DEFAULT_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+
 export interface AnalyticsStore {
   /** Persist one event. Returns false if dropped (quota / store unavailable).
    *  Must NOT throw. Implementations evict the oldest event when over cap. */
@@ -27,6 +32,10 @@ export interface AnalyticsStore {
   count(category?: AnalyticsEventCategory): Promise<number>;
   /** Wipe all analytics records. Must NOT throw. */
   clear(): Promise<void>;
+  /** Evict events older than `maxAgeMs` (measured by wall-clock `timestamp`).
+   *  Returns the number evicted. Must NOT throw — implementors catch storage
+   *  failures + return 0. Design §7: "oldest records are evicted first." */
+  prune(maxAgeMs: number): Promise<number>;
 }
 
 /**
@@ -71,5 +80,12 @@ export class InMemoryAnalyticsStore implements AnalyticsStore {
 
   async clear(): Promise<void> {
     this.events = [];
+  }
+
+  async prune(maxAgeMs: number): Promise<number> {
+    const cutoff = Date.now() - maxAgeMs;
+    const before = this.events.length;
+    this.events = this.events.filter((e) => e.timestamp >= cutoff);
+    return before - this.events.length;
   }
 }

@@ -73,6 +73,8 @@ import { SaveQuotaExceededError } from '../lib/persistence/indexed-db-storage';
 // unaffected (design §4: "the emitter is a no-op if no collector is attached").
 import { initAnalytics, recordAnalyticsEvent } from '../lib/analytics/analytics';
 import { createBrowserAnalyticsStore } from '../lib/analytics/indexed-db-analytics-store';
+// GAP-31 Phase 2: sampled tick-duration + frame-FPS analytics.
+import { PerfSampler } from '../lib/analytics/perf-sampler';
 
 // ----------------------------------------------------------------------------
 // Public types.
@@ -281,6 +283,9 @@ export function useSimulationLoop(
     let raf = 0;
     let lastTs: number | null = null;
     let lastCommitMs = 0;
+    // GAP-31 Phase 2: one PerfSampler per session — cadence-gated (every ~60
+    // ticks) so perf recording doesn't drown the signal or grow storage.
+    const perfSampler = new PerfSampler();
     const loop = (now: number): void => {
       const current = stateRef.current;
       if (!current) {
@@ -308,9 +313,18 @@ export function useSimulationLoop(
           realDelta * PROVISIONAL_REAL_TO_SIM_SECONDS * current.clock.speedMultiplier;
         accumulatorRef.current += simDelta;
         if (accumulatorRef.current >= 1) {
+          // GAP-31 Phase 2: measure the tick duration for sampled perf analytics.
+          const t0 = typeof performance !== 'undefined' ? performance.now() : 0;
           const result = engine.advance(current, accumulatorRef.current);
+          const tickDurationMs =
+            typeof performance !== 'undefined' ? performance.now() - t0 : 0;
           accumulatorRef.current -= result.consumedSeconds;
           stateRef.current = result.state;
+          // Sample tick perf (cadence-gated inside the sampler; no-op until the
+          // analytics collector is initialized). lastTs is non-null here (we're
+          // inside the `if (lastTs != null)` branch), so now - lastTs is the
+          // frame delta.
+          perfSampler.recordTick(tickDurationMs, now - lastTs);
 
           // Throttle commits if PROVISIONAL_UI_COMMIT_THROTTLE_MS > 0.
           // When 0 (default for P5a), commit every step.

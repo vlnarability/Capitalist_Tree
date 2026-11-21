@@ -30,6 +30,9 @@
  * (browser primitive), not a store action.
  */
 import { Component, type ErrorInfo, type ReactNode } from 'react';
+// GAP-31 Phase 2: record caught render errors for on-device observability.
+// No-op until the analytics collector is initialized (SSR / pre-boot).
+import { recordAnalyticsEvent } from '../../lib/analytics/analytics';
 
 interface ErrorBoundaryProps {
   /** The subtree to guard. */
@@ -64,6 +67,15 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
    */
   override componentDidCatch(error: Error, info: ErrorInfo): void {
     console.error('[ErrorBoundary] Uncaught render error:', error, info.componentStack);
+    // GAP-31 Phase 2: record the error for on-device observability (design §3:
+    // "Record errors when they occur — these are rare + high-signal — keep them
+    // all"). Fire-and-forget + no-op until the collector is initialized, so this
+    // never interferes with the error-recovery path.
+    recordAnalyticsEvent('error-caught', 'error', {
+      message: error.message,
+      stack: error.stack,
+      componentStack: info.componentStack,
+    });
   }
 
   /** Reload the page — rehydrates the game from the last IndexedDB save. */

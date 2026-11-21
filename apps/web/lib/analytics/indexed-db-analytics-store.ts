@@ -121,6 +121,26 @@ export class IndexedDbAnalyticsStore implements AnalyticsStore {
     }
     await tx.done;
   }
+
+  /** Evict events older than `maxAgeMs` (wall-clock `timestamp`). Returns the
+   *  count evicted. Best-effort — swallowed on failure (returns 0). */
+  async prune(maxAgeMs: number): Promise<number> {
+    try {
+      const db = await getDB();
+      const cutoff = Date.now() - maxAgeMs;
+      const all = (await db.getAll(STORE_EVENTS)) as AnalyticsEvent[];
+      const old = all.filter((e) => e.timestamp < cutoff);
+      if (old.length === 0) return 0;
+      const tx = db.transaction(STORE_EVENTS, 'readwrite');
+      for (const ev of old) {
+        await tx.store.delete(ev.id);
+      }
+      await tx.done;
+      return old.length;
+    } catch {
+      return 0;
+    }
+  }
 }
 
 /**

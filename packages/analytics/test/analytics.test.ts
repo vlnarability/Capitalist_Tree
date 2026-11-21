@@ -125,6 +125,33 @@ describe('InMemoryAnalyticsStore', () => {
     expect(ids).toContain('mid');
     expect(ids).not.toContain('old');
   });
+
+  it('prunes events older than maxAgeMs (returns the count evicted)', async () => {
+    const store = new InMemoryAnalyticsStore();
+    const now = Date.now();
+    // Two "old" events (1s + 2s ago) + two "recent" (now + 100ms ago).
+    await store.put(makeEvent('a', now - 2000, 'gameplay', 'x'));
+    await store.put(makeEvent('b', now - 1000, 'gameplay', 'x'));
+    await store.put(makeEvent('c', now - 100, 'gameplay', 'x'));
+    await store.put(makeEvent('d', now, 'gameplay', 'x'));
+    // maxAgeMs = 500ms → evicts a + b (older than now - 500).
+    const evicted = await store.prune(500);
+    expect(evicted).toBe(2);
+    expect(await store.count()).toBe(2);
+    const remaining = (await store.query()).map((e) => e.id);
+    expect(remaining).toContain('c');
+    expect(remaining).toContain('d');
+    expect(remaining).not.toContain('a');
+    expect(remaining).not.toContain('b');
+  });
+
+  it('prune with a huge maxAgeMs evicts nothing', async () => {
+    const store = new InMemoryAnalyticsStore();
+    await store.put(makeEvent('a', Date.now(), 'gameplay', 'x'));
+    const evicted = await store.prune(365 * 24 * 60 * 60 * 1000); // 1 year
+    expect(evicted).toBe(0);
+    expect(await store.count()).toBe(1);
+  });
 });
 
 describe('createCollector', () => {
@@ -192,6 +219,28 @@ describe('createCollector', () => {
     await flushMicrotasks();
     await flushMicrotasks();
     expect(await store.count()).toBe(10);
+  });
+
+  it('periodically calls store.prune(maxAgeMs) per the retention config', async () => {
+    const prune = vi.fn().mockResolvedValue(0);
+    const store: AnalyticsStore = {
+      put: vi.fn().mockResolvedValue(true),
+      query: vi.fn().mockResolvedValue([]),
+      count: vi.fn().mockResolvedValue(0),
+      clear: vi.fn().mockResolvedValue(undefined),
+      prune,
+    };
+    // prune every 2 flushes.
+    const collector = createCollector(store, { maxAgeMs: 1000, pruneEveryNFlushes: 2 });
+    // 5 emits WITH an await between each → 5 separate flushes (without the
+    // await, the emits coalesce into a single flush + flushCount only hits 1).
+    // Prune should fire on flush #2 + #4 (flushCount % 2 === 0).
+    for (let i = 0; i < 5; i++) {
+      collector.emit('tick', 'simulation', { i });
+      await flushMicrotasks();
+    }
+    expect(prune).toHaveBeenCalledWith(1000);
+    expect(prune.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 });
 

@@ -97,7 +97,11 @@ import type { UiAction } from '../lib/actions';
 import { simulationEventsToNotifications } from '../lib/format/event-to-notification';
 // GAP-31 (DR-13): bridge high-signal SimulationEvents to local-only analytics
 // (separate IndexedDB; no-op until the boot hook initializes the collector).
-import { recordSimEvents, setAnalyticsSimTime } from '../lib/analytics/analytics';
+import {
+  recordSimEvents,
+  recordSimSummaryIfDue,
+  setAnalyticsSimTime,
+} from '../lib/analytics/analytics';
 
 // ----------------------------------------------------------------------------
 // Public types.
@@ -475,6 +479,10 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
     // the collector's sim-time stamp in sync. No-op until boot initializes it.
     setAnalyticsSimTime(state.clock.elapsedSeconds);
     recordSimEvents(events ?? []);
+    // GAP-31 Phase 2: emit a periodic sim-state snapshot (every sim-day) for
+    // trend analysis. No-op until boot initializes the collector; the first
+    // commit seeds the cadence without emitting.
+    recordSimSummaryIfDue(state);
     // GAP-36: surface an ending when an objective newly completes. Don't
     // clobber an already-pending ending (if two complete in one tick, the
     // second stays recorded in `completed` + shows on the ObjectivesPanel).

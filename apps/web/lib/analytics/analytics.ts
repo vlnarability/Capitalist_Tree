@@ -19,18 +19,29 @@ import {
   type AnalyticsEventCategory,
   type AnalyticsStore,
 } from '@capitalist-tree/analytics';
-import type { SimulationEvent } from '@capitalist-tree/shared';
+import type { GameState, SimulationEvent } from '@capitalist-tree/shared';
 import { mapSimulationEventToAnalytics } from './bridge.js';
+import { extractSimSummary, isSimSummaryDue } from './sim-summary.js';
 
 let collector: AnalyticsCollector | null = null;
 
 /**
  * Create + install the collector backed by `store`. Called once at boot (in the
  * browser). Returns the collector so the caller can hold a ref if needed.
+ * Re-init also resets the sim-summary cadence (a fresh collector = a fresh
+ * cadence baseline), which keeps unit tests isolated.
  */
 export function initAnalytics(store: AnalyticsStore): AnalyticsCollector {
   collector = createCollector(store);
+  lastSimSummarySeconds = null;
   return collector;
+}
+
+/** Tear down the collector + reset the sim-summary cadence. For unit tests +
+ *  StrictMode double-mount hygiene: ensures no state leaks between tests. */
+export function resetAnalytics(): void {
+  collector = null;
+  lastSimSummarySeconds = null;
 }
 
 /** Whether a collector is installed (false in SSR / before boot / unit tests). */
@@ -79,4 +90,36 @@ export function recordAnalyticsEvent(
   } catch {
     // swallow
   }
+}
+
+// ─── Phase 2: periodic sim-state aggregation (design §3) ────────────────────
+//
+// One sim-summary per sim-day (86_400 sim-seconds). The first commit SEEDS the
+// cadence (no emit) so the boot/initial state isn't recorded as a "summary"; a
+// backward clock (newGame / load) re-seeds. The store calls this from
+// `commitSimState` after each engine snapshot.
+let lastSimSummarySeconds: number | null = null;
+
+/**
+ * Emit a sim-summary if a sim-day has elapsed since the last summary. No-op if
+ * no collector is installed. Never throws. Returns true if a summary was emitted
+ * (useful for tests).
+ */
+export function recordSimSummaryIfDue(state: GameState): boolean {
+  if (!collector) return false;
+  const elapsed = state.clock.elapsedSeconds;
+  if (!isSimSummaryDue(elapsed, lastSimSummarySeconds)) {
+    // Seed / re-seed on the first commit or a clock reset (no emit).
+    if (lastSimSummarySeconds === null || elapsed < lastSimSummarySeconds) {
+      lastSimSummarySeconds = elapsed;
+    }
+    return false;
+  }
+  // Stamp the collector's sim-time so the event's simulationTime is correct.
+  // The store also calls setAnalyticsSimTime, but this makes recordSimSummaryIfDue
+  // self-contained for direct callers / tests.
+  setAnalyticsSimTime(elapsed);
+  recordAnalyticsEvent('sim-summary', 'simulation', extractSimSummary(state));
+  lastSimSummarySeconds = elapsed;
+  return true;
 }
