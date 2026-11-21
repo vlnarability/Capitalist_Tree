@@ -318,8 +318,19 @@ Per RV7's P11/P12/P13 phasing. Titles and one-paragraph scope only; full prompts
 >   save-loaded/save-load-failed emits. Zero sim coupling — Approach B: the
 >   collector subscribes to the existing SimulationEvent stream rather than the
 >   sim calling a new emitter, so the sim stays pure + analytics is a no-op in
->   unit tests. Phase 2 [aggregation/sampling + ErrorBoundary capture] + Phase 3
->   [observability panel] remain).
+>   unit tests. Phase 2 DONE (25b3873 — aggregation + sampling + error capture
+>   + retention: `AnalyticsStore.prune(maxAgeMs)` + `DEFAULT_MAX_AGE_MS` [30
+>   days] + `RetentionConfig` + collector periodic prune + IndexedDB prune;
+>   `extractSimSummary` + `isSimSummaryDue` [every sim-day, sim-time-gated,
+>   backward-clock re-seed] + `recordSimSummaryIfDue` wired into `commitSimState`;
+>   `PerfSampler` [cadence-gated every 60 ticks] wired into the RAF loop
+>   [`performance.now()` around `engine.advance`] emitting `tick-perf` [duration
+>   + FPS]; `ErrorBoundary.componentDidCatch` → `recordAnalyticsEvent('error-caught')`;
+>   `initAnalytics` resets the cadence + `resetAnalytics()` for test isolation.
+>   +21 tests [3 retention, 6 sim-summary, 5 perf-sampler, 4 analytics-singleton,
+>   3 ErrorBoundary]; full suite 101 files / 1852 tests. Phase 3 [observability
+>   panel: counts, recent events, summaries, error history, storage usage, JSON
+>   export, clear/reset] remains).
 > - **11 (P13-A): DONE.** Environmental indicators + markets + org-type
 >   incentives (GAP-21, GAP-22, GAP-23) implemented in `bf8d5f4`. GAP-21
 >   (environmental indicators): the four long-horizon indicators — `airQuality`,
