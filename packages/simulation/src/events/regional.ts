@@ -50,6 +50,7 @@ import {
   PROVISIONAL_SPECIES_EXTINCTION_THRESHOLD,
   PROVISIONAL_EVENT_SPECIES_EXTINCTION_RATE_CAP,
 } from '@capitalist-tree/shared';
+import { deriveEcosystemResilience } from '../systems/environment.js';
 
 const SECONDS_PER_DAY = 24 * 60 * 60;
 
@@ -506,6 +507,33 @@ export function aggregateGlobalIndicators(
           avgForestCoverage,
           ecosystemResilience,
         },
+      },
+    },
+    world: {
+      ...state.world,
+      environment: {
+        ...state.world.environment,
+        // W37 (RV4-F-H4 first clause): `env.biodiversity.index` is now a DERIVED
+        // rollup of the per-region average — the single canonical producer is
+        // `evolveRegions` (above). This keeps the 4 P7 side-readers
+        // (deriveEcosystemResilience, environment-biodiversity notifications,
+        // the offline catch-up snapshot, + applyEnvironmentalImpact's transient
+        // write) aligned with the P10 slice achievements/objectives read.
+        // `speciesPopulations` is left untouched (no consumer reads it post-W7).
+        biodiversity: {
+          ...state.world.environment.biodiversity,
+          index: avgBiodiversity,
+        },
+        // Re-derive resilience from the new index so it is consistent at
+        // end-of-tick (the EnvironmentSystem step #10 derivation ran BEFORE
+        // this rollup + would otherwise be one-tick stale).
+        ecosystemResilience: deriveEcosystemResilience({
+          ...state.world.environment,
+          biodiversity: {
+            ...state.world.environment.biodiversity,
+            index: avgBiodiversity,
+          },
+        }),
       },
     },
   };

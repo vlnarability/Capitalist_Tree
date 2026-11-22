@@ -3,8 +3,15 @@
  * sustainability pillars).
  *
  * Pure helper that advances the biodiversity index + species populations one
- * tick. The EnvironmentSystem calls this after the soil step (so it can read
- * the just-updated `soil.health`); it never mutates its input.
+ * tick. **W37 (RV4-F-H4 first clause):** this per-tick P7 stress-driven advance
+ * is NO LONGER CALLED by the EnvironmentSystem — the canonical biodiversity
+ * producer is now the P10 per-region model in `evolveRegions`
+ * (`events/regional.ts`), + `aggregateGlobalIndicators` writes the
+ * population-weighted rollup `avgBiodiversity` back into
+ * `env.biodiversity.index` each tick. The helper is retained as a deprecated
+ * pure function (its unit tests still exercise it directly). See
+ * `events.test.ts` ("W37 — single biodiversity producer") for the rollup
+ * invariant.
  *
  *   stress = w_pollution * pollutionStress
  *          + w_deforest  * (1 - forestCoverage)

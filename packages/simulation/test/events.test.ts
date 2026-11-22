@@ -572,6 +572,48 @@ describe('regional — aggregateGlobalIndicators', () => {
     expect(result.state).toBe(state);
     expect(result.minIndicators).toBeNull();
   });
+
+  // --------------------------------------------------------------------------
+  // W37 (RV4-F-H4 first clause): collapse the dual biodiversity producers.
+  // Pre-W37, `stepBiodiversity` (P7 stress-driven) advanced
+  // `env.biodiversity.index` each tick INDEPENDENTLY of `evolveRegions` (P10
+  // pollution-driven per-region biodiversity rolled up into
+  // `aggregatedIndicators.avgBiodiversity`). Achievements + objectives already
+  // read `avgBiodiversity` (W7 unified the consumers), so `env.biodiversity.index`
+  // was a redundant second simulation. W37 removes the per-tick
+  // `stepBiodiversity` call + makes `env.biodiversity.index` a DERIVED rollup of
+  // the per-region average — one producer.
+  // --------------------------------------------------------------------------
+  it('W37 — env.biodiversity.index mirrors aggregatedIndicators.avgBiodiversity (single producer rollup)', () => {
+    const state = stateWithRegions();
+    const result = aggregateGlobalIndicators(state);
+    const agg = result.state.eventState.global.aggregatedIndicators;
+    // The P7 global index is now the per-region rollup, not an independent sim.
+    expect(result.state.world.environment.biodiversity.index).toBeCloseTo(
+      agg.avgBiodiversity,
+      6,
+    );
+  });
+
+  it('W37 — env.ecosystemResilience is re-derived from the rolled-up index (consistent at end-of-tick)', () => {
+    const state = stateWithRegions();
+    const result = aggregateGlobalIndicators(state);
+    const env = result.state.world.environment;
+    // The resilience must match the formula evaluated against the NEW index
+    // (the EnvironmentSystem step #10 derivation ran BEFORE the rollup + would
+    // otherwise be one-tick stale).
+    const RESILIENCE_WEIGHTS = { biodiversity: 0.4, forestCoverage: 0.3, soil: 0.3 };
+    const expected = Math.max(
+      0,
+      Math.min(
+        1,
+        RESILIENCE_WEIGHTS.biodiversity * env.biodiversity.index +
+          RESILIENCE_WEIGHTS.forestCoverage * env.forestCoverage +
+          RESILIENCE_WEIGHTS.soil * env.soil.health,
+      ),
+    );
+    expect(env.ecosystemResilience).toBeCloseTo(expected, 6);
+  });
 });
 
 // ---------------------------------------------------------------------------

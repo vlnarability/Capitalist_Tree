@@ -155,8 +155,14 @@ const SOIL_HEALTH_CRITICAL = 0.15; // health below → critical
 /**
  * Derive `ecosystemResilience` in [0, 1] from biodiversity + forestCoverage +
  * soil.health (GDD §10.1). Pure: takes the env, returns the resilience.
+ *
+ * W37: also re-invoked from `aggregateGlobalIndicators` (events/regional.ts)
+ * AFTER the biodiversity rollup writes `env.biodiversity.index`, so the
+ * resilience stays consistent with the canonical per-region-derived index at
+ * end-of-tick (the EnvironmentSystem step #10 derivation runs BEFORE the
+ * EventSystem rollup + would otherwise be one-tick stale).
  */
-function deriveEcosystemResilience(env: GameState['world']['environment']): number {
+export function deriveEcosystemResilience(env: GameState['world']['environment']): number {
   const w = RESILIENCE_WEIGHTS;
   return Math.max(
     0,
@@ -348,9 +354,19 @@ export const environmentSystem: System = {
     // 8. Soil (extension-point dynamics + health nudge).
     env.soil = stepSoil(env, dtSeconds);
 
-    // 9. Biodiversity (index + species populations, reads soil.health +
-    //    forestCoverage + globalTemperature).
-    env.biodiversity = stepBiodiversity(env, dtSeconds);
+    // 9. Biodiversity — W37 (RV4-F-H4 first clause): the per-tick P7
+    //    stress-driven `stepBiodiversity` advance is REMOVED. The canonical
+    //    biodiversity producer is now the P10 per-region model in `evolveRegions`
+    //    (EventSystem slot #12), + `aggregateGlobalIndicators` writes the
+    //    population-weighted rollup `avgBiodiversity` back into
+    //    `env.biodiversity.index` each tick. Achievements + objectives already
+    //    read `aggregatedIndicators.avgBiodiversity` (W7 unified the consumers);
+    //    this completes the unification by collapsing to ONE producer. The
+    //    `stepBiodiversity` helper is retained as a deprecated pure function
+    //    (its unit tests still exercise it directly). `deriveEcosystemResilience`
+    //    (step #10 below) reads `env.biodiversity.index` — it now sees the
+    //    previous tick's rollup (a one-tick lag, matching the existing
+    //    `aggregatedIndicators` lag the ProgressionSystem already tolerates).
 
     // 10. Ecosystem resilience (derived from biodiversity + forestCoverage +
     //     soil.health).
