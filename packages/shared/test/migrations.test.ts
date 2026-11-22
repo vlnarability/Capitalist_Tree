@@ -1248,6 +1248,62 @@ describe('MigrationRegistry', () => {
     expect(out.economy.initialSupply).toBe('50000');
   });
 
+  // --------------------------------------------------------------------------
+  // P11 (W8 / RV4-F-H5): v14 -> v15 migration backfills
+  // `eventState.objectives.completed` (persisted end-game objective completion).
+  // --------------------------------------------------------------------------
+  it('v14 -> v15 migration backfills eventState.objectives.completed (W8 / RV4-F-H5)', () => {
+    // A v14 save predates the `objectives` block. The migration backfills
+    // `{ completed: [] }`; objectives re-evaluate on the first post-load tick
+    // and any still-achieved get recorded then.
+    const v14State = freshState();
+    const { objectives: _obj, ...eventStateWithoutObjectives } = v14State.eventState as {
+      objectives?: unknown;
+    };
+    void _obj;
+    const v14Save = {
+      ...v14State,
+      eventState: eventStateWithoutObjectives,
+    } as unknown as GameState;
+    const out = migrations.migrate(v14Save, 14, CURRENT_SCHEMA_VERSION);
+    expect(out.eventState.objectives).toBeDefined();
+    expect(out.eventState.objectives.completed).toEqual([]);
+  });
+
+  it('v14 -> v15 migration is idempotent on a v15 save (hand-patched completed preserved)', () => {
+    // A save that already has an `objectives` block (e.g. a v15 save with a
+    // recorded completion) must keep its values — the migration never overwrites.
+    const v15State = freshState();
+    const handPatched = {
+      ...v15State,
+      eventState: {
+        ...v15State.eventState,
+        objectives: { completed: ['great-restoration'] },
+      },
+    } as unknown as GameState;
+    const out = migrations.migrate(handPatched, 14, CURRENT_SCHEMA_VERSION);
+    expect(out.eventState.objectives.completed).toEqual(['great-restoration']);
+  });
+
+  it('v14 -> v15 migration does NOT touch originalTree (pure on the original-tree guard)', () => {
+    // The migration comment states it is pure w.r.t. `originalTree.id` /
+    // `originalTree.isOriginal` — verify the guard isn't disturbed.
+    const v14State = freshState();
+    const { objectives: _obj, ...eventStateWithoutObjectives } = v14State.eventState as {
+      objectives?: unknown;
+    };
+    void _obj;
+    const originalIdBefore = v14State.originalTree.id;
+    const isOriginalBefore = v14State.originalTree.isOriginal;
+    const v14Save = {
+      ...v14State,
+      eventState: eventStateWithoutObjectives,
+    } as unknown as GameState;
+    const out = migrations.migrate(v14Save, 14, CURRENT_SCHEMA_VERSION);
+    expect(out.originalTree.id).toBe(originalIdBefore);
+    expect(out.originalTree.isOriginal).toBe(isOriginalBefore);
+  });
+
   it('v15 -> v16 migration backfills eventState.environment.lastSoilHealthBand (W15 follow-up)', () => {
     // Construct a v15 state WITHOUT eventState.environment (the field the
     // v15→v16 migration adds). freshState() + manual override.
