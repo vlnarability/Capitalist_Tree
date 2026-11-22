@@ -360,13 +360,13 @@ describe('executeMarketTransaction — buyer → seller at the clearing price', 
   });
 
   // --------------------------------------------------------------------------
-  // P11 (W13 / RV3-4): demand-injection backstop is capped. Pre-fix, the
-  // injection was uncapped — a single sale could trigger an arbitrarily
-  // large authority issuance (infinite external demand), masking GDD §8.5
-  // scarcity. The cap limits each injection; if the buyer still can't afford
-  // the full sale after the capped injection, the quantity is reduced.
+  // P11 (W36 / RV3-4 follow-up): demand-injection backstop is capped at a
+  // PER-TICK AGGREGATE (was per-CALL in W13). The cap limits each market's
+  // total injection per tick; if the buyer still can't afford the full sale
+  // after the capped injection, the quantity is reduced. The first sale in a
+  // tick behaves identically to the old per-call cap (budget starts at 0).
   // --------------------------------------------------------------------------
-  it('caps the demand injection at PROVISIONAL_BUSINESS_MARKET_DEMAND_INJECTION_MAX_PER_CALL_MINOR', () => {
+  it('caps the demand injection at PROVISIONAL_BUSINESS_MARKET_DEMAND_INJECTION_MAX_PER_TICK_MINOR', () => {
     // Sell 20000 water @ 10 = 200000 to the market (balance 0). The needed
     // injection is 200000, but the cap is 100000. The injection is capped at
     // 100000, and the quantity is reduced to 100000/10 = 10000 (partial sale).
@@ -399,6 +399,80 @@ describe('executeMarketTransaction — buyer → seller at the clearing price', 
     expect(getBalance(result.state, 'market:water')).toBe(0n);
     // Conservation still holds (injection is an issuance; sale is a transfer).
     expect(conservationDiscrepancy(result.state, INITIAL_SUPPLY)).toBe(0n);
+  });
+
+  // --------------------------------------------------------------------------
+  // P11 (W36 / RV3-4 follow-up): the cap is PER-TICK AGGREGATE, not per-call.
+  // Pre-W36, N same-tick sales to one market each re-triggered the per-call
+  // cap → N × cap total injection (a bounded variant of the scarcity-masking
+  // concern). W36 debits a per-tick budget on `market.demandInjectedThisTick`;
+  // once exhausted, further same-tick sales get NO injection (full scarcity).
+  // --------------------------------------------------------------------------
+  it('caps the AGGREGATE injection per tick — N same-tick sales cannot exceed the per-tick cap total', () => {
+    let state = freshState();
+    const sellerId = 'business:seller:0';
+    state = registerAccount(state, { id: sellerId, type: 'business', label: 'Seller', balance: '0' });
+
+    // Sale 1: sell 20000 water @ 10 = 200000 (needed 200000, budget 100000).
+    // Injects 100000, qty reduced to 10000. Budget after: 100000.
+    const r1 = executeMarketTransaction(state, {
+      marketId: 'market:water', buyer: 'market:water', seller: sellerId,
+      quantity: 20000, price: '10', timestamp: 100,
+      category: 'business-market-sale', description: 'sale 1',
+    });
+    expect(r1.injectedAmount).toBe('100000');
+    // The market's per-tick budget is debited.
+    const m1 = r1.state.economy.markets.find((x) => x.id === 'market:water')!;
+    expect(m1.demandInjectedThisTick).toBe('100000');
+
+    // Sale 2 (SAME tick — budget already at 100000, remaining 0): another
+    // 20000 @ 10 = 200000. Pre-W36 this would inject ANOTHER 100000 (per-call
+    // cap re-triggered → 200000 total). W36: remaining budget 0 → NO injection
+    // → full scarcity (qty 0, total 0). Total injection stays at 100000.
+    const r2 = executeMarketTransaction(r1.state, {
+      marketId: 'market:water', buyer: 'market:water', seller: sellerId,
+      quantity: 20000, price: '10', timestamp: 100,
+      category: 'business-market-sale', description: 'sale 2 (same tick, budget exhausted)',
+    });
+    expect(r2.demandInjected).toBe(false);
+    expect(r2.injectedAmount).toBe('0');
+    expect(r2.total).toBe('0'); // no sale — full scarcity
+    // Budget unchanged (no injection debited).
+    const m2 = r2.state.economy.markets.find((x) => x.id === 'market:water')!;
+    expect(m2.demandInjectedThisTick).toBe('100000');
+
+    // Total injection across both same-tick sales = 100000 (the per-tick cap),
+    // NOT 200000 (which the per-call cap would have allowed).
+    expect(BigInt(r1.injectedAmount) + BigInt(r2.injectedAmount)).toBe(100000n);
+    // Conservation holds across both sales.
+    expect(conservationDiscrepancy(r2.state, INITIAL_SUPPLY)).toBe(0n);
+  });
+
+  it('clearMarkets resets the per-tick demand-injection budget each tick', () => {
+    let state = freshState();
+    const sellerId = 'business:seller:0';
+    state = registerAccount(state, { id: sellerId, type: 'business', label: 'Seller', balance: '0' });
+
+    // Tick A: exhaust the budget (inject 100000).
+    const r1 = executeMarketTransaction(state, {
+      marketId: 'market:water', buyer: 'market:water', seller: sellerId,
+      quantity: 20000, price: '10', timestamp: 100,
+      category: 'business-market-sale', description: 'tick A sale',
+    });
+    expect(r1.state.economy.markets.find((x) => x.id === 'market:water')!.demandInjectedThisTick).toBe('100000');
+
+    // clearMarkets runs at the start of tick B → resets the budget to '0'.
+    const cleared = clearMarkets(r1.state, 200);
+    expect(cleared.state.economy.markets.find((x) => x.id === 'market:water')!.demandInjectedThisTick).toBe('0');
+
+    // Tick B: the budget is fresh → a sale can inject again (100000).
+    const r2 = executeMarketTransaction(cleared.state, {
+      marketId: 'market:water', buyer: 'market:water', seller: sellerId,
+      quantity: 20000, price: '10', timestamp: 200,
+      category: 'business-market-sale', description: 'tick B sale (budget reset)',
+    });
+    expect(r2.demandInjected).toBe(true);
+    expect(r2.injectedAmount).toBe('100000');
   });
 
   it('is a no-op for zero quantity (no transactions, no state change)', () => {

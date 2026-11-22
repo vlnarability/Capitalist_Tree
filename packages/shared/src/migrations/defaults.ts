@@ -1382,3 +1382,38 @@ const v16ToV17: Migration = (state: GameState): GameState => {
 };
 
 migrations.register(16, v16ToV17);
+
+/**
+ * P11 (W36 / RV3-4 follow-up): backfill `demandInjectedThisTick` on every
+ * market. Pre-v18 saves have no such field; the new per-tick aggregate cap
+ * debits this counter each injection + `clearMarkets` resets it each tick.
+ *
+ * The field has a Zod `.default('0')`, so a v17 save already parses cleanly
+ * under v18, but the migration backfills it explicitly so consumers can rely
+ * on the field being present without a Zod-parse indirection (matching the
+ * v5→v6 / v9→v10 / v10→v11 convention for additive defaulted fields).
+ *
+ * Idempotent: a market that already has `demandInjectedThisTick` (a v18 save
+ * re-loaded through the path, or a hand-patched save) keeps its value.
+ */
+const v17ToV18: Migration = (state: GameState): GameState => {
+  const out: GameState = { ...state };
+  if (!Array.isArray(out.economy.markets)) {
+    return out;
+  }
+  let mutated = false;
+  const patchedMarkets = out.economy.markets.map((m) => {
+    const withMaybe = m as typeof m & { demandInjectedThisTick?: unknown };
+    if (typeof withMaybe.demandInjectedThisTick !== 'string') {
+      mutated = true;
+      return { ...m, demandInjectedThisTick: '0' };
+    }
+    return m;
+  });
+  if (mutated) {
+    out.economy = { ...out.economy, markets: patchedMarkets } as typeof out.economy;
+  }
+  return out;
+};
+
+migrations.register(17, v17ToV18);

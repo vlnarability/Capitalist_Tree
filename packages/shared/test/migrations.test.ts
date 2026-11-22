@@ -1308,8 +1308,56 @@ describe('MigrationRegistry', () => {
     expect(out.rngVersion).toBe(2);
   });
 
-  it('v17 is the current schema version', () => {
-    expect(CURRENT_SCHEMA_VERSION).toBe(17);
+  it('v17 -> v18 migration backfills demandInjectedThisTick on every market (W36 — per-tick demand-injection cap)', () => {
+    // Construct a v17 state with markets WITHOUT demandInjectedThisTick (the
+    // field the v17→v18 migration adds). baseState() initializes markets WITH
+    // the field, so strip it to simulate a legacy save that predates it.
+    const v17State = freshState();
+    const state: GameState = {
+      ...v17State,
+      economy: {
+        ...v17State.economy,
+        markets: v17State.economy.markets.map((m) => {
+          const { demandInjectedThisTick: _stripped, ...rest } = m as {
+            demandInjectedThisTick?: string;
+          };
+          return rest;
+        }) as typeof v17State.economy.markets,
+      },
+    } as unknown as GameState;
+    // Sanity: the market lacks the field pre-migration.
+    expect(
+      (state.economy.markets[0] as { demandInjectedThisTick?: unknown }).demandInjectedThisTick,
+    ).toBeUndefined();
+
+    const out = migrations.migrate(state, 17, CURRENT_SCHEMA_VERSION);
+    // Every market is backfilled to '0'.
+    expect(out.economy.markets.length).toBeGreaterThan(0);
+    for (const m of out.economy.markets) {
+      expect(m.demandInjectedThisTick).toBe('0');
+    }
+  });
+
+  it('v17 -> v18 migration is idempotent on a save that already has demandInjectedThisTick (preserves the value)', () => {
+    // A market that already has a non-zero budget (a mid-tick save) keeps its value.
+    const v17State = freshState();
+    const state: GameState = {
+      ...v17State,
+      economy: {
+        ...v17State.economy,
+        markets: v17State.economy.markets.map((m) =>
+          m.id === 'market:default' ? { ...m, demandInjectedThisTick: '75000' } : m,
+        ),
+      },
+    } as unknown as GameState;
+
+    const out = migrations.migrate(state, 17, CURRENT_SCHEMA_VERSION);
+    const market = out.economy.markets.find((m) => m.id === 'market:default')!;
+    expect(market.demandInjectedThisTick).toBe('75000');
+  });
+
+  it('v18 is the current schema version', () => {
+    expect(CURRENT_SCHEMA_VERSION).toBe(18);
   });
 
   it('v12 -> v13 migration is a defensive no-op on the environment derivation when world.environment is missing', () => {

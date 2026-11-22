@@ -118,6 +118,16 @@ export const marketStateSchema = z.object({
   demand: z.number(),
   /** Simulation second at which `price` was last recomputed. P3b. */
   lastPriceUpdate: z.number().int().nonnegative().default(0),
+  /**
+   * P11 (W36 / RV3-4 follow-up): cumulative external demand-injection this
+   * tick, in bigint minor units (string). Reset to `'0'` by `clearMarkets`
+   * once per tick. The per-tick aggregate cap
+   * (`PROVISIONAL_BUSINESS_MARKET_DEMAND_INJECTION_MAX_PER_TICK_MINOR`) limits
+   * the TOTAL injection across all same-tick sales to one market — closing
+   * the per-call-cap hole where N sales in one tick each re-triggered the cap
+   * (N × cap total). Pre-W36 the cap was per-call (`MAX_PER_CALL_MINOR`).
+   */
+  demandInjectedThisTick: z.string().default('0'),
 });
 export type MarketState = z.infer<typeof marketStateSchema>;
 

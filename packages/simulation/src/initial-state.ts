@@ -121,6 +121,7 @@ export function initializeState(config: GameConfig): GameState {
     supply: PROVISIONAL_ECONOMY_MARKET_INITIAL_SUPPLY,
     demand: 0,
     lastPriceUpdate: 0,
+    demandInjectedThisTick: '0',
   }));
 
   // P3b: per-market external accounts. Each market has a dedicated

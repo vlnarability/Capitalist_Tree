@@ -68,7 +68,7 @@ import {
   PROVISIONAL_ECONOMY_AUTHORITY_ACCOUNT_ID,
   PROVISIONAL_BUSINESS_MARKET_PRICE_VOLATILITY,
   PROVISIONAL_BUSINESS_MARKET_DEMAND_INJECTION_ENABLED,
-  PROVISIONAL_BUSINESS_MARKET_DEMAND_INJECTION_MAX_PER_CALL_MINOR,
+  PROVISIONAL_BUSINESS_MARKET_DEMAND_INJECTION_MAX_PER_TICK_MINOR,
   PROVISIONAL_MARKET_PRICE_EQUIPMENT,
   PROVISIONAL_MARKET_PRICE_LABOR,
   PROVISIONAL_MARKET_PRICE_LAND,
@@ -154,6 +154,7 @@ function ensureDeferredMarkets(state: GameState): GameState {
       supply: 0,
       demand: 0,
       lastPriceUpdate: 0,
+      demandInjectedThisTick: '0',
     };
     next = {
       ...next,
@@ -265,7 +266,8 @@ export function clearMarkets(state: GameState, now: number): ClearMarketsResult 
     const anchor = deferredBasePrice.get(m.id) ?? currentPrice;
     const newPrice = computePriceDrift(m, PROVISIONAL_BUSINESS_MARKET_PRICE_VOLATILITY, anchor);
     if (newPrice === currentPrice) {
-      return { ...m, lastPriceUpdate: now };
+      // P11 (W36): reset the per-tick demand-injection budget each tick.
+      return { ...m, lastPriceUpdate: now, demandInjectedThisTick: '0' };
     }
     events.push({
       type: 'market-price-changed',
@@ -284,6 +286,8 @@ export function clearMarkets(state: GameState, now: number): ClearMarketsResult 
       ...m,
       price: newPrice.toString(10),
       lastPriceUpdate: now,
+      // P11 (W36): reset the per-tick demand-injection budget each tick.
+      demandInjectedThisTick: '0',
     };
   });
 
@@ -412,12 +416,16 @@ export function executeMarketTransaction(
 
   // 1. Demand injection: if the buyer is the market account and has
   //    insufficient balance, the authority injects just enough to cover.
-  //    P11 (W13 / RV3-4): the injection is CAPPED at
-  //    PROVISIONAL_BUSINESS_MARKET_DEMAND_INJECTION_MAX_PER_CALL_MINOR per
-  //    call. If the cap is hit, the effective quantity sold is reduced to
-  //    what the buyer can afford after the capped injection (partial sale —
-  //    scarcity is enforced, no InsufficientFundsError thrown). Pre-fix the
-  //    injection was uncapped → infinite external demand masked GDD §8.5.
+  //    P11 (W36 / RV3-4 follow-up): the injection is capped at a PER-TICK
+  //    AGGREGATE — `PROVISIONAL_BUSINESS_MARKET_DEMAND_INJECTION_MAX_PER_TICK_MINOR`
+  //    total per market per tick (tracked on `market.demandInjectedThisTick`,
+  //    reset by `clearMarkets` each tick). Pre-W36 the cap was per-CALL, so N
+  //    same-tick sales to one market each re-triggered it (N × cap total) — a
+  //    bounded variant of the original scarcity-masking concern. Now each
+  //    injection debits the remaining per-tick budget; if the needed injection
+  //    exceeds the remaining budget, the quantity sold is reduced to what the
+  //    buyer can afford after the capped injection (partial sale — scarcity
+  //    enforced, no InsufficientFundsError thrown).
   if (
     buyerIsMarket &&
     PROVISIONAL_BUSINESS_MARKET_DEMAND_INJECTION_ENABLED
@@ -425,11 +433,16 @@ export function executeMarketTransaction(
     const buyerBalance = getBalance(state, buyer);
     if (buyerBalance < total) {
       const needed = total - buyerBalance;
-      // Cap the injection — enforce scarcity.
+      // Per-tick aggregate cap: debit the remaining budget for this market.
+      // `market` is read from `state` (the input); the cumulative counter
+      // persists across same-tick sales via the stamp below.
+      const injectedSoFarThisTick = BigInt(market.demandInjectedThisTick ?? '0');
+      const remainingThisTick =
+        PROVISIONAL_BUSINESS_MARKET_DEMAND_INJECTION_MAX_PER_TICK_MINOR - injectedSoFarThisTick;
+      // Cap the injection — enforce scarcity (clamped at ≥ 0; a tick whose
+      // budget is already exhausted gets no injection).
       injectedAmount =
-        needed > PROVISIONAL_BUSINESS_MARKET_DEMAND_INJECTION_MAX_PER_CALL_MINOR
-          ? PROVISIONAL_BUSINESS_MARKET_DEMAND_INJECTION_MAX_PER_CALL_MINOR
-          : needed;
+        needed > remainingThisTick ? (remainingThisTick > 0n ? remainingThisTick : 0n) : needed;
       if (injectedAmount > 0n) {
         const injectionRequestId = params.requestId
           ? `${params.requestId}:demand-injection`
@@ -445,6 +458,18 @@ export function executeMarketTransaction(
         });
         txns.push(next.economy.transactions[next.economy.transactions.length - 1]!);
         demandInjected = true;
+        // Debit the per-tick budget: stamp the cumulative injection on the
+        // market so the next same-tick sale sees the reduced remaining budget.
+        const newInjectedThisTick = (injectedSoFarThisTick + injectedAmount).toString(10);
+        next = {
+          ...next,
+          economy: {
+            ...next.economy,
+            markets: next.economy.markets.map((m) =>
+              m.id === market.id ? { ...m, demandInjectedThisTick: newInjectedThisTick } : m,
+            ),
+          },
+        };
       }
       // If the injection was capped, reduce the effective quantity to what
       // the buyer can now afford. This enforces scarcity without throwing.

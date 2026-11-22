@@ -126,6 +126,7 @@ export function baseState(overrides: Partial<GameState> = {}): GameState {
           supply: 0,
           demand: 0,
           lastPriceUpdate: 0,
+          demandInjectedThisTick: '0',
         },
       ],
       transactions: [],

@@ -412,7 +412,10 @@ export const PROVISIONAL_INITIAL_INTEREST_RATE = 0;
 // Bumped to 17 in DR-6 (persisted GameState.rngVersion — v1 legacy
 // root-consuming fork for existing saves, v2 non-root-consuming for new sims;
 // the v16→v17 migration stamps rngVersion=1 on legacy saves).
-export const CURRENT_SCHEMA_VERSION = 17;
+// Bumped to 18 in W36 (per-tick demand-injection cap — added
+// MarketState.demandInjectedThisTick, reset by clearMarkets each tick; the
+// v17→v18 migration backfills '0' on every market).
+export const CURRENT_SCHEMA_VERSION = 18;
 
 // Used by migration tests to exercise the v0 -> v1 path. Real saves are
 // always written at CURRENT_SCHEMA_VERSION.

@@ -177,15 +177,18 @@ export const PROVISIONAL_MARKET_PRICE_LAND = '100000';
 // in operateBusiness). Production code leaves this `true`.
 export const PROVISIONAL_BUSINESS_MARKET_DEMAND_INJECTION_ENABLED = true;
 
-// P11 (W13 / RV3-4): Per-call cap on the demand-injection backstop. Pre-fix,
-// the injection was uncapped — a single market sale could trigger an
-// arbitrarily large authority issuance (infinite external demand), masking
-// GDD §8.5 scarcity. The cap limits each injection; if the buyer still
-// can't afford the full sale after the capped injection, the quantity sold
-// is reduced to what the buyer can cover (partial sale — scarcity enforced,
-// no InsufficientFundsError thrown). @provisional — tunable; 100000 minor
-// units = $1000 per injection at the default 2-decimal currency.
-export const PROVISIONAL_BUSINESS_MARKET_DEMAND_INJECTION_MAX_PER_CALL_MINOR = 100000n;
+// P11 (W36 / RV3-4 follow-up): Per-TICK aggregate cap on the demand-injection
+// backstop. Pre-W36 (W13) the cap was per-CALL — a single market sale could
+// trigger up to `cap` authority issuance, + N same-tick sales to one market
+// each re-triggered it (N × cap total), a bounded variant of the original
+// scarcity-masking concern. W36 makes the cap per-tick: `clearMarkets` resets
+// `market.demandInjectedThisTick` to '0' once per tick, + each injection
+// debits the remaining per-tick budget. If a sale's needed injection exceeds
+// the remaining budget, the quantity sold is reduced to what the buyer can
+// cover after the capped injection (partial sale — scarcity enforced, no
+// InsufficientFundsError thrown). @provisional — tunable; 100000 minor units
+// = $1000 per market per tick at the default 2-decimal currency.
+export const PROVISIONAL_BUSINESS_MARKET_DEMAND_INJECTION_MAX_PER_TICK_MINOR = 100000n;
 
 // ---------------------------------------------------------------------------
 // GROWTH PRESSURE (P8c — GDD §8.4 Growth Pressure)
