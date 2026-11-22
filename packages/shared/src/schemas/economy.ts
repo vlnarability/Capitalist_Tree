@@ -1,4 +1,8 @@
 import { z } from 'zod';
+import {
+  PROVISIONAL_ECONOMY_MAX_TRANSACTIONS,
+  PROVISIONAL_ECONOMY_MAX_PROCESSED_REQUEST_IDS,
+} from '../constants/economy.js';
 
 /**
  * Transaction record (TDD §10.4).
@@ -190,7 +194,21 @@ export const economyStateSchema = z.object({
   interestRate: z.number(),
   monetaryAuthority: monetaryAuthorityStateSchema,
   markets: z.array(marketStateSchema),
-  transactions: z.array(transactionRecordSchema),
+  /** P11 (W39 / RV5-F2 follow-up): the transaction log is bounded at parse
+   *  time to `PROVISIONAL_ECONOMY_MAX_TRANSACTIONS` (most-recent N kept, via
+   *  `slice(-CAP)` — matches the sim's per-tick `capTail` semantics). The sim
+   *  already trims on every add, so a legitimate save never exceeds the cap;
+   *  this is a defense-in-depth against hand-crafted/corrupt saves that would
+   *  otherwise load a multi-thousand-entry array into memory before the next
+   *  tick's trim. TRUNCATE (not reject) so legacy pre-W12 saves with >cap
+   *  transactions still load (no migration trims them — see v3→v4/v5→v6). */
+  transactions: z
+    .array(transactionRecordSchema)
+    .transform((arr) =>
+      arr.length > PROVISIONAL_ECONOMY_MAX_TRANSACTIONS
+        ? arr.slice(-PROVISIONAL_ECONOMY_MAX_TRANSACTIONS)
+        : arr,
+    ),
   /** P3a: explicit account ledger. Player + external participants. The
    *  central monetary authority is virtual (the "mint") — its net position
    *  is implied by `totalIssued - totalSinks`. Defaults to `[]` so older
@@ -199,8 +217,19 @@ export const economyStateSchema = z.object({
   accounts: z.array(accountStateSchema).default([]),
   /** P3a: idempotency set. Every fulfilled or rejected CurrencyIssuanceRequest
    *  has its requestId recorded here so a re-processed request never
-   *  double-issues money, even across save/load (TDD §10.3). */
-  processedRequestIds: z.array(z.string()).default([]),
+   *  double-issues money, even across save/load (TDD §10.3).
+   *  P11 (W39 / RV5-F2 follow-up): bounded at parse time to
+   *  `PROVISIONAL_ECONOMY_MAX_PROCESSED_REQUEST_IDS` (most-recent N kept) —
+   *  defense-in-depth against corrupt saves. TRUNCATE (not reject) for
+   *  backward compat with pre-W12 saves (no migration trims this set). */
+  processedRequestIds: z
+    .array(z.string())
+    .transform((arr) =>
+      arr.length > PROVISIONAL_ECONOMY_MAX_PROCESSED_REQUEST_IDS
+        ? arr.slice(-PROVISIONAL_ECONOMY_MAX_PROCESSED_REQUEST_IDS)
+        : arr,
+    )
+    .default([]),
   /** P3a: cumulative currency ever issued by the authority (bigint as string).
    *  Monotonically non-decreasing. */
   totalIssued: z.string().default('0'),

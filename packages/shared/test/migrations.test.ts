@@ -6,6 +6,8 @@ import {
   CURRENT_SCHEMA_VERSION,
   deserialize,
   PROVISIONAL_ENERGY_BATTERY_CAPACITY_DEFAULT,
+  PROVISIONAL_ECONOMY_MAX_TRANSACTIONS,
+  PROVISIONAL_ECONOMY_MAX_PROCESSED_REQUEST_IDS,
   type GameState,
   type SaveEnvelope,
 } from '../src/index.js';
@@ -1517,5 +1519,78 @@ describe('deserialize() runs migrations before strict validation (TDD §14.3)', 
     // The strict post-migration validation must catch the superRefine
     // violation even though the envelope shape itself is fine.
     expect(() => deserialize(env)).toThrow();
+  });
+});
+
+describe('W39 — bounded arrays truncate at parse time (N9)', () => {
+  // The sim trims `transactions` + `processedRequestIds` to their caps each
+  // tick (W12 capTail), so a legitimate save never exceeds the cap. W39 adds a
+  // parse-time transform (slice(-CAP), keep most-recent N) as defense-in-depth
+  // against hand-crafted/corrupt saves — TRUNCATE (not reject) so legacy
+  // pre-W12 saves with >cap items still load (no migration trims them).
+  function txn(i: number) {
+    return {
+      id: `txn-${i}`,
+      timestamp: i,
+      sourceAccount: 'a',
+      destinationAccount: 'b',
+      amount: '1',
+      category: 'c',
+      description: `txn ${i}`,
+    };
+  }
+
+  it('truncates economy.transactions to PROVISIONAL_ECONOMY_MAX_TRANSACTIONS (keeps the most recent N)', () => {
+    const cap = PROVISIONAL_ECONOMY_MAX_TRANSACTIONS;
+    const base = freshState();
+    // Over-cap by 1: timestamps 0..cap (cap+1 records).
+    const overTxns = Array.from({ length: cap + 1 }, (_, i) => txn(i));
+    const state: GameState = {
+      ...base,
+      economy: { ...base.economy, transactions: overTxns as never },
+    } as unknown as GameState;
+    const env: SaveEnvelope = { schemaVersion: CURRENT_SCHEMA_VERSION, state };
+
+    const out = deserialize(env);
+    // Truncated to exactly the cap — NOT loaded fully.
+    expect(out.economy.transactions).toHaveLength(cap);
+    // The MOST-RECENT cap are kept (slice(-cap)): the first kept has timestamp 1
+    // (the timestamp-0 record was dropped), the last has timestamp cap.
+    expect(out.economy.transactions[0]!.id).toBe('txn-1');
+    expect(out.economy.transactions[cap - 1]!.id).toBe(`txn-${cap}`);
+  });
+
+  it('leaves economy.transactions untouched when at or under the cap (no truncation for legitimate saves)', () => {
+    const cap = PROVISIONAL_ECONOMY_MAX_TRANSACTIONS;
+    const base = freshState();
+    const atCap = Array.from({ length: cap }, (_, i) => txn(i));
+    const state: GameState = {
+      ...base,
+      economy: { ...base.economy, transactions: atCap as never },
+    } as unknown as GameState;
+    const env: SaveEnvelope = { schemaVersion: CURRENT_SCHEMA_VERSION, state };
+
+    const out = deserialize(env);
+    // Exactly cap — no truncation, no data loss.
+    expect(out.economy.transactions).toHaveLength(cap);
+    expect(out.economy.transactions[0]!.id).toBe('txn-0');
+  });
+
+  it('truncates economy.processedRequestIds to PROVISIONAL_ECONOMY_MAX_PROCESSED_REQUEST_IDS (keeps the most recent N)', () => {
+    const cap = PROVISIONAL_ECONOMY_MAX_PROCESSED_REQUEST_IDS;
+    const base = freshState();
+    // Over-cap by 1: ids 'req-0'..'req-cap' (cap+1 entries).
+    const overIds = Array.from({ length: cap + 1 }, (_, i) => `req-${i}`);
+    const state: GameState = {
+      ...base,
+      economy: { ...base.economy, processedRequestIds: overIds },
+    } as unknown as GameState;
+    const env: SaveEnvelope = { schemaVersion: CURRENT_SCHEMA_VERSION, state };
+
+    const out = deserialize(env);
+    expect(out.economy.processedRequestIds).toHaveLength(cap);
+    // Most-recent cap kept: 'req-1' first, 'req-cap' last ('req-0' dropped).
+    expect(out.economy.processedRequestIds[0]).toBe('req-1');
+    expect(out.economy.processedRequestIds[cap - 1]).toBe(`req-${cap}`);
   });
 });
