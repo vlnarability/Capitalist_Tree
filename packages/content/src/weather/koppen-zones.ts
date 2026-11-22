@@ -9,9 +9,15 @@
  * 60 mm, 18 °C / 10 °C / 22 °C boundaries, the 3:1 winter:summer precipitation
  * ratio for Mediterranean zones, etc.).
  *
- * Phase 1 = catalog + schema only. The WeatherSystem does not yet read the new
- * Köppen fields (no sim behavior change). Phase 3 (DR-11) wires them into the
- * existing temperature / water / season / weather channels.
+ * Phase 3 (DR-11) is WIRED — the WeatherSystem reads these fields every tick:
+ * `seasonalBaseTemp` feeds the local temperature (effects.ts),
+ * `koppenCode`/`frostRisk`/`heatStressRisk` drive the per-zone transition
+ * matrix biases (transition-matrices.ts), `seasonality` drives the season
+ * calendar (time-system.ts), + `precipitation.annualMm` is the photosynthesis
+ * water-stress Liebig signal (photosynthesis.ts:147). See
+ * climate-effect-wiring.test.ts for the acceptance coverage (BWh vs Af water
+ * balance + temperature). Phases 4 (highland lapse) + 5 (runtime frost
+ * re-derivation) are also done.
  *
  * The default starting climate (`climate:temperate`) lives in
  * `climate-baselines.ts` — it is a warm-Dfb gameplay default (kept byte-identical

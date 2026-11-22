@@ -88,10 +88,12 @@ export type WeatherState = z.infer<typeof weatherStateSchema>;
  * The Köppen fields (`koppenCode`, `koppenClass`, `precipitation`,
  * `seasonality`, `frostRisk`, `heatStressRisk`, `supportsTrees`,
  * `treeSuitabilityNote`) are the realistic climate profile grounded in the
- * Kottek et al. 2006 classification (NOAA Jetstream Köppen subdivisions). The
- * WeatherSystem does not yet read them (Phase 1 = catalog + schema only, no
- * sim behavior change); Phase 3 wires them into the existing temp/water/
- * season/weather channels.
+ * Kottek et al. 2006 classification (NOAA Jetstream Köppen subdivisions).
+ * Phase 3 (DR-11) is WIRED — the WeatherSystem reads these every tick
+ * (seasonalBaseTemp → local temperature; koppenCode/frostRisk/heatStressRisk
+ * → transition-matrix biases; seasonality → season calendar;
+ * precipitation.annualMm → photosynthesis water-stress Liebig signal). See
+ * climate-effect-wiring.test.ts for the acceptance coverage.
  *
  * PROVISIONAL per GDD §17 ("detailed climate model"); Köppen grounding per
  * GAP-17 / DR-11.

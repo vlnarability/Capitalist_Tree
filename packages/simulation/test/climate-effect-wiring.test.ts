@@ -100,6 +100,30 @@ describe('GAP-17 Phase 3 — realistic outcome: BWh date palm drought-stresses',
     );
   });
 
+  it('BWh (hot desert) yields lower freshwater availability + higher temperature than temperate (the W35/N5 acceptance criterion)', () => {
+    // The gap-review N5 acceptance criterion: "Selecting a BWh desert climate
+    // measurably changes water balance + temperature in a test." The existing
+    // BWh-vs-Af test above covers water balance; this variant pins the
+    // criterion literally against the temperate default + adds the temperature
+    // channel (BWh summer base 35 °C vs temperate summer base 24 °C).
+    const bwh = engine.initialize(cfg('climate:bwh', 'species:date-palm'));
+    const temperate = engine.initialize(cfg('climate:temperate', 'species:date-palm'));
+    const bwhAfter = engine.advance(bwh, 90 * SECONDS_PER_DAY).state;
+    const temperateAfter = engine.advance(temperate, 90 * SECONDS_PER_DAY).state;
+    // Water balance: BWh's arid-biased matrix → less rain → lower freshwater.
+    expect(bwhAfter.world.environment.freshwater.availability).toBeLessThan(
+      temperateAfter.world.environment.freshwater.availability,
+    );
+    // Temperature channel: BWh's seasonalBaseTemp is hotter than temperate's
+    // across every season (spring 22 vs ~10, summer 35 vs ~24). Advance to
+    // mid-summer (day 45) + assert the local temperature reflects the zone.
+    const bwhSummer = engine.advance(bwh, 45 * SECONDS_PER_DAY).state;
+    const temperateSummer = engine.advance(temperate, 45 * SECONDS_PER_DAY).state;
+    expect(bwhSummer.world.weather.temperature).toBeGreaterThan(
+      temperateSummer.world.weather.temperature,
+    );
+  });
+
   it('a date palm in BWh survives its native desert climate (drought-tolerant)', () => {
     // The date palm is native to BWh + drought-tolerant (low waterRequirement),
     // so it SURVIVES the desert rather than stressing to death — the drought
