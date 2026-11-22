@@ -98,9 +98,16 @@ export function harvestLeaves(
   //   budding/growth, not the rate at which existing leaves photosynthesize.)
   const cond = effectiveLeafCondition(tree.stress, tree.foliage.seasonalCondition);
   const dailyWater = dailyWaterNeed(tree, ctx.species);
+  // P11 (W33 / RV2-2 follow-up): read the step's weather temperature (with
+  // climate fallback) so frost/heat-wave weather events reduce the harvest
+  // capacity estimate — same fix as photosynthesis.ts:271. Pre-fix, a frost
+  // event dropped weather.temperature below the species' minimum but harvest
+  // kept reading the ~14 °C climate average, so the per-action capacity + the
+  // sustainable-harvest estimate never reflected acute weather stress.
+  const temperatureC = ctx.weather?.temperature ?? ctx.environment.globalTemperature;
   const liebig = Math.min(
     lightFactor(ctx.timeOfDay),
-    temperatureFactor(ctx.environment.globalTemperature, ctx.species.temperatureRange),
+    temperatureFactor(temperatureC, ctx.species.temperatureRange),
     waterFactor(tree, dailyWater),
     co2Factor(ctx.environment.atmosphere.co2Concentration),
     nutrientFactor(tree.nutrients, ctx.species.nutrientRequirement),
@@ -183,9 +190,13 @@ export function estimateSustainableHarvest(
   // (Re-derive the per-day versions; the step versions would scale by stepDays.)
   const cond = effectiveLeafCondition(tree.stress, tree.foliage.seasonalCondition);
   const dailyWater = dailyWaterNeed(tree, ctx.species);
+  // P11 (W33 / RV2-2 follow-up): read the step's weather temperature (with
+  // climate fallback) so frost/heat-wave weather events reduce the
+  // sustainable-harvest estimate — same fix as photosynthesis.ts:271.
+  const temperatureC = ctx.weather?.temperature ?? ctx.environment.globalTemperature;
   const liebig = Math.min(
     lightFactor(ctx.timeOfDay),
-    temperatureFactor(ctx.environment.globalTemperature, ctx.species.temperatureRange),
+    temperatureFactor(temperatureC, ctx.species.temperatureRange),
     waterFactor(tree, dailyWater),
     co2Factor(ctx.environment.atmosphere.co2Concentration),
     nutrientFactor(tree.nutrients, ctx.species.nutrientRequirement),

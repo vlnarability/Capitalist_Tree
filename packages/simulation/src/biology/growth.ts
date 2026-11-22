@@ -25,27 +25,7 @@ import {
 } from '@capitalist-tree/shared';
 import type { BiologyContext } from './types.js';
 import type { EnergyAllocation } from './energy-allocation.js';
-import type { BiologyParameters } from '../progression/trait-effects.js';
-
-/**
- * The neutral biology parameter set (every multiplier 1.0). Used as the
- * default when no trait-adjusted parameters are supplied — keeps the
- * pre-P9c callers' behavior unchanged.
- */
-const NEUTRAL_PARAMS: BiologyParameters = {
-  growthRateMultiplier: 1,
-  earlyGrowthMultiplier: 1,
-  structuralGrowthMultiplier: 1,
-  maxGrowthMultiplier: 1,
-  productionCapacityMultiplier: 1,
-  energyProductionMultiplier: 1,
-  waterDemandMultiplier: 1,
-  droughtResistanceMultiplier: 1,
-  reservesCapacityMultiplier: 1,
-  pestVulnerabilityMultiplier: 1,
-  frostSurvivalMultiplier: 1,
-  warmClimatePerformanceMultiplier: 1,
-};
+import { type BiologyParameters, NEUTRAL_BIOLOGY_PARAMS } from '../progression/trait-effects.js';
 
 /**
  * Asymptotic growth factor in [0, 1] for a single dimension.
@@ -93,23 +73,43 @@ export function growDimension(
   speciesGrowthRate: number,
   ctx: BiologyContext,
   /** P11 (W9/RV4-F-M7): trait-adjusted growth multiplier. Defaults to neutral. */
-  params: BiologyParameters = NEUTRAL_PARAMS,
+  params: BiologyParameters = NEUTRAL_BIOLOGY_PARAMS,
+  /**
+   * P11 (W32): an additional per-dimension multiplier (defaults to 1). Used by
+   * the trunk call to apply `structuralGrowthMultiplier` (thick-trunk trade-off)
+   * without affecting height/branch/root.
+   */
+  extraMultiplier = 1,
 ): number {
   if (maximum <= 0 || eu <= 0) return current;
-  const frac = current / maximum;
+  // P11 (W32): maxGrowthMultiplier scales the asymptotic ceiling
+  // (efficient-photosynthesis trade-off caps peak growth). A multiplier < 1
+  // lowers the ceiling → the tree fills its fractionComplete faster → less
+  // growth. The clamp at effectiveMax means the tree can't exceed the trait-
+  // adjusted ceiling.
+  const effectiveMax = Math.max(0, maximum * params.maxGrowthMultiplier);
+  if (effectiveMax <= 0) return Math.min(current, 0);
+  const frac = Math.min(1, current / effectiveMax);
   const factor = growthFactor(frac);
-  // P11 (W9): apply the trait-adjusted growthRateMultiplier (e.g. rapid-growth
-  // raises it, pest-resistance lowers it). The multiplier composes onto the
-  // species' baseline growthRate multiplicatively (see trait-effects stacking).
+  // P11 (W32): earlyGrowthMultiplier scales EARLY-development growth (the
+  // deep-roots trade-off — roots before canopy). Youth-weighted by `factor`
+  // (1 when young, 0 when mature) so the penalty only bites early; a mature
+  // tree (factor≈0) is unaffected (its growth is already near-zero).
+  const earlyComponent = 1 + (params.earlyGrowthMultiplier - 1) * factor;
+  // P11 (W9): growthRateMultiplier scales every dimension (rapid-growth raises
+  // it, pest-resistance lowers it). Composes multiplicatively with the
+  // early + extra (structural) multipliers — see trait-effects stacking.
   const delta =
     eu *
     PROVISIONAL_BIOLOGY_GROWTH_CONVERSION_MULTIPLIER *
     speciesGrowthRate *
     params.growthRateMultiplier *
+    earlyComponent *
+    extraMultiplier *
     factor *
     ctx.stepDays;
   // delta is in metres (height/trunk) or dimensionless (branch/root) per step.
-  return Math.min(maximum, current + delta);
+  return Math.min(effectiveMax, current + delta);
 }
 
 /**
@@ -144,7 +144,7 @@ export function applyGrowth(
   /** Maximum leaves the tree can support this step (from seasons.maxSupportedLeaves). */
   maxLeaves: number,
   /** P11 (W9/RV4-F-M7): trait-adjusted biology parameters. Defaults to neutral. */
-  params: BiologyParameters = NEUTRAL_PARAMS,
+  params: BiologyParameters = NEUTRAL_BIOLOGY_PARAMS,
 ): GrowthResult {
   const sp = ctx.species;
   // DR-4: height + diameter grow from INDEPENDENT energy buckets. Height uses
@@ -160,6 +160,9 @@ export function applyGrowth(
     ctx,
     params,
   );
+  // P11 (W32): trunk growth also applies structuralGrowthMultiplier (the
+  // thick-trunk trade-off — -20% trunk-density growth at magnitude 1). Passed
+  // as the per-dimension extraMultiplier so it doesn't affect height/branch.
   const trunkDiameter = growDimension(
     tree.structure.trunkDiameter,
     sp.maximumTrunkDiameter,
@@ -167,6 +170,7 @@ export function applyGrowth(
     sp.growthRate,
     ctx,
     params,
+    params.structuralGrowthMultiplier,
   );
   // DR-4 allometric constraint: a tree cannot grow taller than
   // `trunkDiameter × maxSlendernessRatio`. If height growth would push the

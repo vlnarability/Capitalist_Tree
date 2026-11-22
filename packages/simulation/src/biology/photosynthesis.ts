@@ -44,6 +44,7 @@ import {
   PROVISIONAL_DAY_START_FRACTION,
 } from '@capitalist-tree/shared';
 import type { BiologyContext } from './types.js';
+import { type BiologyParameters, NEUTRAL_BIOLOGY_PARAMS } from '../progression/trait-effects.js';
 
 /**
  * Liebig temperature factor in [0, 1].
@@ -86,9 +87,21 @@ export function lightFactor(timeOfDay: number): number {
  * stored water to the daily need. Above 1.0 → clamped to 1.0 (extra water
  * doesn't help photosynthesis — Liebig).
  */
-export function waterFactor(tree: TreeState, dailyWaterNeedL: number): number {
+export function waterFactor(
+  tree: TreeState,
+  dailyWaterNeedL: number,
+  /** P11 (W32): trait-adjusted multipliers. Defaults to neutral. */
+  params: BiologyParameters = NEUTRAL_BIOLOGY_PARAMS,
+): number {
   if (dailyWaterNeedL <= 0) return 1;
-  return Math.min(1, tree.water.stored / dailyWaterNeedL);
+  // P11 (W32): droughtResistanceMultiplier sustains photosynthesis through dry
+  // periods (the deep-roots benefit). Implemented as an effective-demand
+  // reduction SIGNAL (need / multiplier), not a water transfer — preserves
+  // the mass-conservation invariant ResourceSystem enforces. A multiplier > 1
+  // (deep-roots 1.4) lowers the effective need → a higher water factor when
+  // stored < need. Clamped at 1 (can't exceed full water).
+  const effectiveNeed = dailyWaterNeedL / Math.max(1e-9, params.droughtResistanceMultiplier);
+  return Math.min(1, tree.water.stored / effectiveNeed);
 }
 
 /**
@@ -232,11 +245,16 @@ export function computeActiveLeafArea(
 export function dailyWaterNeed(
   tree: TreeState,
   species: TreeSpecies,
+  /** P11 (W32): trait-adjusted multipliers. Defaults to neutral. */
+  params: BiologyParameters = NEUTRAL_BIOLOGY_PARAMS,
 ): number {
   const speciesMaxFoliage = computeSpeciesMaxFoliage(species);
   const cap = Math.max(1, speciesMaxFoliage);
   const foliageFraction = Math.min(1, tree.foliage.currentLeaves / cap);
-  return species.waterRequirement * foliageFraction;
+  // P11 (W32): waterDemandMultiplier scales the requirement (rapid-growth +
+  // large-foliage both raise it; +30% at magnitude 1). A multiplier < 1 lowers
+  // the need (no trait currently does this, but the convention is symmetric).
+  return species.waterRequirement * foliageFraction * params.waterDemandMultiplier;
 }
 
 /**
@@ -255,11 +273,16 @@ export function dailyWaterNeed(
  * and once via the Liebig min (reducing per-leaf efficiency). The compounding
  * reflects that severe stress both yellows leaves and impairs their metabolism.
  */
-export function photosynthesisForStep(tree: TreeState, ctx: BiologyContext): number {
+export function photosynthesisForStep(
+  tree: TreeState,
+  ctx: BiologyContext,
+  /** P11 (W32): trait-adjusted multipliers. Defaults to neutral. */
+  params: BiologyParameters = NEUTRAL_BIOLOGY_PARAMS,
+): number {
   if (!tree.alive) return 0;
   if (ctx.species.deciduous && ctx.season === 'winter') return 0;
 
-  const dailyWater = dailyWaterNeed(tree, ctx.species);
+  const dailyWater = dailyWaterNeed(tree, ctx.species, params);
   // P11 (W4 / RV2-2): use the current WEATHER temperature (which fluctuates
   // with frost/heat-wave conditions) for the temperature Liebig factor, not
   // the slowly-evolving climate baseline (`environment.globalTemperature`).
@@ -269,6 +292,15 @@ export function photosynthesisForStep(tree: TreeState, ctx: BiologyContext): num
   // conditions" was unreachable. Fall back to the climate value when weather
   // is absent (backward compat for callers that build a context without it).
   const temperatureC = ctx.weather?.temperature ?? ctx.environment.globalTemperature;
+  // P11 (W32): warmClimatePerformanceMultiplier penalizes photosynthesis when
+  // the temperature is ABOVE the species' optimum (the cold-resistance
+  // trade-off — cold-hardy chemistry underperforms in heat; LOWER is a
+  // penalty). At/below optimum there's no penalty (cold-resistance doesn't
+  // hurt in the cold). Applied to the Liebig temperature factor directly.
+  let tempFactor = temperatureFactor(temperatureC, ctx.species.temperatureRange);
+  if (temperatureC > ctx.species.temperatureRange.optimum) {
+    tempFactor *= params.warmClimatePerformanceMultiplier;
+  }
   // GAP-17 (DR-11) Phase 3 deferred follow-up (a): the climate-level water-stress
   // Liebig factor — the regional precipitation-vs-demand deficit the per-plot
   // soil-water cap decouples from the tree's buffer (§6 bullet 2: "when demand >
@@ -282,8 +314,8 @@ export function photosynthesisForStep(tree: TreeState, ctx: BiologyContext): num
     : 1;
   const liebig = Math.min(
     lightFactor(ctx.timeOfDay),
-    temperatureFactor(temperatureC, ctx.species.temperatureRange),
-    waterFactor(tree, dailyWater),
+    tempFactor,
+    waterFactor(tree, dailyWater, params),
     climateWaterStress,
     co2Factor(ctx.environment.atmosphere.co2Concentration),
     nutrientFactor(tree.nutrients, ctx.species.nutrientRequirement),
@@ -294,11 +326,14 @@ export function photosynthesisForStep(tree: TreeState, ctx: BiologyContext): num
     tree.foliage.currentLeaves *
     effectiveLeafCondition(tree.stress, tree.foliage.seasonalCondition);
 
+  // P11 (W32): energyProductionMultiplier scales the per-leaf energy yield
+  // (the efficient-photosynthesis benefit — +25% energy at magnitude 1).
   const perDay =
     PROVISIONAL_BIOLOGY_MAX_PHOTOSYNTHESIS_RATE *
     ctx.species.photosynthesisRate *
     effectiveLeaves *
-    liebig;
+    liebig *
+    params.energyProductionMultiplier;
 
   return perDay * ctx.stepDays;
 }

@@ -13,7 +13,9 @@
  * progress bar. The fallback runs the same `runOfflineCatchUpChunked`
  * processor, so results are identical.
  */
-import { catchUpOnLoad, type CatchUpOnLoadResult, type CatchUpOnLoadStore } from './offline-catch-up-trigger';
+import { type CatchUpOnLoadResult, type CatchUpOnLoadStore } from './offline-catch-up-trigger';
+import { beginOfflineCatchUp } from '@capitalist-tree/simulation';
+import { PROVISIONAL_OFFLINE_PROMPT_THRESHOLD_MS } from '../constants';
 import { errorToNotification } from '../dispatch-wrapper';
 import type { GameState, OfflineSummary, SimulationEvent } from '@capitalist-tree/shared';
 import { OfflineClockTamperedError } from '@capitalist-tree/shared';
@@ -41,9 +43,10 @@ export function catchUpOnLoadAsync(
   nowMs: number,
   onProgress?: CatchUpProgressFn,
 ): Promise<CatchUpAsyncResult> {
-  // SSR / test / non-browser environment — fall back to synchronous.
+  // SSR / test / non-browser environment — fall back to the async chunked
+  // path (W34: yields between chunks so the main thread stays responsive).
   if (typeof Worker === 'undefined' || typeof window === 'undefined') {
-    return Promise.resolve(runSynchronousFallback(state, nowMs, onProgress));
+    return runChunkedFallback(state, nowMs, onProgress);
   }
 
   return new Promise<CatchUpAsyncResult>((resolve, reject) => {
@@ -54,8 +57,9 @@ export function catchUpOnLoadAsync(
         { type: 'module' },
       );
     } catch {
-      // Worker URL failed to instantiate — fall back to synchronous.
-      resolve(runSynchronousFallback(state, nowMs, onProgress));
+      // Worker URL failed to instantiate — fall back to the async chunked
+      // path (W34: no main-thread freeze).
+      resolve(runChunkedFallback(state, nowMs, onProgress));
       return;
     }
 
@@ -100,9 +104,10 @@ export function catchUpOnLoadAsync(
 
     const onError = () => {
       // Worker failed to load/run (e.g. module resolution error in dev) —
-      // fall back to synchronous so the catch-up still completes.
+      // fall back to the async chunked path so the catch-up still completes
+      // WITHOUT freezing the main thread (W34).
       cleanup();
-      resolve(runSynchronousFallback(state, nowMs, onProgress));
+      resolve(runChunkedFallback(state, nowMs, onProgress));
     };
 
     worker.addEventListener('message', onMessage);
@@ -111,22 +116,65 @@ export function catchUpOnLoadAsync(
   });
 }
 
-/** Synchronous fallback (same processor, no worker). */
-function runSynchronousFallback(
+/**
+ * P11 (W34 / RV5-F1 follow-up): async chunked fallback for when the Web
+ * Worker is unavailable (SSR, test env, or the worker URL fails to load).
+ *
+ * Pre-W34, the fallback called the synchronous `catchUpOnLoad`, which runs
+ * all ~1800 chunks of a 30-real-day absence in one `for` loop on the main
+ * thread — freezing the UI for minutes (the exact bug W11 closed for the
+ * Worker path). This version drives the pure `beginOfflineCatchUp` stepper
+ * one chunk at a time, yielding to the event loop (`setTimeout(0)`) between
+ * chunks so the main thread can paint + stay responsive. The result is
+ * bit-identical to `catchUpOnLoad` (the stepper produces the same state +
+ * summary + events as `runOfflineCatchUp`).
+ *
+ * Mirrors `catchUpOnLoad`'s decision tree: a fresh save (elapsed ≤ the prompt
+ * threshold) returns the input state with `summary: null`; a zero-chunk
+ * catch-up (elapsed crossed the threshold but rounded to 0 chunks) returns
+ * `summary: null` too (no modal). Throws `OfflineClockTamperedError` on a
+ * backwards clock (via `beginOfflineCatchUp` → `planOfflineCatchUp`).
+ */
+async function runChunkedFallback(
   state: GameState,
   nowMs: number,
   onProgress?: CatchUpProgressFn,
-): CatchUpAsyncResult {
-  // Report a single progress tick (0→done) so the UI can dismiss cleanly.
-  // The synchronous path is fast for small absences; for large ones the
-  // fallback is a degraded experience but still correct.
-  const result = catchUpOnLoad(state, nowMs);
-  if (onProgress) {
-    // If the summary exists, report its chunk count; else 0/0.
-    const total = result.summary?.chunksRun ?? 0;
-    onProgress(total, total);
+): Promise<CatchUpAsyncResult> {
+  const lastSimulatedAt = state.metadata.lastSimulatedAt;
+  const elapsed = nowMs - lastSimulatedAt;
+
+  // Fresh save — non-negative elapsed within the prompt threshold. A NEGATIVE
+  // elapsed (backwards clock) is deliberately NOT caught here: it falls
+  // through to beginOfflineCatchUp, which applies the tolerance check + throws
+  // OfflineClockTamperedError on a real tamper (mirrors catchUpOnLoad).
+  if (elapsed >= 0 && elapsed <= PROVISIONAL_OFFLINE_PROMPT_THRESHOLD_MS) {
+    onProgress?.(0, 0);
+    return { state, summary: null, events: [] };
   }
-  return result;
+
+  // Stale save OR backwards clock — drive the chunked stepper.
+  const stepper = beginOfflineCatchUp(state, nowMs);
+  const total = stepper.total;
+
+  if (total === 0) {
+    // Zero-chunk catch-up: summary suppressed (no modal), state from the
+    // processor. Mirrors catchUpOnLoad's zero-chunk branch.
+    onProgress?.(0, 0);
+    const result = stepper.finish();
+    return { state: result.state, summary: null, events: result.events };
+  }
+
+  onProgress?.(0, total);
+  for (let i = 0; i < total; i++) {
+    stepper.step();
+    onProgress?.(i + 1, total);
+    // Yield to the event loop between chunks so the main thread can paint +
+    // stay responsive. This is the W34 fix: a 30-day absence (1800 chunks) on
+    // the fallback path no longer blocks for the full duration.
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  }
+  const result = stepper.finish();
+  return { state: result.state, summary: result.summary, events: result.events };
 }
 
 /**

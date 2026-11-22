@@ -23,6 +23,7 @@ import {
   PROVISIONAL_BIOLOGY_LEAF_CAPACITY_PER_BRANCH,
   PROVISIONAL_BIOLOGY_RESERVE_CAPACITY_DEVELOPMENT_GAIN,
 } from '@capitalist-tree/shared';
+import { type BiologyParameters, NEUTRAL_BIOLOGY_PARAMS } from '../progression/trait-effects.js';
 import type { BiologyContext } from './types.js';
 import { biomassScore } from './energy-allocation.js';
 
@@ -48,12 +49,17 @@ import { biomassScore } from './energy-allocation.js';
 export function computeReserveCapacity(
   tree: TreeState,
   species: TreeSpecies,
+  /** P11 (W32): trait-adjusted multipliers. Defaults to neutral. */
+  params: BiologyParameters = NEUTRAL_BIOLOGY_PARAMS,
 ): number {
   const biomass = biomassScore(tree, species);
   const baseline = Math.max(1, species.initial.reserveCapacity);
   const developed =
     species.reserveCapacity * (biomass / 4) * PROVISIONAL_BIOLOGY_RESERVE_CAPACITY_DEVELOPMENT_GAIN;
-  return Math.max(1, baseline + developed);
+  // P11 (W32): reservesCapacityMultiplier scales the total capacity (the
+  // thick-trunk benefit — +30% reserves at magnitude 1). Clamped at 1 so a
+  // trait never shrinks capacity below the sapling floor.
+  return Math.max(1, (baseline + developed) * params.reservesCapacityMultiplier);
 }
 
 /**
@@ -95,9 +101,15 @@ export function applyReserveDelta(
 export function computeLeafCapacity(
   branchDevelopment: number,
   initialLeafCapacity: number,
+  /** P11 (W32): trait-adjusted multipliers. Defaults to neutral. */
+  params: BiologyParameters = NEUTRAL_BIOLOGY_PARAMS,
 ): number {
+  // P11 (W32): productionCapacityMultiplier scales the leaf capacity (the
+  // large-foliage benefit — +25% capacity at magnitude 1). Floored after the
+  // multiplier so the result stays an integer leaf count.
   return Math.floor(
-    initialLeafCapacity + branchDevelopment * PROVISIONAL_BIOLOGY_LEAF_CAPACITY_PER_BRANCH,
+    (initialLeafCapacity + branchDevelopment * PROVISIONAL_BIOLOGY_LEAF_CAPACITY_PER_BRANCH) *
+      params.productionCapacityMultiplier,
   );
 }
 

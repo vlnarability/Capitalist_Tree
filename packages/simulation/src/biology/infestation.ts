@@ -26,6 +26,7 @@ import {
   PROVISIONAL_BIOLOGY_INFESTATION_SEVERITY_MIN,
   PROVISIONAL_BIOLOGY_INFESTATION_SEVERITY_MAX,
 } from '@capitalist-tree/shared';
+import { type BiologyParameters, NEUTRAL_BIOLOGY_PARAMS } from '../progression/trait-effects.js';
 
 /** A biology context — the slice of SystemContext the infestation roll needs. */
 export interface InfestationContext {
@@ -49,11 +50,17 @@ export function rollInfestation(
   ctx: InfestationContext,
   rng: Rng,
   stepDays: number,
+  /** P11 (W32): trait-adjusted multipliers. Defaults to neutral. */
+  params: BiologyParameters = NEUTRAL_BIOLOGY_PARAMS,
 ): TreeDamageState[] {
   const newDamage: TreeDamageState[] = [];
 
   // Pest infestation — gated on foliage (pests eat leaves).
-  if (hasFoliage && rng.next() < PROVISIONAL_BIOLOGY_PEST_INFESTATION_RATE_PER_DAY * stepDays) {
+  // P11 (W32): pestVulnerabilityMultiplier scales the pest rate (the
+  // pest-resistance benefit — LOWER is better; -50% at magnitude 1). Applied
+  // to pests only (the trait is pest-resistance); disease is unaffected.
+  const pestRate = PROVISIONAL_BIOLOGY_PEST_INFESTATION_RATE_PER_DAY * params.pestVulnerabilityMultiplier;
+  if (hasFoliage && rng.next() < pestRate * stepDays) {
     newDamage.push({
       type: 'pest',
       severity: severityRoll(rng),

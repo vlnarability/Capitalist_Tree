@@ -116,6 +116,16 @@ export function defaultBiologyParameters(): BiologyParameters {
   };
 }
 
+/**
+ * Frozen neutral parameter set — the default value for the optional `params`
+ * arg on the biology functions that consume trait multipliers (W32). Using a
+ * shared frozen constant avoids allocating a fresh object on every call that
+ * omits `params` (the common case — most callers are tests + non-trait paths).
+ * Readonly so a caller can't mutate the shared neutral.
+ */
+export const NEUTRAL_BIOLOGY_PARAMS: Readonly<BiologyParameters> =
+  Object.freeze(defaultBiologyParameters());
+
 // ---------------------------------------------------------------------------
 // Local @provisional per-trait coefficients (GDD §11.2 table)
 // ---------------------------------------------------------------------------

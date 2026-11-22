@@ -118,6 +118,21 @@ export const biologySystem: System = {
       species,
     );
 
+    // P11 (W9 / RV4-F-M7, extended W32): apply genetic trait effects to the
+    // biology multipliers BEFORE any biology computation that consumes them.
+    // `applyTraitEffects` folds each active (expressed) trait's benefit +
+    // trade-off into the parameter set. W9 wired only `growthRateMultiplier`
+    // (into applyGrowth); W32 threads the full set through photosynthesis
+    // (energyProduction, warmClimate, droughtResistance, waterDemand), leaf
+    // capacity (productionCapacity), reserve capacity (reservesCapacity),
+    // infestation (pestVulnerability), mortality (frostSurvival), + growth
+    // (earlyGrowth, structuralGrowth, maxGrowth). Pre-W32 the helper was
+    // called but 11 of 12 multipliers were computed then never read.
+    const traitParams = applyTraitEffects(
+      defaultBiologyParameters(),
+      state.progression.genetics.activeTraits,
+    );
+
     // Dead trees stay dead. Recompute health=0 and skip the rest. P3 still
     // drains any pending issuances queued before death.
     if (!tree.alive) {
@@ -130,9 +145,12 @@ export const biologySystem: System = {
     tree.foliage.seasonalCondition = advanceSeasonalCondition(tree, bioCtx);
 
     // 5. Recompute leafCapacity from branch development.
+    // P11 (W32): pass traitParams so productionCapacityMultiplier (large-foliage)
+    // scales the leaf capacity.
     tree.foliage.leafCapacity = computeLeafCapacity(
       tree.structure.branchDevelopment,
       species.initial.leafCapacity,
+      traitParams,
     );
 
     // 6. Cap currentLeaves at the seasonally-supported maximum (senescence).
@@ -144,7 +162,11 @@ export const biologySystem: System = {
     if (tree.foliage.currentLeaves < 0) tree.foliage.currentLeaves = 0;
 
     // 7. Photosynthesis.
-    const production = photosynthesisForStep(tree, bioCtx);
+    // P11 (W32): pass traitParams so energyProductionMultiplier
+    // (efficient-photosynthesis), warmClimatePerformanceMultiplier
+    // (cold-resistance trade-off), droughtResistanceMultiplier (deep-roots),
+    // + waterDemandMultiplier (rapid-growth / large-foliage) all take effect.
+    const production = photosynthesisForStep(tree, bioCtx, traitParams);
     tree.energy.production = production / stepDays; // store per-day rate
 
     // NOTE: water + nutrient uptake is owned by ResourceSystem (slot #4,
@@ -161,22 +183,11 @@ export const biologySystem: System = {
 
     // Reserve capacity — recomputed from current biomass (the tree may have
     // grown since last tick). Used by budding and reserve update below.
-    const capacity = computeReserveCapacity(tree, species);
+    // P11 (W32): pass traitParams so reservesCapacityMultiplier (thick-trunk)
+    // scales the capacity.
+    const capacity = computeReserveCapacity(tree, species, traitParams);
 
-    // 9b. P11 (W9 / RV4-F-M7): apply genetic trait effects to the biology
-    // multipliers BEFORE growth. `applyTraitEffects` folds each active
-    // (expressed) trait's benefit + trade-off into the parameter set; the
-    // resulting `growthRateMultiplier` scales height/trunk/branch/root growth
-    // in `applyGrowth` below. Pre-P11 this helper was defined + unit-tested
-    // but never called — the genetics subsystem was non-functional despite
-    // passing its own unit tests. With this call, activating `trait:rapid-
-    // growth` measurably raises the growth rate.
-    const traitParams = applyTraitEffects(
-      defaultBiologyParameters(),
-      state.progression.genetics.activeTraits,
-    );
-
-    // 10. Apply growth.
+    // 9b. Apply growth.
     const growth = applyGrowth(tree, bioCtx, alloc, seasonalMax, traitParams);
     tree.structure.height = growth.height;
     tree.structure.trunkDiameter = growth.trunkDiameter;
@@ -237,11 +248,14 @@ export const biologySystem: System = {
     // any living tree. The rates are per-day × stepDays (per-tick-vs-per-day
     // scaling, same pattern as the weather fix + RV4-F-H2).
     const infestationRng = ctx.rng.fork('BiologySystem:infestation');
+    // P11 (W32): pass traitParams so pestVulnerabilityMultiplier (pest-resistance)
+    // scales the pest rate.
     const infestationDamage = rollInfestation(
       tree.foliage.currentLeaves > 0,
       bioCtx,
       infestationRng,
       stepDays,
+      traitParams,
     );
     if (infestationDamage.length > 0) {
       tree.damage = [...tree.damage, ...infestationDamage];
@@ -288,8 +302,10 @@ export const biologySystem: System = {
     tree.health = computeHealth(tree, bioCtx);
 
     // 15. Mortality check (RNG-driven).
+    // P11 (W32): pass traitParams so frostSurvivalMultiplier (cold-resistance)
+    // + reservesCapacityMultiplier (thick-trunk, via capacity) affect survival.
     const rng = ctx.rng.fork('BiologySystem');
-    const mortality = checkMortality(tree, bioCtx, rng);
+    const mortality = checkMortality(tree, bioCtx, rng, traitParams);
     if (mortality.died) {
       tree.alive = false;
       tree.health = 0;

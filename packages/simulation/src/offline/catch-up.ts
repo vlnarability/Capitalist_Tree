@@ -329,87 +329,147 @@ function buildSummary(before: FieldSnapshot, after: FieldSnapshot, plan: Offline
  * calls (the engine is pure and seeded). See the determinism test.
  */
 /**
+ * P11 (W34 / RV5-F1 follow-up): a chunked catch-up STEPPER. Exposes the
+ * per-chunk advance as a stateful object a caller can drive chunk-by-chunk,
+ * yielding to the event loop between chunks. This is what lets the apps/web
+ * main-thread fallback (when the Web Worker is unavailable) run a 30-real-day
+ * catch-up (≈1800 chunks) WITHOUT freezing the UI — the sync
+ * {@link runOfflineCatchUpChunked} runs all chunks in one `for` loop, so
+ * calling it on the main thread blocks for the full duration.
+ *
+ * The stepper is pure modulo its internal `work` state: the same `(state,
+ * nowMs)` produces a bit-identical {@link OfflineCatchUpStepper.finish}
+ * result to {@link runOfflineCatchUp} (the engine is pure + seeded; TDD §18.3
+ * splittability). Throws `OfflineClockTamperedError` from
+ * {@link beginOfflineCatchUp} on a backwards clock beyond tolerance (via
+ * {@link planOfflineCatchUp}).
+ */
+export interface OfflineCatchUpStepper {
+  /** Total chunks planned (0 → `step()` is a no-op; `finish()` returns the zero-chunk result). */
+  readonly total: number;
+  /** True once all planned chunks have run via `step()`. */
+  readonly done: boolean;
+  /**
+   * Advance one chunk. Returns that chunk's events (may be empty). A no-op
+   * once `done` (or when `total === 0`), so the caller can drive
+   * `for (i=0; i<total; i++) stepper.step()` without an extra guard.
+   */
+  step(): SimulationEvent[];
+  /**
+   * Build + return the final result: after-snapshot, summary, bookend events,
+   * + the `lastSimulatedAt` marker advance (non-zero case). For the zero-chunk
+   * case, returns an empty-summary result with NO marker advance + no bookend
+   * events — identical to {@link runOfflineCatchUpChunked}'s zero-chunk
+   * short-circuit.
+   */
+  finish(): OfflineCatchUpResult;
+}
+
+/**
+ * Begin a chunked catch-up. Plans + snapshots the before-state + returns a
+ * {@link OfflineCatchUpStepper} the caller drives chunk-by-chunk. The stepper
+ * holds the running `work` state internally; {@link OfflineCatchUpStepper.step}
+ * advances one chunk, {@link OfflineCatchUpStepper.finish} builds the final
+ * result.
+ *
+ * Throws `OfflineClockTamperedError` on a backwards clock beyond tolerance
+ * (via {@link planOfflineCatchUp}). Pure modulo the stepper's internal state.
+ */
+export function beginOfflineCatchUp(state: GameState, nowMs: number): OfflineCatchUpStepper {
+  const plan = planOfflineCatchUp(state, nowMs);
+  const before = snapshotFields(state);
+  let work = deepCopy(state);
+  let completed = 0;
+  const chunkEvents: SimulationEvent[] = [];
+  const total = plan.chunksPlanned;
+
+  return {
+    total,
+    get done() {
+      return completed >= total;
+    },
+    step(): SimulationEvent[] {
+      if (total === 0 || completed >= total) return [];
+      const result = engine.advance(work, PROVISIONAL_OFFLINE_CHUNK_SIM_SECONDS);
+      work = result.state;
+      const events = [...result.events];
+      chunkEvents.push(...events);
+      completed++;
+      return events;
+    },
+    finish(): OfflineCatchUpResult {
+      // Step 6 — zero-chunk short-circuit (matches runOfflineCatchUpChunked):
+      // empty summary (before==before), no events, NO marker advance. `work`
+      // is already a deepCopy of the input (purity — caller gets a fresh ref).
+      if (total === 0) {
+        const emptySummary = buildSummary(before, before, {
+          ...plan,
+          simElapsedSeconds: 0,
+          chunksPlanned: 0,
+        });
+        return { state: work, summary: emptySummary, events: [] };
+      }
+      // Steps 9–11: after-snapshot + summary + bookend events + marker advance.
+      const after = snapshotFields(work);
+      const summary = buildSummary(before, after, plan);
+      const startedEvent: OfflineCatchUpStartedEvent = {
+        type: 'offline-catch-up-started',
+        at: before.elapsedSeconds,
+        payload: {
+          requestedRealMs: plan.requestedRealMs,
+          simElapsedSecondsPlanned: plan.simElapsedSeconds,
+          chunksPlanned: plan.chunksPlanned,
+          capped: plan.capped,
+        },
+      };
+      const completedEvent: OfflineCatchUpCompletedEvent = {
+        type: 'offline-catch-up-completed',
+        at: after.elapsedSeconds,
+        payload: { summary },
+      };
+      const finalState: GameState = {
+        ...work,
+        metadata: {
+          ...work.metadata,
+          lastSimulatedAt: nowMs,
+        },
+      };
+      return {
+        state: finalState,
+        summary,
+        events: [startedEvent, ...chunkEvents, completedEvent],
+      };
+    },
+  };
+}
+
+/**
  * P11 (W11 / RV5-F1): chunked catch-up with a progress callback. Identical to
  * {@link runOfflineCatchUp} but calls `onProgress(completed, total)` after
  * each chunk so a Web Worker (or async yielding wrapper) can post progress to
  * the main thread for a progress bar. The callback is optional — when
  * omitted, this is equivalent to {@link runOfflineCatchUp}.
+ *
+ * P11 (W34): delegates to {@link beginOfflineCatchUp} so the stepper + this
+ * sync loop share one implementation of the chunk-advance + summary logic
+ * (the stepper is the reuse point for the async main-thread fallback).
  */
 export function runOfflineCatchUpChunked(
   state: GameState,
   nowMs: number,
   onProgress?: (completed: number, total: number) => void,
 ): OfflineCatchUpResult {
-  const plan = planOfflineCatchUp(state, nowMs);
-
-  // Before-snapshot is read from the input state (the pre-catch-up reality).
-  const before = snapshotFields(state);
-
-  // Step 6 — zero-chunk short-circuit: empty summary, no events, no marker
-  // advance. Return a clone so the caller gets a fresh object (purity).
-  if (plan.chunksPlanned === 0) {
-    const emptyState = deepCopy(state);
-    const emptySummary = buildSummary(before, before, { ...plan, simElapsedSeconds: 0, chunksPlanned: 0 });
+  const stepper = beginOfflineCatchUp(state, nowMs);
+  if (stepper.total === 0) {
     // Report 100% even for the zero-chunk case so the UI can dismiss cleanly.
     onProgress?.(0, 0);
-    return { state: emptyState, summary: emptySummary, events: [] };
+    return stepper.finish();
   }
-
-  // Step 7 — emit the started event at the pre-catch-up sim time.
-  const startedEvent: OfflineCatchUpStartedEvent = {
-    type: 'offline-catch-up-started',
-    at: before.elapsedSeconds,
-    payload: {
-      requestedRealMs: plan.requestedRealMs,
-      simElapsedSecondsPlanned: plan.simElapsedSeconds,
-      chunksPlanned: plan.chunksPlanned,
-      capped: plan.capped,
-    },
-  };
-
-  // Step 8 — clone + chunked advance. The clone honours rule 2 (no input
-  // mutation) explicitly; `engine.advance` also deep-copies on entry, so the
-  // input is never touched.
-  let work = deepCopy(state);
-  const chunkEvents: SimulationEvent[] = [];
-  for (let i = 0; i < plan.chunksPlanned; i++) {
-    const result = engine.advance(work, PROVISIONAL_OFFLINE_CHUNK_SIM_SECONDS);
-    work = result.state;
-    if (result.events.length > 0) {
-      for (const ev of result.events) {
-        chunkEvents.push(ev);
-      }
-    }
-    // P11 (W11): report progress after each chunk so the Web Worker can post
-    // it to the main thread for the progress bar.
-    onProgress?.(i + 1, plan.chunksPlanned);
+  for (let i = 0; i < stepper.total; i++) {
+    stepper.step();
+    onProgress?.(i + 1, stepper.total);
   }
-
-  // Step 9 — after-snapshot + summary.
-  const after = snapshotFields(work);
-  const summary = buildSummary(before, after, plan);
-
-  const completedEvent: OfflineCatchUpCompletedEvent = {
-    type: 'offline-catch-up-completed',
-    at: after.elapsedSeconds,
-    payload: { summary },
-  };
-
-  // Step 10 — advance the save marker. `work` is the engine's fresh return
-  // value; we replace its metadata with an updated `lastSimulatedAt` without
-  // mutating the input.
-  work = {
-    ...work,
-    metadata: {
-      ...work.metadata,
-      lastSimulatedAt: nowMs,
-    },
-  };
-
-  // Step 11 — full event stream: bookend events + chunk events in order.
-  const events: SimulationEvent[] = [startedEvent, ...chunkEvents, completedEvent];
-
-  return { state: work, summary, events };
+  return stepper.finish();
 }
 
 /**

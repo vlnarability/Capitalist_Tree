@@ -29,6 +29,7 @@ import {
 import type { Rng } from '../rng.js';
 import { computeReserveCapacity, reserveFraction } from './reserves.js';
 import type { BiologyContext } from './types.js';
+import { type BiologyParameters, NEUTRAL_BIOLOGY_PARAMS } from '../progression/trait-effects.js';
 
 const SECONDS_PER_DAY = 24 * 60 * 60;
 
@@ -79,19 +80,35 @@ export function checkMortality(
   tree: TreeState,
   ctx: BiologyContext,
   rng: Rng,
+  /** P11 (W32): trait-adjusted multipliers. Defaults to neutral. */
+  params: BiologyParameters = NEUTRAL_BIOLOGY_PARAMS,
 ): MortalityCheck {
   if (!tree.alive) return { died: false };
 
   const stepDays = ctx.stepDays;
-  const capacity = computeReserveCapacity(tree, ctx.species);
+  // P11 (W32): pass params so reservesCapacityMultiplier (thick-trunk) is
+  // honoured — a larger reserve capacity raises reserveFrac → lower mortality.
+  const capacity = computeReserveCapacity(tree, ctx.species, params);
   const reserveFrac = reserveFraction(tree, capacity);
   const defoliations = recentSevereDefoliations(tree, ctx.now);
+
+  // P11 (W32): frostSurvivalMultiplier scales the mortality probability when
+  // the tree has recent frost damage (the cold-resistance benefit — +50% frost
+  // survival at magnitude 1). frostSurvivalMultiplier > 1 = better survival →
+  // LOWER death prob (prob × 1/multiplier). Only applies when frost damage is
+  // present (cold-resistance is irrelevant in frost-free conditions). The
+  // window matches the defoliation prune window so "recent" is consistent.
+  const frostWindowSeconds = PROVISIONAL_BIOLOGY_DEATH_DEFOLIATION_WINDOW_DAYS * SECONDS_PER_DAY;
+  const hasRecentFrost = tree.damage.some(
+    (d) => d.type === 'weather:frost' && d.appliedAt >= ctx.now - frostWindowSeconds,
+  );
+  const frostSurvivalFactor = hasRecentFrost ? 1 / params.frostSurvivalMultiplier : 1;
 
   // 1. Repeated severe defoliation: if the count meets/exceeds the threshold,
   //    the tree is at high mortality risk regardless of current stress.
   if (defoliations >= PROVISIONAL_BIOLOGY_DEATH_DEFOLIATION_COUNT) {
     const prob =
-      PROVISIONAL_BIOLOGY_DEATH_DAILY_PROBABILITY * stepDays * 2; // doubled for repeat events
+      PROVISIONAL_BIOLOGY_DEATH_DAILY_PROBABILITY * stepDays * 2 * frostSurvivalFactor; // doubled for repeat events
     if (rng.next() < prob) {
       return {
         died: true,
@@ -109,7 +126,7 @@ export function checkMortality(
     const stressOverage =
       (tree.stress - PROVISIONAL_BIOLOGY_DEATH_STRESS_CRITICAL) /
       (1 - PROVISIONAL_BIOLOGY_DEATH_STRESS_CRITICAL);
-    const prob = PROVISIONAL_BIOLOGY_DEATH_DAILY_PROBABILITY * stressOverage * stepDays;
+    const prob = PROVISIONAL_BIOLOGY_DEATH_DAILY_PROBABILITY * stressOverage * stepDays * frostSurvivalFactor;
     if (rng.next() < prob) {
       return {
         died: true,
@@ -144,7 +161,7 @@ export function checkMortality(
       (tree.wear - PROVISIONAL_BIOLOGY_WEAR_MORTALITY_ONSET) /
       (PROVISIONAL_BIOLOGY_WEAR_DEATH_THRESHOLD - PROVISIONAL_BIOLOGY_WEAR_MORTALITY_ONSET);
     const prob =
-      PROVISIONAL_BIOLOGY_DEATH_DAILY_PROBABILITY * Math.min(1, wearOverage) * stepDays;
+      PROVISIONAL_BIOLOGY_DEATH_DAILY_PROBABILITY * Math.min(1, wearOverage) * stepDays * frostSurvivalFactor;
     if (rng.next() < prob) {
       return {
         died: true,

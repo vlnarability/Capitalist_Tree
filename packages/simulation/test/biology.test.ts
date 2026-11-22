@@ -36,6 +36,7 @@ import {
   updateStress,
   checkMortality,
   recentSevereDefoliations,
+  rollInfestation,
   harvestLeaves,
   estimateSustainableHarvest,
   maturityMultiplier,
@@ -458,6 +459,188 @@ describe('growth — genetic trait effects (P11 W9 / RV4-F-M7)', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// P11 (W32 / RV4-F-M7 follow-up): all 11 remaining trait-effect multipliers
+// wired into the biology functions. Pre-W32 only `growthRateMultiplier` was
+// consumed (applyGrowth); the other 11 were computed by applyTraitEffects
+// then never read, so 6 of 7 genetic traits had no in-game effect. Each test
+// activates one trait at magnitude 1 + asserts its primary multiplier has a
+// measurable effect at the site W32 wired it.
+// ---------------------------------------------------------------------------
+describe('biology — genetic trait effects (W32: all 11 multipliers wired)', () => {
+  // Helper: build BiologyParameters with a single trait active at magnitude 1.
+  function withTrait(traitId: string) {
+    return applyTraitEffects(defaultBiologyParameters(), [
+      { traitId, active: true, generation: 1, magnitude: 1 },
+    ]);
+  }
+
+  it('large-foliage raises leaf capacity + water demand (productionCapacity + waterDemand)', () => {
+    const tree = testTree({ foliage: { currentLeaves: 1000, leafCapacity: 2000 } });
+    const neutral = defaultBiologyParameters();
+    const params = withTrait('trait:large-foliage');
+    // +25% leaf capacity (productionCapacityMultiplier = 1.25).
+    const neutralCap = computeLeafCapacity(100, SPECIES.initial.leafCapacity, neutral);
+    const traitCap = computeLeafCapacity(100, SPECIES.initial.leafCapacity, params);
+    expect(traitCap).toBeGreaterThan(neutralCap);
+    expect(traitCap).toBeCloseTo(neutralCap * 1.25, 0);
+    // +30% water demand (waterDemandMultiplier = 1.3).
+    const neutralWater = dailyWaterNeed(tree, SPECIES, neutral);
+    const traitWater = dailyWaterNeed(tree, SPECIES, params);
+    expect(traitWater).toBeGreaterThan(neutralWater);
+    expect(traitWater).toBeCloseTo(neutralWater * 1.3, 5);
+  });
+
+  it('deep-roots sustains photosynthesis through drought + penalizes early growth', () => {
+    // droughtResistance: a tree in drought (stored < need) gets a higher water
+    // factor with deep-roots (effective need is divided by 1.4).
+    const tree = testTree({ water: { stored: 1, capacity: 50 } });
+    const neutral = defaultBiologyParameters();
+    const params = withTrait('trait:deep-roots');
+    const need = dailyWaterNeed(tree, SPECIES, neutral); // same demand — deep-roots doesn't touch waterDemand
+    const neutralWf = waterFactor(tree, need, neutral);
+    const traitWf = waterFactor(tree, need, params);
+    expect(traitWf).toBeGreaterThan(neutralWf); // deep-roots sustains photosynthesis
+    expect(traitWf).toBeCloseTo(Math.min(1, neutralWf * 1.4), 5);
+
+    // earlyGrowth: a YOUNG tree (low fraction → high growth factor → the
+    // youth-weighted penalty bites) grows less height with deep-roots.
+    const young = testTree({
+      structure: { height: 0.5, trunkDiameter: 0.05, branchDevelopment: 1, structuralIntegrity: 1 },
+    });
+    const ctx = testContext();
+    const alloc = allocateEnergy(young, 1000, ctx);
+    const maxLeaves = maxSupportedLeaves(young);
+    const neutralGrowth = applyGrowth(young, ctx, alloc, maxLeaves, neutral);
+    const traitGrowth = applyGrowth(young, ctx, alloc, maxLeaves, params);
+    expect(traitGrowth.height).toBeLessThan(neutralGrowth.height); // -15% early growth
+  });
+
+  it('thick-trunk raises reserve capacity + penalizes trunk (structural) growth', () => {
+    const tree = testTree({
+      structure: { height: 5, trunkDiameter: 0.5, branchDevelopment: 50, structuralIntegrity: 1 },
+    });
+    const neutral = defaultBiologyParameters();
+    const params = withTrait('trait:thick-trunk');
+    // +30% reserve capacity (reservesCapacityMultiplier = 1.3).
+    const neutralCap = computeReserveCapacity(tree, SPECIES, neutral);
+    const traitCap = computeReserveCapacity(tree, SPECIES, params);
+    expect(traitCap).toBeGreaterThan(neutralCap);
+    expect(traitCap).toBeCloseTo(neutralCap * 1.3, 5);
+    // -20% trunk growth (structuralGrowthMultiplier = 0.8, trunk-only).
+    const ctx = testContext();
+    const alloc = allocateEnergy(tree, 1000, ctx);
+    const maxLeaves = maxSupportedLeaves(tree);
+    const neutralGrowth = applyGrowth(tree, ctx, alloc, maxLeaves, neutral);
+    const traitGrowth = applyGrowth(tree, ctx, alloc, maxLeaves, params);
+    expect(traitGrowth.trunkDiameter).toBeLessThan(neutralGrowth.trunkDiameter);
+    // Height is unaffected (structuralGrowth is trunk-only).
+    expect(traitGrowth.height).toBe(neutralGrowth.height);
+  });
+
+  it('pest-resistance reduces the pest infestation rate (pestVulnerability × 0.5)', () => {
+    // rollInfestation is RNG-driven; over many trials the pest count with
+    // pest-resistance should be ~half the neutral count. Disease is unaffected.
+    const neutral = defaultBiologyParameters();
+    const params = withTrait('trait:pest-resistance');
+    const N = 400;
+    const ctx = { now: 0 };
+    const stepDays = 1;
+    let neutralPests = 0;
+    let traitPests = 0;
+    let neutralDisease = 0;
+    let traitDisease = 0;
+    for (let i = 0; i < N; i++) {
+      const nRng = Rng.fromSeed(i + 1);
+      const tRng = Rng.fromSeed(i + 1); // SAME seed → only the trait differs
+      const n = rollInfestation(true, ctx, nRng, stepDays, neutral);
+      const t = rollInfestation(true, ctx, tRng, stepDays, params);
+      neutralPests += n.filter((d) => d.type === 'pest').length;
+      traitPests += t.filter((d) => d.type === 'pest').length;
+      neutralDisease += n.filter((d) => d.type === 'disease').length;
+      traitDisease += t.filter((d) => d.type === 'disease').length;
+    }
+    expect(neutralPests).toBeGreaterThan(0); // sanity: pests fire
+    expect(traitPests).toBeLessThan(neutralPests); // pest-resistance reduces pests
+    // Disease is unaffected (pest-resistance is pest-specific).
+    expect(traitDisease).toBe(neutralDisease);
+  });
+
+  it('cold-resistance penalizes warm-climate photosynthesis + improves frost survival', () => {
+    const tree = testTree({ foliage: { currentLeaves: 1000, leafCapacity: 2000 }, water: { stored: 50, capacity: 50 } });
+    const neutral = defaultBiologyParameters();
+    const params = withTrait('trait:cold-resistance');
+    // warmClimatePerformance: at a WARM temp (> optimum 22 °C), cold-resistance
+    // reduces photosynthesis (× 0.85). 30 °C is above optimum but below maximum.
+    const warmCtx = {
+      ...testContext(),
+      weather: { condition: 'heat-wave' as const, temperature: 30, intensity: 0.8, prevCondition: null, daysInCondition: 0 },
+    };
+    const neutralWarm = photosynthesisForStep(tree, warmCtx, neutral);
+    const traitWarm = photosynthesisForStep(tree, warmCtx, params);
+    expect(neutralWarm).toBeGreaterThan(0);
+    expect(traitWarm).toBeLessThan(neutralWarm); // -15% warm performance
+
+    // At a COLD temp (≤ optimum), cold-resistance does NOT penalize photosynthesis.
+    const coolCtx = {
+      ...testContext(),
+      weather: { condition: 'sunny' as const, temperature: 15, intensity: 0.3, prevCondition: null, daysInCondition: 0 },
+    };
+    expect(photosynthesisForStep(tree, coolCtx, params)).toBe(photosynthesisForStep(tree, coolCtx, neutral));
+
+    // frostSurvival: a frost-damaged critical tree dies less often with
+    // cold-resistance (death prob × 1/1.5 ≈ 0.67). RNG-driven; many trials.
+    const criticalTree = () =>
+      testTree({
+        stress: 0.97,
+        energy: { reserves: 0.1, production: 0, consumption: 0 },
+        damage: [{ type: 'weather:frost', severity: 0.7, appliedAt: 0 }],
+      });
+    const dieCtx = testContext({ stepSeconds: SECONDS_PER_DAY });
+    let neutralDied = 0;
+    let traitDied = 0;
+    const M = 400;
+    for (let i = 0; i < M; i++) {
+      if (checkMortality(criticalTree(), dieCtx, Rng.fromSeed(i + 1), neutral).died) neutralDied++;
+      if (checkMortality(criticalTree(), dieCtx, Rng.fromSeed(i + 1), params).died) traitDied++;
+    }
+    expect(neutralDied).toBeGreaterThan(0); // sanity: the critical tree dies sometimes
+    expect(traitDied).toBeLessThan(neutralDied); // cold-resistance improves frost survival
+  });
+
+  it('efficient-photosynthesis raises energy production + lowers the growth ceiling', () => {
+    const tree = testTree({ foliage: { currentLeaves: 1000, leafCapacity: 2000 }, water: { stored: 50, capacity: 50 } });
+    const neutral = defaultBiologyParameters();
+    const params = withTrait('trait:efficient-photosynthesis');
+    // +25% energy production (energyProductionMultiplier = 1.25).
+    const ctx = testContext();
+    const neutralProd = photosynthesisForStep(tree, ctx, neutral);
+    const traitProd = photosynthesisForStep(tree, ctx, params);
+    expect(traitProd).toBeGreaterThan(neutralProd);
+    expect(traitProd).toBeCloseTo(neutralProd * 1.25, 5);
+
+    // -10% growth ceiling (maxGrowthMultiplier = 0.9). A tree near the ceiling
+    // (85% of max — below the trait's lowered 0.9×max ceiling so the clamp is
+    // reachable) grows less with efficient-photosynthesis: its fractionComplete
+    // relative to the lowered ceiling is higher → smaller growth factor.
+    const nearCeiling = testTree({
+      structure: {
+        height: SPECIES.maximumHeight * 0.85,
+        trunkDiameter: SPECIES.maximumTrunkDiameter * 0.85,
+        branchDevelopment: SPECIES.maximumBranchDevelopment * 0.85,
+        structuralIntegrity: 1,
+      },
+    });
+    const alloc = allocateEnergy(nearCeiling, 1000, ctx);
+    const maxLeaves = maxSupportedLeaves(nearCeiling);
+    const neutralGrowth = applyGrowth(nearCeiling, ctx, alloc, maxLeaves, neutral);
+    const traitGrowth = applyGrowth(nearCeiling, ctx, alloc, maxLeaves, params);
+    expect(traitGrowth.height).toBeLessThan(neutralGrowth.height);
+    // The trait's ceiling is lower → height can't exceed 0.9 × maximumHeight.
+    expect(traitGrowth.height).toBeLessThanOrEqual(SPECIES.maximumHeight * 0.9 + 1e-9);
+  });
+});
+
 describe('reserves (TDD §7.4)', () => {
   it('reserve capacity scales with biomass', () => {
     const sapling = testTree({
@@ -811,6 +994,85 @@ describe('harvest (TDD §7.5, GDD §5.4)', () => {
     });
     const est = estimateSustainableHarvest(tree, ctx);
     expect(est.leavesPerDay).toBe(0);
+  });
+
+  // --------------------------------------------------------------------------
+  // P11 (W33 / RV2-2 follow-up): harvest reads the current WEATHER temperature
+  // (which fluctuates with frost/heat-wave conditions), not the slowly-evolving
+  // climate baseline (`environment.globalTemperature`). Pre-fix, a frost event
+  // dropped `weather.temperature` below the species' optimum but harvest kept
+  // reading the ~18 °C climate average — so the per-action photosynthetic
+  // capacity + the sustainable-harvest estimate never reflected acute weather
+  // stress. Same fix as photosynthesis.ts:271 (W4 / RV2-2).
+  // --------------------------------------------------------------------------
+  it('reads weather.temperature for the harvest capacity estimate (frost reduces it)', () => {
+    const tree = testTree({
+      foliage: { currentLeaves: 1000, leafCapacity: 2000 },
+      water: { stored: 50, capacity: 50 },
+    });
+    const ctxNoWeather = testContext(); // climate avg 18 °C, no weather → fallback
+    const ctxFrost = {
+      ...testContext(),
+      weather: {
+        condition: 'frost' as const,
+        temperature: 9.5, // above species min (5 °C) but well below optimum (22 °C)
+        intensity: 0.8,
+        prevCondition: null,
+        daysInCondition: 0,
+      },
+    };
+    const baseline = harvestLeaves(tree, ctxNoWeather, 100, 0, 'currency:leaf-dollar');
+    const frost = harvestLeaves(tree, ctxFrost, 100, 0, 'currency:leaf-dollar');
+    // Frost reduces the per-action photosynthetic capacity estimate.
+    expect(frost.photosyntheticCapacityBefore).toBeGreaterThan(0); // 9.5 > min 5
+    expect(frost.photosyntheticCapacityBefore).toBeLessThan(baseline.photosyntheticCapacityBefore);
+  });
+
+  it('reads weather.temperature for the sustainable-harvest estimate (frost reduces production)', () => {
+    const tree = testTree({
+      foliage: { currentLeaves: 1000, leafCapacity: 2000 },
+      water: { stored: 50, capacity: 50 },
+    });
+    const ctxNoWeather = testContext();
+    const ctxFrost = {
+      ...testContext(),
+      weather: {
+        condition: 'frost' as const,
+        temperature: 9.5,
+        intensity: 0.8,
+        prevCondition: null,
+        daysInCondition: 0,
+      },
+    };
+    const baseline = estimateSustainableHarvest(tree, ctxNoWeather);
+    const frost = estimateSustainableHarvest(tree, ctxFrost);
+    // Frost reduces per-day production (the temperature Liebig factor drops).
+    expect(frost.productionPerDay).toBeGreaterThan(0);
+    expect(frost.productionPerDay).toBeLessThan(baseline.productionPerDay);
+    // Surplus shrinks with production → sustainable leaves/day can only drop.
+    expect(frost.leavesPerDay).toBeLessThanOrEqual(baseline.leavesPerDay);
+  });
+
+  it('weather temperature below species minimum → zero harvest capacity', () => {
+    const tree = testTree({
+      foliage: { currentLeaves: 1000, leafCapacity: 2000 },
+      water: { stored: 50, capacity: 50 },
+    });
+    // 4 °C — below White Oak's minimum (5 °C). temperatureFactor = 0.
+    const ctxBelowMin = {
+      ...testContext(),
+      weather: {
+        condition: 'frost' as const,
+        temperature: 4,
+        intensity: 0.9,
+        prevCondition: null,
+        daysInCondition: 0,
+      },
+    };
+    const r = harvestLeaves(tree, ctxBelowMin, 100, 0, 'currency:leaf-dollar');
+    expect(r.photosyntheticCapacityBefore).toBe(0);
+    // The sustainable estimate's production also collapses to 0.
+    expect(estimateSustainableHarvest(tree, ctxBelowMin).productionPerDay).toBe(0);
   });
 });
 

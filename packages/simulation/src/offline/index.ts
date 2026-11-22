@@ -17,7 +17,9 @@
 export {
   runOfflineCatchUp,
   runOfflineCatchUpChunked,
+  beginOfflineCatchUp,
   planOfflineCatchUp,
   type OfflineCatchUpResult,
   type OfflineCatchUpPlan,
+  type OfflineCatchUpStepper,
 } from './catch-up.js';
