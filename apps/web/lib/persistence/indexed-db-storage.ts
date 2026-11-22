@@ -114,12 +114,24 @@ export class IndexedDbStorage implements Storage {
 
   async deleteSave(id: string): Promise<boolean> {
     const db = await getDB();
-    const had = (await db.get(STORE_SAVES, id)) != null;
-    await db.delete(STORE_SAVES, id);
-    const activeId = (await db.get(STORE_META, META_ACTIVE_KEY)) as string | undefined;
+    // P11 (W38 / RV5-F5 follow-up): wrap the existence check + save delete +
+    // active-pointer read + conditional pointer delete in a SINGLE readwrite
+    // transaction across both stores, so the save + the active-key pointer are
+    // atomic. Pre-fix, four separate db ops could leave the DB inconsistent if a
+    // crash occurred between them (the active pointer could reference a deleted
+    // save — the same orphan-pointer class W22 closed for `save()`). With one
+    // transaction, IDB rolls back all ops on failure/abort — the save + pointer
+    // are either both deleted or both present.
+    const tx = db.transaction([STORE_SAVES, STORE_META], 'readwrite');
+    const saves = tx.objectStore(STORE_SAVES);
+    const meta = tx.objectStore(STORE_META);
+    const had = (await saves.get(id)) != null;
+    await saves.delete(id);
+    const activeId = (await meta.get(META_ACTIVE_KEY)) as string | undefined;
     if (activeId === id) {
-      await db.delete(STORE_META, META_ACTIVE_KEY);
+      await meta.delete(META_ACTIVE_KEY);
     }
+    await tx.done;
     return had;
   }
 
