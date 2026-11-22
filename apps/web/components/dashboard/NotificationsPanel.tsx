@@ -41,8 +41,8 @@
  *   - Colour is NEVER the only signal — each severity carries an icon
  *     (ℹ / ⚠ / 🛑) AND a text label, so colour-blind users see the level.
  *   - `prefers-reduced-motion`: the panel calls `useReducedMotion()` and
- *     suppresses the slide-in transition when reduced. (P4's TreeView is
- *     not yet wired to the same hook — see R-P5d-2 in docs/ui.md.)
+ *     suppresses the slide-in transition when reduced. (TreeView is wired
+ *     to the same hook — W40 resolved R-P5d-2; see docs/ui.md.)
  *
  * Architecture (rule 6 — rendering / UI reads state, never writes):
  *   - Subscribes narrowly to `ui.notifications` (the bounded FIFO ring buffer)

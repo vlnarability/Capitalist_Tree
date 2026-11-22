@@ -1,9 +1,9 @@
 /**
  * Playwright config (P5d — smoke test).
  *
- * Minimal config: launches the Next.js dev server on a random port, runs
- * a single smoke spec against Chromium. The smoke test exercises the
- * P5d gameplay loop end-to-end:
+ * Minimal config: launches the Next.js dev server on a fixed port (4321,
+ * overridable via PLAYWRIGHT_PORT), runs a single smoke spec against
+ * Chromium. The smoke test exercises the P5d gameplay loop end-to-end:
  *
  *   new game → buy water → apply water → advance time → harvest →
  *   save → reload → verify state restored

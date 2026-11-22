@@ -654,16 +654,15 @@ non-text contrast threshold.
   should expose the three-way toggle. Until then the only way to force
   `'on'` / `'off'` is via the dev console:
   `useGameStore.getState().setReducedMotionOverride('on')`.
-- **R-P5d-2 — `TreeView` not yet wired to `useReducedMotion`.** P4's
-  `TreeView` rAF loop animates branch-sway + leaf-particles +
-  currency-leaf drift unconditionally. The `useReducedMotion` hook is
-  ready for consumers; the consumer isn't yet. Wiring TreeView is a
-  future rendering-package change (it would gate the per-frame sway
-  offset + particle pool updates). Until then, the in-game override
-  affects the NotificationsPanel slide-in but NOT the tree's
-  animations — documented in `apps/web/hooks/useReducedMotion.ts` § GAP
-  and in `apps/web/components/dashboard/NotificationsPanel.tsx` §
-  Accessibility notes.
+- **R-P5d-2 — `TreeView` wired to `useReducedMotion` (W40 — RESOLVED).**
+  P4's `TreeView` rAF loop previously animated branch-sway + leaf-particles +
+  currency-leaf drift unconditionally. W40 wired the consumer: TreeView now
+  calls `useReducedMotion()` + gates the per-frame `dt` passed to
+  `CanvasTreeRenderer.render()` — when reduced motion is requested, `dt = 0`
+  so branch-sway + particle/pool state do not advance (WCAG 2.1 AA / 2.3.3).
+  The in-game override + OS preference now affect the NotificationsPanel
+  slide-in AND the tree's animations. Verified by
+  `apps/web/components/tree/TreeView.reduced-motion.test.tsx`.
 - **R-P5d-3 — NotificationsPanel keyboard navigation within the list.**
   The dismiss buttons are individually tabbable (every button is a real
   `<button>`), but the list itself is not a roving-tabindex widget.
@@ -770,7 +769,7 @@ yet) — tracked as **R-P5d-5**.
 | ID | Description | Severity |
 |----|-------------|----------|
 | R-P5d-1 | In-game UI for `reducedMotionOverride` (defaults to `'auto'`) — settings panel TBD | Low |
-| R-P5d-2 | `TreeView` not yet wired to `useReducedMotion` — branch-sway + particles animate unconditionally | Medium |
+| R-P5d-2 | ~~`TreeView` not yet wired to `useReducedMotion`~~ — **RESOLVED (W40):** TreeView now gates the rAF `dt` on `useReducedMotion()` | ~~Medium~~ → Done |
 | R-P5d-3 | NotificationsPanel list is not a roving-tabindex widget — acceptable at ≤ 20 items | Low |
 | R-P5d-4 | Auto-dismiss timer not wired (info / non-actionable notifications stay until dismissed) | Low |
 | R-P5d-5 | Playwright browser binary download is opt-in (CI doesn't provision it) | Low |

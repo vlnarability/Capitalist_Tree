@@ -1,11 +1,11 @@
 # The Capitalist Tree — PROJECT COMPLETE
 
-**Generated:** 2026-11-16 (P10 merged — ALL 12 SYSTEMS IMPLEMENTED)
+**Generated:** 2026-11-22 (P10 merged 2026-11-16 — ALL 12 SYSTEMS IMPLEMENTED; P11–P13 hardening pass W1–W42 applied through `2e8a843`)
 **Repository:** https://github.com/vlnarability/Capitalist_Tree
-**Main branch HEAD:** `7d8ea77` — Merge p10-global into main: EventSystem + global/climate/events (P10a-P10d) — ALL 12 SYSTEMS COMPLETE
-**Schema version:** 13
+**Main branch HEAD:** `2e8a843` — W42 v14→v15 migration test (P13 hardening pass complete: W1–W42 merged)
+**Schema version:** 18
 **Systems implemented:** 12 of 12 (ALL systems real — no stubs remain)
-**Test suite:** 1471/1471 tests pass (63 files, 178 seconds, 0 failures)
+**Test suite:** 1931/1931 tests pass (107 files, ~247 seconds, 0 failures)
 
 ---
 
@@ -13,12 +13,12 @@
 
 | Metric | Value |
 |---|---|
-| Main HEAD | `7d8ea77` (pushed to origin/main) |
-| Test files | 63 passed (63) |
-| Tests | 1471 passed (1471) |
+| Main HEAD | `2e8a843` (pushed to origin/main) |
+| Test files | 107 passed (107) |
+| Tests | 1931 passed (1931) |
 | Failures | 0 |
-| Suite duration | 178 seconds |
-| Schema version | 13 |
+| Suite duration | ~247 seconds |
+| Schema version | 18 |
 | Systems | 12 of 12 (ALL real, no stubs) |
 
 ---
@@ -109,4 +109,4 @@ simulation.md, biology.md, resources-weather.md, economy.md, offline-automation.
 
 ## PROJECT COMPLETE
 
-All 12 simulation systems are implemented and merged to main. The full test suite passes (1471/1471 tests, 0 failures, 178 seconds). The project is feature-complete per the GDD/TDD specification.
+All 12 simulation systems are implemented and merged to main. The P11–P13 hardening pass (W1–W42, RV1–RV6 gap-review fixes) is complete. The full test suite passes (1931/1931 tests, 0 failures, ~247 seconds).
