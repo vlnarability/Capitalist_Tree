@@ -57,6 +57,7 @@ import {
   getDefaultCurrencyVisual,
 } from '@capitalist-tree/rendering';
 import type { TreeViewProps } from '@capitalist-tree/rendering';
+import { useReducedMotion } from '../../hooks/useReducedMotion';
 
 // Re-export TreeViewProps so consumers can `import { TreeView, type TreeViewProps }`
 // from one place. P4a declared the type; P4d wires the component.
@@ -104,22 +105,29 @@ export function TreeView({
   //   - rendererRef: the CanvasTreeRenderer instance (created on mount).
   //   - rafRef: the requestAnimationFrame handle (so we can cancel on unmount).
   //   - lastFrameMsRef: wall-clock ms of the previous rAF tick (for dt).
-  //   - latestPropsRef: the latest { tree, environment, currency } props, so
-  //     the rAF closure always reads fresh values without re-subscribing.
+  //   - latestPropsRef: the latest { tree, environment, currency, reduceMotion }
+  //     props, so the rAF closure always reads fresh values without
+  //     re-subscribing.
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const rendererRef = useRef<CanvasTreeRenderer | null>(null);
   const rafRef = useRef<number | null>(null);
   const lastFrameMsRef = useRef<number>(0);
+  // P5d (W40 / R-P5d-2): consume the reduced-motion hook so the rAF loop can
+  // gate branch-sway + particle animation. The hook combines the in-game
+  // `ui.reducedMotionOverride` with the OS `prefers-reduced-motion` media
+  // query; `true` means "reduce motion" (disable non-essential animation).
+  const reduceMotion = useReducedMotion();
   const latestPropsRef = useRef<{
     tree: TreeViewProps['tree'];
     environment: TreeViewProps['environment'];
     currency: TreeViewProps['currency'] | undefined;
-  }>({ tree, environment, currency });
+    reduceMotion: boolean;
+  }>({ tree, environment, currency, reduceMotion });
 
   // Sync the latest-props ref every render. The rAF closure reads from this
   // ref — so it always sees the freshest values without us re-subscribing
   // (which would tear down + recreate the renderer every frame).
-  latestPropsRef.current = { tree, environment, currency };
+  latestPropsRef.current = { tree, environment, currency, reduceMotion };
 
   // -------------------------------------------------------------------------
   // Mount effect — create the renderer + start the rAF loop + observe resize.
@@ -186,7 +194,8 @@ export function TreeView({
       const dt = Math.min(MAX_FRAME_DT_MS, now - lastFrameMsRef.current);
       lastFrameMsRef.current = now;
 
-      const { tree: t, environment: e, currency: c } = latestPropsRef.current;
+      const { tree: t, environment: e, currency: c, reduceMotion: rm } =
+        latestPropsRef.current;
 
       // Hot-swap the currency if it changed since the last frame. Avoids
       // recreating the renderer (which would re-allocate particle pools + lose
@@ -196,7 +205,15 @@ export function TreeView({
         renderer.setCurrency(c);
       }
 
-      renderer.render(t, e, dt);
+      // P5d (W40 / R-P5d-2): when reduced motion is requested, pass dt = 0 so
+      // the renderer does NOT advance branch-sway or particle/pool state — the
+      // tree is drawn statically each frame (WCAG 2.1 AA / 2.3.3 Animation from
+      // Interactions). The rAF loop keeps running so the canvas still re-renders
+      // when tree/environment props change (e.g. growth), + so toggling the
+      // setting resumes animation immediately (the loop reads `rm` fresh from
+      // the ref each tick).
+      const effectiveDt = rm ? 0 : dt;
+      renderer.render(t, e, effectiveDt);
 
       rafRef.current = requestAnimationFrame(loop);
     };
