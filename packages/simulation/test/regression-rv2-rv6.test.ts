@@ -9,18 +9,34 @@
  *   capable condition transition occurs (gated on `conditionChanged` so damage
  *   fires once per weather episode, not every tick).
  *
- * RV6-1 (W10): critical notifications (clock-tamper, corrupt-save) are
- *   surfaced, not filtered. Pre-fix, the notification filter dropped them.
+ * RV6-1 (W10): critical notifications are surfaced, not filtered. Pre-fix, the
+ *   NotificationsPanel `ACTIONABLE_NOTIFICATION_CODES` whitelist dropped the 3
+ *   safety-critical codes (`offline-clock-tampered`, `save-corrupt`,
+ *   `original-tree-protected`) — the player never saw clock-tamper / corrupt-
+ *   save / original-tree-protection warnings. The fix (W10) added the 3 codes
+ *   to the whitelist; the web dispatch wrapper (apps/web/lib/dispatch-wrapper.ts)
+ *   maps sim-thrown errors to those codes. The sim-layer regression below pins
+ *   the THROW side: the sim must continue to throw `OfflineClockTamperedError`,
+ *   `UnknownSchemaVersionError`/`SaveValidationError`, +
+ *   `OriginalTreeNotTransferableError` in their respective conditions, so the
+ *   dispatch wrapper has a signal to surface (without the throw, the code is
+ *   dead + the notification never fires — the RV6-1 regression would recur
+ *   silently).
  */
 import { describe, it, expect } from 'vitest';
-import { engine, DEFAULT_GAME_CONFIG, Rng } from '../src/index.js';
+import { engine, DEFAULT_GAME_CONFIG, Rng, runOfflineCatchUp } from '../src/index.js';
 import { shouldEmitDamage, computeDamageSeverity } from '../src/weather/effects.js';
 import { weatherSystem } from '../src/systems/weather-system.js';
+import { sellTreeHandler } from '../src/economy/actions.js';
 import type { SystemContext } from '../src/systems/system.js';
 import { findWeatherEvent } from '@capitalist-tree/content';
 import {
   PROVISIONAL_WEATHER_DAMAGE_INTENSITY_THRESHOLD,
   PROVISIONAL_WEATHER_DAMAGE_SEVERITY_SCALE,
+  deserialize,
+  OfflineClockTamperedError,
+  UnknownSchemaVersionError,
+  OriginalTreeNotTransferableError,
 } from '@capitalist-tree/shared';
 
 const SECONDS_PER_DAY = 24 * 60 * 60;
@@ -157,5 +173,50 @@ describe('RV2-1 regression — weather damage is applied to tree.damage (W4 / DR
         expect(weatherDmg.length).toBe(0);
       }
     });
+  });
+});
+
+// -----------------------------------------------------------------------------
+// RV6-1 (W10) — sim-layer throw side of the critical-notification flow.
+//
+// The web dispatch wrapper (apps/web/lib/dispatch-wrapper.ts) maps these
+// sim-thrown errors to the 3 safety-critical notification codes that W10 added
+// to the NotificationsPanel `ACTIONABLE_NOTIFICATION_CODES` whitelist:
+//   - OfflineClockTamperedError         → 'offline-clock-tampered'
+//   - UnknownSchemaVersionError         → 'save-corrupt'
+//   - OriginalTreeNotTransferableError  → 'original-tree-protected'
+// If the sim stops throwing any of them, the code is dead + the notification
+// never fires (the RV6-1 regression recurs silently). These pin the throw side.
+// (The individual throws are also exercised in their own test files —
+// offline-catch-up / migrations / economy — this block groups them as the
+// RV6-1 regression invariant.)
+// -----------------------------------------------------------------------------
+describe('RV6-1 regression — sim throws the 3 safety-critical error conditions (W10 / DR-9)', () => {
+  it('runOfflineCatchUp throws OfflineClockTamperedError on a backward clock (→ offline-clock-tampered)', () => {
+    const s = engine.initialize({ ...DEFAULT_GAME_CONFIG, seed: 1, createdAt: 0 });
+    const T = s.metadata.lastSimulatedAt;
+    // 60s backward is beyond PROVISIONAL_OFFLINE_BACKWARDS_CLOCK_TOLERANCE_MS
+    // (500ms) — the clock-tamper guard fires.
+    expect(() => runOfflineCatchUp(s, T - 60_000)).toThrow(OfflineClockTamperedError);
+  });
+
+  it('deserialize throws UnknownSchemaVersionError on an unknown schemaVersion (→ save-corrupt)', () => {
+    const s = engine.initialize({ ...DEFAULT_GAME_CONFIG, seed: 1, createdAt: 0 });
+    const env = { schemaVersion: 999, state: s } as unknown as Parameters<
+      typeof deserialize
+    >[0];
+    expect(() => deserialize(env)).toThrow(UnknownSchemaVersionError);
+  });
+
+  it('sellTreeHandler throws OriginalTreeNotTransferableError when selling the original tree (→ original-tree-protected)', () => {
+    const s = engine.initialize({ ...DEFAULT_GAME_CONFIG, seed: 1, createdAt: 0 });
+    // The original tree's id is 'original' — the handler guards it before any
+    // sale flow. (Non-original targets throw TreeSaleNotImplementedError instead.)
+    expect(() =>
+      sellTreeHandler(s, {
+        type: 'sell-tree',
+        payload: { target: 'original' },
+      } as unknown as Parameters<typeof sellTreeHandler>[1]),
+    ).toThrow(OriginalTreeNotTransferableError);
   });
 });
