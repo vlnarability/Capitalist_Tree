@@ -2,8 +2,33 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Field Journal aesthetic (W48): parchment paper, ink text, paper grain.
+ * The body is the page of a naturalist's notebook; panels are cards laid on
+ * it. Per the global HTML-responsiveness rule nothing here fixes a width.
+ */
 html,
 body {
-  background-color: #0b0f14;
-  color: #e6edf3;
+  background-color: #f4ecd8;
+  color: #3a2a1a;
+  font-family: Georgia, 'Times New Roman', serif;
+}
+
+/* Subtle paper grain — two soft radial stains + faint horizontal rules
+   like ledger paper. Kept very light so chart/tree contrast is unaffected. */
+body {
+  background-image:
+    radial-gradient(circle at 18% 28%, rgba(58, 42, 26, 0.05) 0, transparent 55%),
+    radial-gradient(circle at 82% 72%, rgba(58, 42, 26, 0.045) 0, transparent 50%),
+    repeating-linear-gradient(0deg, transparent 0 27px, rgba(58, 42, 26, 0.025) 27px 28px);
+  background-attachment: fixed;
+}
+
+@layer utilities {
+  /* small-caps label — the field-journal signature for stat labels + panel
+     titles. Tailwind has no built-in small-caps utility, so define one. */
+  .smallcaps {
+    font-variant: small-caps;
+    letter-spacing: 0.08em;
+  }
 }

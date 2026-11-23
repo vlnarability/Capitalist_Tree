@@ -311,7 +311,7 @@ export default function HomePage(): ReactElement {
         className="mb-4"
       >
         <SpeedControls accumulator={loop.accumulator} />
-        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-800/80 pt-3">
+        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-dotted border-ink/25 pt-3">
           <Button onClick={() => void loop.save()} data-testid="save-button">
             💾 Save
           </Button>
@@ -354,7 +354,9 @@ export default function HomePage(): ReactElement {
             tone={treeTone ?? 'slate'}
             hint="P4 procedural renderer"
           >
-            <div className="rounded-md overflow-hidden border border-slate-800/60 bg-slate-950">
+            {/* W48 (field journal): parchment frame around the canvas. The
+                renderer draws its own sky; this is just the matting. */}
+            <div className="rounded-sm overflow-hidden border border-ink/25 bg-parchment-3/30">
               <TreeView
                 tree={treeRenderData}
                 environment={environmentRenderData}
@@ -480,7 +482,7 @@ export default function HomePage(): ReactElement {
           <button
             type="button"
             onClick={() => setAnalyticsOpen(true)}
-            className="fixed bottom-4 left-4 z-40 rounded-full border border-slate-700 bg-slate-900/90 px-3 py-2 text-xs text-slate-300 shadow-lg transition-colors hover:bg-slate-800"
+            className="fixed bottom-4 left-4 z-40 rounded-sm border border-ink/40 bg-parchment-2/90 px-3 py-2 text-xs text-ink-2 shadow-lg transition-colors hover:bg-parchment-3"
             aria-label="Open analytics observability panel"
             data-testid="analytics-toggle"
           >
@@ -499,13 +501,13 @@ export default function HomePage(): ReactElement {
 
 function Header(): ReactElement {
   return (
-    <header className="mb-6 flex flex-wrap items-baseline justify-between gap-2">
+    <header className="mb-6 flex flex-wrap items-baseline justify-between gap-2 border-b-2 border-double border-ink/40 pb-3">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-100">
+        <h1 className="text-2xl font-serif italic tracking-tight text-ink">
           The Capitalist Tree
         </h1>
-        <p className="text-xs text-slate-500">
-          P5b + P5c — main game screen (GDD §13.1; advanced view §13.3)
+        <p className="text-xs font-serif text-ink-soft smallcaps">
+          a field journal of speculative botany
         </p>
       </div>
     </header>

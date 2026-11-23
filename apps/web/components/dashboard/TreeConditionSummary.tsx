@@ -98,24 +98,24 @@ export function TreeConditionSummary({
     <div className={`flex flex-col gap-3 ${className ?? ''}`} data-testid="tree-condition">
       <div className="flex items-baseline justify-between gap-2">
         <span
-          className={`text-2xl font-bold ${textClassForTone(tone)}`}
+          className={`text-2xl font-bold font-serif ${textClassForTone(tone)}`}
           data-testid="tree-condition-tier"
         >
           {condition.label}
         </span>
-        <span className="text-xs text-slate-500">{age.label}</span>
+        <span className="text-xs text-ink-soft font-serif">{age.label}</span>
       </div>
 
-      <p className="text-xs text-slate-400" data-testid="tree-condition-hint">
+      <p className="text-xs text-ink-2 font-serif italic" data-testid="tree-condition-hint">
         {condition.hint}
       </p>
 
       <div className="flex flex-col gap-1">
         <div className="flex items-baseline justify-between">
-          <span className="text-[10px] uppercase tracking-wider text-slate-500">
+          <span className="text-[10px] uppercase tracking-wider text-ink-soft font-serif">
             Canopy Density
           </span>
-          <span className="text-xs tabular-nums text-slate-400">
+          <span className="text-xs tabular-nums text-ink-2 font-serif">
             {Math.round(density * 100)}%
           </span>
         </div>
@@ -126,16 +126,16 @@ export function TreeConditionSummary({
         />
       </div>
 
-      <div className="flex items-baseline justify-between text-xs">
-        <span className="text-slate-500">Leaves</span>
-        <span className="tabular-nums text-slate-300">
+      <div className="flex items-baseline justify-between text-xs font-serif">
+        <span className="text-ink-soft">Leaves</span>
+        <span className="tabular-nums text-ink">
           {currentLeaves.toLocaleString()} / {leafCapacity.toLocaleString()}
         </span>
       </div>
 
-      <div className="flex items-baseline justify-between text-xs">
-        <span className="text-slate-500">Age</span>
-        <span className="tabular-nums text-slate-300">{age.sub}</span>
+      <div className="flex items-baseline justify-between text-xs font-serif">
+        <span className="text-ink-soft">Age</span>
+        <span className="tabular-nums text-ink">{age.sub}</span>
       </div>
     </div>
   );
@@ -143,15 +143,16 @@ export function TreeConditionSummary({
 
 /** Map a Tone fragment to a Tailwind text colour class. */
 function textClassForTone(tone: PanelTone): string {
+  // W48 (field journal): tone text re-skinned for parchment contrast.
   switch (tone) {
     case 'emerald':
-      return 'text-emerald-300';
+      return 'text-leaf-dark';
     case 'amber':
-      return 'text-amber-300';
+      return 'text-brass-2';
     case 'rose':
-      return 'text-rose-300';
+      return 'text-accent';
     case 'slate':
-      return 'text-slate-300';
+      return 'text-ink';
   }
 }
 

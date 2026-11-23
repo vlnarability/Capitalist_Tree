@@ -31,14 +31,17 @@ export interface ProgressBarProps {
   readonly className?: string;
 }
 
+// W48 (field journal): fill tones re-skinned for parchment. The -500 Tailwind
+// defaults read fine on cream; the track was dark slate (bg-slate-800/80)
+// which clashed — switched to a faint ink tint (bg-ink/15).
 const FILL_TONE: Readonly<Record<NonNullable<ProgressBarProps['tone']>, string>> = Object.freeze({
-  slate: 'bg-slate-500',
-  emerald: 'bg-emerald-500',
-  amber: 'bg-amber-500',
-  rose: 'bg-rose-500',
-  sky: 'bg-sky-500',
-  indigo: 'bg-indigo-500',
-  cyan: 'bg-cyan-500',
+  slate: 'bg-ink/55',
+  emerald: 'bg-leaf',
+  amber: 'bg-brass',
+  rose: 'bg-accent',
+  sky: 'bg-sky-600',
+  indigo: 'bg-ink',
+  cyan: 'bg-teal-600',
 });
 
 /**
@@ -58,7 +61,7 @@ export function ProgressBar({ value, label, tone = 'slate', className }: Progres
       aria-valuemin={0}
       aria-valuemax={100}
       className={[
-        'h-2 w-full overflow-hidden rounded-full bg-slate-800/80',
+        'h-2 w-full overflow-hidden rounded-full bg-ink/15',
         className ?? '',
       ]
         .filter(Boolean)

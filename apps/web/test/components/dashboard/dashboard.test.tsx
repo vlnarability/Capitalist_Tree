@@ -221,8 +221,11 @@ describe('SpeedControls (P5b) — dispatch test', () => {
     expect(useGameStore.getState().simState?.clock.speedMultiplier).toBe(1);
     const { getByTestId } = render(<SpeedControls accumulator={0} />);
     const oneX = getByTestId('speed-controls-1x');
-    expect(oneX.className).toContain('border-emerald-500');
-    expect(oneX.className).toContain('bg-emerald-500/10');
+    // W48 (field journal): active tone changed from emerald to leaf-green so
+    // it reads on parchment. The contract is unchanged — the selected
+    // multiplier is visually highlighted via a distinct border + fill.
+    expect(oneX.className).toContain('border-leaf');
+    expect(oneX.className).toContain('bg-leaf/20');
   });
 
   it('renders the accumulator remainder', () => {

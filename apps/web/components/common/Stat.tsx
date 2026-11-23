@@ -24,14 +24,18 @@ export interface StatProps {
   readonly sub?: string;
 }
 
+// W48 (field journal): tone map re-skinned to read on parchment. The bright
+// light-tone text (emerald-300 etc.) was tuned for dark slate; on cream paper
+// it blows out. Darker, ink-leaning variants preserve the tone semantics
+// (leaf=healthy, brass=warning, accent=critical) at readable contrast.
 const TEXT_TONE: Readonly<Record<NonNullable<StatProps['tone']>, string>> = Object.freeze({
-  slate: 'text-slate-100',
-  emerald: 'text-emerald-300',
-  amber: 'text-amber-300',
-  rose: 'text-rose-300',
-  sky: 'text-sky-300',
-  indigo: 'text-indigo-300',
-  cyan: 'text-cyan-300',
+  slate: 'text-ink',
+  emerald: 'text-leaf-dark',
+  amber: 'text-brass-2',
+  rose: 'text-accent',
+  sky: 'text-sky-800',
+  indigo: 'text-ink',
+  cyan: 'text-teal-800',
 });
 
 /**
@@ -43,9 +47,9 @@ const TEXT_TONE: Readonly<Record<NonNullable<StatProps['tone']>, string>> = Obje
 export function Stat({ label, value, tone = 'slate', sub }: StatProps): ReactElement {
   return (
     <div className="flex flex-col gap-0.5">
-      <span className="text-[10px] uppercase tracking-wider text-slate-500">{label}</span>
-      <span className={`text-lg font-semibold tabular-nums ${TEXT_TONE[tone]}`}>{value}</span>
-      {sub ? <span className="text-xs text-slate-500">{sub}</span> : null}
+      <span className="text-[10px] uppercase tracking-wider text-ink-soft font-serif">{label}</span>
+      <span className={`text-lg font-semibold tabular-nums font-serif ${TEXT_TONE[tone]}`}>{value}</span>
+      {sub ? <span className="text-xs text-ink-soft font-serif italic">{sub}</span> : null}
     </div>
   );
 }

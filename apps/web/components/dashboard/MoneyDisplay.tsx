@@ -78,12 +78,12 @@ export function MoneyDisplay({ className }: MoneyDisplayProps = {}): ReactElemen
 
   return (
     <div className={`flex flex-col gap-0.5 ${className ?? ''}`}>
-      <span className="text-[10px] uppercase tracking-wider text-slate-500">Current Cash</span>
-      <span className="text-3xl font-bold tabular-nums text-emerald-300" data-testid="money-nominal">
+      <span className="text-[10px] uppercase tracking-wider text-ink-soft font-serif">Current Cash</span>
+      <span className="text-3xl font-bold tabular-nums font-serif text-leaf-dark" data-testid="money-nominal">
         {nominal}
       </span>
       {showReal ? (
-        <span className="text-xs text-slate-500" data-testid="money-real">
+        <span className="text-xs text-ink-soft font-journal" data-testid="money-real">
           ≈ {real} purchasing power
         </span>
       ) : null}

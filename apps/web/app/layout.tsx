@@ -15,7 +15,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="min-h-screen font-sans">
+      <body className="min-h-screen font-serif">
         {/* P11 (W21 / RV5-F4): concurrent-tab gate. Acquires an exclusive Web
             Lock so a second tab is blocked from mounting the game (protecting
             the save from a two-tabs-clobber race). Renders the children only

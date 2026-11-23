@@ -1,10 +1,15 @@
 /**
  * Panel — common container (P5b — GDD §13.1 main game screen surrounds).
  *
- * A bordered, padded, rounded card that wraps a section of the dashboard.
- * The main game screen (page.tsx) lays out its surrounds as a grid of
- * Panels; this primitive enforces consistent visual structure (border,
- * radius, padding, optional title + tone).
+ * A bordered, padded card that wraps a section of the dashboard. The main
+ * game screen (page.tsx) lays out its surrounds as a grid of Panels; this
+ * primitive enforces consistent visual structure (border, radius, padding,
+ * optional title + tone).
+ *
+ * W48 (field journal): re-skinned from dark slate to parchment + ink. The
+ * panel is now a cream card with a hairline ink border, a serif small-caps
+ * title, and tone-mapped accent colors (leaf for healthy/money, brass for
+ * warning/expenses, accent-red for critical/unpaid, sky/teal for weather).
  *
  * Rule 6 (rendering / UI reads state, never writes): pure presentational
  * component. No store subscription, no engine calls — just a styled wrapper.
@@ -28,24 +33,26 @@ export interface PanelProps {
   readonly tone?: 'slate' | 'emerald' | 'amber' | 'rose' | 'sky' | 'indigo' | 'cyan';
 }
 
+// Field-journal tone map: each tone maps to a hairline border + accent text
+// color that reads on parchment. `slate` is the neutral ink default.
 const BORDER_TONE: Readonly<Record<NonNullable<PanelProps['tone']>, string>> = Object.freeze({
-  slate: 'border-slate-800',
-  emerald: 'border-emerald-800/60',
-  amber: 'border-amber-800/60',
-  rose: 'border-rose-800/60',
-  sky: 'border-sky-800/60',
-  indigo: 'border-indigo-800/60',
-  cyan: 'border-cyan-800/60',
+  slate: 'border-ink/25',
+  emerald: 'border-leaf/45',
+  amber: 'border-brass/45',
+  rose: 'border-accent/45',
+  sky: 'border-sky-700/45',
+  indigo: 'border-ink/35',
+  cyan: 'border-teal-700/45',
 });
 
 const TEXT_TONE: Readonly<Record<NonNullable<PanelProps['tone']>, string>> = Object.freeze({
-  slate: 'text-slate-400',
-  emerald: 'text-emerald-300',
-  amber: 'text-amber-300',
-  rose: 'text-rose-300',
-  sky: 'text-sky-300',
-  indigo: 'text-indigo-300',
-  cyan: 'text-cyan-300',
+  slate: 'text-ink-soft',
+  emerald: 'text-leaf-dark',
+  amber: 'text-brass-2',
+  rose: 'text-accent',
+  sky: 'text-sky-800',
+  indigo: 'text-ink',
+  cyan: 'text-teal-800',
 });
 
 /**
@@ -69,7 +76,10 @@ export function Panel({
   return (
     <section
       className={[
-        'rounded-lg border bg-slate-950/40 p-4 space-y-2 backdrop-blur-sm',
+        // Parchment card: cream fill, hairline ink border, a faint bottom
+        // shadow so it sits on the paper. `rounded-sm` keeps corners tight
+        // (field journals are square-cut, not pillowy).
+        'rounded-sm border bg-parchment-2/45 p-4 space-y-2 shadow-[0_1px_0_rgba(58,42,26,0.08)]',
         border,
         className ?? '',
       ]
@@ -77,13 +87,15 @@ export function Panel({
         .join(' ')}
     >
       {title ? (
-        <header className="flex items-baseline justify-between gap-2">
-          <h2 className={`text-xs uppercase tracking-wider flex items-center gap-1.5 ${text}`}>
+        <header className="flex items-baseline justify-between gap-2 border-b border-dotted border-ink/20 pb-1">
+          <h2 className={`text-[11px] uppercase tracking-[0.15em] smallcaps font-serif flex items-center gap-1.5 ${text}`}>
             {icon ? <span aria-hidden="true">{icon}</span> : null}
             <span>{title}</span>
           </h2>
           {hint ? (
-            <span className="text-[10px] text-slate-500 font-mono uppercase">{hint}</span>
+            <span className="text-[10px] text-ink-soft font-journal uppercase tracking-wider">
+              {hint}
+            </span>
           ) : null}
         </header>
       ) : null}

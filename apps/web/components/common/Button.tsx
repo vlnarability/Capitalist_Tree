@@ -2,9 +2,14 @@
  * Button — common button primitive (P5b — GDD §13.1 main screen speed controls).
  *
  * A small, Tailwind-styled button with three tones:
- *   - `'default'` — neutral slate (Save, Load, New Game).
- *   - `'active'` — emerald highlight (selected speed multiplier).
- *   - `'warning'` — amber (Pause toggle).
+ *   - `'default'` — ink-bordered parchment (Save, Load, New Game).
+ *   - `'active'`  — leaf-green highlight (selected speed multiplier).
+ *   - `'warning'` — brass/amber (Pause toggle).
+ *
+ * W48 (field journal): re-skinned from dark slate to parchment + ink. The
+ * active tone is now leaf-green (was emerald) so it reads on cream paper;
+ * the dashboard test that pinned the old emerald classes was updated in
+ * lockstep (test/components/dashboard/dashboard.test.tsx).
  *
  * The component forwards all standard button attributes via spread so callers
  * can attach onClick handlers, disable it, set type, etc. without coupling
@@ -24,9 +29,9 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const TONE_CLASSES: Readonly<Record<ButtonTone, string>> = Object.freeze({
-  default: 'border-slate-700 bg-slate-900 text-slate-200 hover:border-slate-600 hover:bg-slate-800',
-  active: 'border-emerald-500 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/20',
-  warning: 'border-amber-500 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20',
+  default: 'border-ink/40 bg-parchment text-ink hover:bg-parchment-3 hover:border-ink/65',
+  active: 'border-leaf bg-leaf/20 text-leaf-dark font-semibold hover:bg-leaf/30',
+  warning: 'border-brass bg-brass/15 text-brass-2 hover:bg-brass/25',
 });
 
 /**
@@ -44,8 +49,8 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         ref={ref}
         type="button"
         className={[
-          'inline-flex items-center gap-1.5 rounded border px-3 py-1 text-sm font-medium transition-colors',
-          'focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50',
+          'inline-flex items-center gap-1.5 rounded-sm border px-3 py-1 text-sm font-serif transition-colors',
+          'focus:outline-none focus-visible:ring-2 focus-visible:ring-leaf/50',
           'disabled:cursor-not-allowed disabled:opacity-50',
           TONE_CLASSES[tone],
           className ?? '',

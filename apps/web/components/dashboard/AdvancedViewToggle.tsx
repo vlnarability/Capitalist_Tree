@@ -69,7 +69,7 @@ export function AdvancedViewToggle({
       >
         {advancedView ? 'Advanced view' : 'Simplified view'}
       </Button>
-      <span className="text-xs text-slate-500" data-testid="advanced-view-hint">
+      <span className="text-xs text-ink-soft font-serif italic" data-testid="advanced-view-hint">
         {advancedView
           ? 'Showing biology + economy details (GDD §13.3)'
           : 'Plain-language summaries (GDD §13.2)'}

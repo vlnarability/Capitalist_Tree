@@ -131,7 +131,7 @@ export function SpeedControls({
           </Button>
         ))}
       </div>
-      <p className="text-xs text-slate-500" data-testid="speed-controls-accumulator">
+      <p className="text-xs text-ink-soft font-journal" data-testid="speed-controls-accumulator">
         Accumulator: {Number.isFinite(accumulator) ? accumulator.toFixed(2) : '0.00'} sim seconds
       </p>
     </div>
