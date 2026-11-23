@@ -95,6 +95,12 @@ import {
 } from '../lib/constants';
 import type { UiAction } from '../lib/actions';
 import { simulationEventsToNotifications } from '../lib/format/event-to-notification';
+// W44 (Finding 1): typed-error → notification mapping, used by the `dispatch`
+// mutator below to surface engine errors as actionable UI notifications
+// instead of letting them propagate to React + the ErrorBoundary. Extracted
+// to its own file so this store can import it without a circular dependency
+// (dispatch-wrapper.ts imports `useGameStore` from here).
+import { errorToNotification } from '../lib/format/error-to-notification';
 // GAP-31 (DR-13): bridge high-signal SimulationEvents to local-only analytics
 // (separate IndexedDB; no-op until the boot hook initializes the collector).
 import {
@@ -416,12 +422,16 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
    * that fresh reference; the previous reference is never mutated. This is
    * the ONLY path by which UI-initiated actions modify `simState`.
    *
-   * Throws if the engine raises (e.g. `UnknownActionError`,
-   * `InsufficientFundsError`, `OriginalTreeNotTransferableError`). The
-   * store does NOT catch — the caller is expected to handle typed errors
-   * (e.g. catch `InsufficientFundsError` in the purchase button and surface
-   * a UI notification). P5b/P5c may wrap dispatch in a higher-level helper
-   * that auto-converts typed errors into `pushNotification` calls.
+   * W44 (Finding 1): typed engine errors (e.g. `InsufficientFundsError`,
+   * `UnknownMarketError`, `OriginalTreeNotTransferableError`) are caught
+   * here + auto-converted to `pushNotification` calls — pre-W44 they
+   * propagated to React + the ErrorBoundary, crashing the panel. Unknown
+   * error classes (programming bugs) are still re-thrown so they surface as
+   * unhandled rejections (caught by tests + error-monitoring). On a typed
+   * error: the notification is pushed, `simState` is left unchanged
+   * (`executeAction` threw before publishing), + `[]` is returned. This
+   * makes the previously-unwired `safeDispatch` mapping live for ALL
+   * dispatch paths (not just callers that opt into the wrapper).
    */
   dispatch: (action) => {
     const current = get().simState;
@@ -432,7 +442,23 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
       // `engineStatus === 'running'` before dispatching if it needs to gate.
       return [];
     }
-    const result = engine.executeAction(current, action);
+    let result;
+    try {
+      result = engine.executeAction(current, action);
+    } catch (err) {
+      // W44 (Finding 1): typed engine error → actionable UI notification.
+      // `errorToNotification` returns null for unknown error classes —
+      // those are re-thrown (programming bugs must surface). On a typed
+      // error: push the notification (the `ui` slice only — `simState`
+      // is unchanged because `executeAction` threw before publishing),
+      // then return `[]`.
+      const payload = errorToNotification(err, current.clock.elapsedSeconds);
+      if (payload === null) {
+        throw err;
+      }
+      get().pushNotification(payload);
+      return [];
+    }
     set({
       simState: result.state,
       events: appendBounded(get().events, result.events, PROVISIONAL_UI_MAX_EVENT_LOG),

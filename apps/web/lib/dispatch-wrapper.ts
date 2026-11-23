@@ -86,25 +86,16 @@
  * mutation path for UI state (rule 6 symmetric counterpart).
  */
 import type { GameAction, SimulationEvent } from '@capitalist-tree/shared';
-import {
-  OfflineClockTamperedError,
-  OriginalTreeNotTransferableError,
-  SaveValidationError,
-  SimulationInvariantError,
-  TreeSaleNotImplementedError,
-  UnknownActionError,
-  UnknownSchemaVersionError,
-} from '@capitalist-tree/shared';
-import {
-  DuplicateRequestIdError,
-  InsufficientFundsError,
-  InvalidAmountError,
-  SelfTransferError,
-  UnknownAccountError,
-  UnknownMarketError,
-} from '@capitalist-tree/simulation';
-import type { GameStoreState, UiNotification } from '../stores/game-store';
+import type { GameStoreState } from '../stores/game-store';
 import { useGameStore } from '../stores/game-store';
+// W44 (Finding 1): the `errorToNotification` mapping was extracted to
+// `./format/error-to-notification.ts` so the store's `dispatch` mutator can
+// import it WITHOUT a circular dependency (this file imports `useGameStore`
+// from the store; importing the mapping back into the store would cycle).
+// Re-exported here so existing imports (`from '../lib/dispatch-wrapper'`)
+// keep working.
+import { errorToNotification } from './format/error-to-notification';
+export { errorToNotification } from './format/error-to-notification';
 
 // ----------------------------------------------------------------------------
 // Public types.
@@ -137,131 +128,13 @@ export interface SafeDispatchResult {
 }
 
 // ----------------------------------------------------------------------------
-// Error → notification mapping (pure).
+// Error → notification mapping (pure) — extracted W44 / Finding 1.
 // ----------------------------------------------------------------------------
-
-/**
- * Map a typed engine error to a UI notification payload (minus the
- * client-generated `id` + `createdAtMs` — those are added by
- * `pushNotification`). Returns `null` for unknown error classes so the
- * caller knows to re-throw.
- *
- * Pure: given an Error instance, returns a deterministic payload object
- * (or null). No side effects.
- *
- * The `at` field is read from the current `simState.clock.elapsedSeconds`
- * by the caller (this function doesn't reach into the store — it stays
- * pure). When the caller doesn't have a simState (e.g. the store hasn't
- * booted), `at` defaults to 0.
- */
-export function errorToNotification(
-  err: unknown,
-  at: number,
-): Omit<UiNotification, 'id' | 'createdAtMs'> | null {
-  if (err instanceof InsufficientFundsError) {
-    return {
-      severity: 'warning',
-      code: 'low-funds',
-      message: `Insufficient funds: needed ${err.needed}, available ${err.available}.`,
-      at,
-    };
-  }
-  if (err instanceof UnknownAccountError) {
-    return {
-      severity: 'critical',
-      code: 'low-funds',
-      message: `Unknown account "${err.accountId}" — the funds target is missing.`,
-      at,
-    };
-  }
-  if (err instanceof UnknownMarketError) {
-    return {
-      severity: 'warning',
-      code: 'unknown-market',
-      message: `Unknown market "${err.marketId}".`,
-      at,
-    };
-  }
-  if (err instanceof InvalidAmountError) {
-    return {
-      severity: 'info',
-      code: 'invalid-amount',
-      message: `Invalid amount "${err.amount}": ${err.reason}.`,
-      at,
-    };
-  }
-  if (err instanceof DuplicateRequestIdError) {
-    return {
-      severity: 'info',
-      code: 'duplicate-request',
-      message: `Duplicate request "${err.requestId}" — already processed.`,
-      at,
-    };
-  }
-  if (err instanceof SelfTransferError) {
-    return {
-      severity: 'info',
-      code: 'self-transfer',
-      message: `Self-transfer rejected for account "${err.accountId}".`,
-      at,
-    };
-  }
-  if (err instanceof UnknownActionError) {
-    return {
-      severity: 'critical',
-      code: 'unknown-action',
-      message: `Unknown action type "${err.actionType}".`,
-      at,
-    };
-  }
-  if (err instanceof SimulationInvariantError) {
-    return {
-      severity: 'critical',
-      code: 'invariant',
-      message: err.message,
-      at,
-    };
-  }
-  if (err instanceof OriginalTreeNotTransferableError) {
-    return {
-      severity: 'warning',
-      code: 'original-tree-protected',
-      message: `The original tree ("${err.treeId}") cannot be sold or transferred.`,
-      at,
-    };
-  }
-  if (err instanceof TreeSaleNotImplementedError) {
-    return {
-      severity: 'info',
-      code: 'tree-sale-not-implemented',
-      message: `Selling tree "${err.treeId}" is not implemented yet (P3c).`,
-      at,
-    };
-  }
-  if (err instanceof UnknownSchemaVersionError || err instanceof SaveValidationError) {
-    return {
-      severity: 'critical',
-      code: 'save-corrupt',
-      message: err.message,
-      at,
-    };
-  }
-  if (err instanceof OfflineClockTamperedError) {
-    return {
-      severity: 'critical',
-      code: 'offline-clock-tampered',
-      message:
-        `Your system clock moved backwards by ${err.backwardsMs} ms while you ` +
-        `were away. Offline catch-up was refused to avoid corrupting your ` +
-        `game — your save is intact. (GDD §4.2, TDD §14.4)`,
-      at,
-    };
-  }
-  // Unknown error class — return null so the caller re-throws. The wrapper
-  // does NOT swallow unexpected errors; a programming bug should still
-  // surface as an unhandled rejection.
-  return null;
-}
+// The `errorToNotification` function + its 12-entry mapping table now live in
+// `./format/error-to-notification.ts` (extracted so the store's `dispatch`
+// mutator can import the mapping without a circular dependency — see the
+// import note above). Re-exported from this module for back-compat. See that
+// file for the full mapping table + docstring.
 
 // ----------------------------------------------------------------------------
 // Wrapper.
@@ -272,7 +145,16 @@ export function errorToNotification(
  * to `pushNotification` calls. Returns the events the engine emitted (same
  * shape as bare dispatch) plus an `ok` flag.
  *
- * On a typed error:
+ * W44 (Finding 1): the store's `dispatch` mutator itself now catches typed
+ * errors + surfaces them as notifications (so ALL dispatch paths benefit,
+ * not just callers that opt into this wrapper). In production
+ * `store.dispatch` catches first + returns `[]`, so this wrapper's catch
+ * is only reached when the underlying `dispatch` re-throws an UNKNOWN
+ * error class (which this wrapper also re-throws). The wrapper is retained
+ * as a back-compat ergonomic layer for callers that want the
+ * `{ events, ok }` shape + for tests that stub a throwing `dispatch`.
+ *
+ * On a typed error (when the underlying dispatch throws — e.g. a stub):
  *   1. Read the current `simState.clock.elapsedSeconds` (the `at` field for
  *      the notification). Defaults to 0 if the store hasn't booted.
  *   2. Map the error to a notification payload via {@link errorToNotification}.

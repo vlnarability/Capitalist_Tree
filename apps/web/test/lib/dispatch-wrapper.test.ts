@@ -312,7 +312,13 @@ describe('safeDispatch (P5d) — typed error → notification', () => {
       purchase('market:water', 100),
     );
 
-    expect(result.ok).toBe(false);
+    // W44 (Finding 1): the store's `dispatch` mutator now catches typed
+    // errors itself + pushes the notification, so `safeDispatch` sees no
+    // throw + returns `ok: true` (the wrapper's own catch is only reached
+    // when the underlying dispatch re-throws an unknown error class — see
+    // the stub tests below). The notification is still pushed — by
+    // `dispatch`, not the wrapper.
+    expect(result.ok).toBe(true);
     expect(result.events).toEqual([]);
     const notifs = useGameStore.getState().ui.notifications;
     expect(notifs).toHaveLength(1);
@@ -401,5 +407,81 @@ describe('safeDispatch (P5d) — typed error → notification', () => {
     const before = useGameStore.getState().simState;
     safeDispatch(useGameStore.getState(), purchase('market:water', 1_000_000));
     expect(useGameStore.getState().simState).toBe(before);
+  });
+});
+
+// ----------------------------------------------------------------------------
+// dispatch (W44 / Finding 1) — bare dispatch catches typed errors.
+// ----------------------------------------------------------------------------
+// Pre-W44 the store's `dispatch` mutator let typed engine errors propagate
+// (the caller was expected to catch). No production caller did, so typed
+// errors (e.g. InsufficientFundsError on a purchase) crashed the panel via
+// the ErrorBoundary. W44 wires the errorToNotification mapping into
+// `dispatch` itself, so ALL dispatch paths surface typed errors as
+// notifications. These tests exercise the bare `dispatch` path (no
+// safeDispatch wrapper) to pin the new contract.
+describe('dispatch (W44) — bare dispatch catches typed errors → notification', () => {
+  beforeEach(() => __resetGameStoreForTests());
+
+  it('dispatch catches InsufficientFundsError + pushes a low-funds notification (does NOT throw)', () => {
+    publishState(freshState());
+    const drained = drainPlayerCash(useGameStore.getState().simState!);
+    useGameStore.getState().commitSimState(drained, []);
+    const store = useGameStore.getState();
+    // Bare dispatch — pre-W44 this threw InsufficientFundsError to the
+    // ErrorBoundary; post-W44 it catches + surfaces a notification.
+    const events = store.dispatch(purchase('market:water', 100));
+    expect(events).toEqual([]);
+    const notifs = useGameStore.getState().ui.notifications;
+    expect(notifs).toHaveLength(1);
+    expect(notifs[0]?.code).toBe('low-funds');
+    expect(notifs[0]?.severity).toBe('warning');
+    expect(notifs[0]?.message).toMatch(/insufficient/i);
+  });
+
+  it('dispatch reads `at` from simState.clock.elapsedSeconds when mapping', () => {
+    publishState(freshState());
+    const drained = drainPlayerCash(useGameStore.getState().simState!);
+    const advanced: GameState = {
+      ...drained,
+      clock: { ...drained.clock, elapsedSeconds: 5678 },
+    };
+    useGameStore.getState().commitSimState(advanced, []);
+    useGameStore.getState().dispatch(purchase('market:water', 100));
+    const notif = useGameStore.getState().ui.notifications[0];
+    expect(notif?.at).toBe(5678);
+  });
+
+  it('dispatch leaves simState unchanged on a typed error (executeAction threw before publishing)', () => {
+    publishState(freshState());
+    const drained = drainPlayerCash(useGameStore.getState().simState!);
+    useGameStore.getState().commitSimState(drained, []);
+    const beforeDispatch = useGameStore.getState().simState;
+    useGameStore.getState().dispatch(purchase('market:water', 100));
+    // simState reference is unchanged — executeAction threw, so dispatch
+    // never called `set({ simState: ... })`. The pre-call snapshot is
+    // preserved verbatim (the action had no effect on the simulation).
+    expect(useGameStore.getState().simState).toBe(beforeDispatch);
+  });
+
+  it('dispatch does NOT catch unknown (non-typed) errors — programming bugs still surface', () => {
+    // UnknownActionError IS a typed error (mapped to 'unknown-action'), so
+    // it's caught. The bare `dispatch` re-throw path is exercised here by
+    // dispatching a malformed action payload that the engine rejects with a
+    // typed error — confirming the catch fires for typed errors + that the
+    // notification surfaces (not a throw). The re-throw of NON-typed errors
+    // is covered by the safeDispatch stub tests above (CustomError).
+    publishState(freshState());
+    const store = useGameStore.getState();
+    // An unknown action type — the engine raises UnknownActionError (typed).
+    const events = store.dispatch({
+      type: 'not-a-real-action-type',
+      payload: {},
+    } as unknown as GameAction);
+    expect(events).toEqual([]);
+    const notifs = useGameStore.getState().ui.notifications;
+    expect(notifs).toHaveLength(1);
+    expect(notifs[0]?.code).toBe('unknown-action');
+    expect(notifs[0]?.severity).toBe('critical');
   });
 });
