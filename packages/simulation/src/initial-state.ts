@@ -34,6 +34,11 @@ import {
   PROVISIONAL_ECONOMY_MARKET_ACCOUNT_PREFIX,
   PROVISIONAL_ECONOMY_MARKET_INITIAL_SUPPLY,
   PROVISIONAL_ENERGY_BATTERY_CAPACITY_DEFAULT,
+  PROVISIONAL_PERSONAL_EXPENSE_FOOD_MINOR,
+  PROVISIONAL_PERSONAL_EXPENSE_HOUSING_MINOR,
+  PROVISIONAL_PERSONAL_EXPENSE_UTILITIES_MINOR,
+  PROVISIONAL_PERSONAL_EXPENSE_HEALTHCARE_MINOR,
+  PROVISIONAL_PERSONAL_EXPENSE_TRANSPORTATION_MINOR,
 } from '@capitalist-tree/shared';
 import { findSpeciesById, findClimateById, ALL_MARKETS } from '@capitalist-tree/content';
 import { seasonFromDay, SECONDS_PER_DAY } from './systems/time-system.js';
@@ -169,13 +174,29 @@ export function initializeState(config: GameConfig): GameState {
       // action. Starts at 0 — the player is rested. PersonalSystem decays it
       // each tick (rest).
       laborExhaustion: 0,
+      // W46 (inert-expenses fix): seed `livingExpenses` with the real default
+      // amounts (not '0'). Pre-W46 all five categories were seeded to '0' —
+      // `getExpenseAmount` masked this at billing time by falling back to the
+      // defaults, but the ExpensesSummary UI reads `player.livingExpenses`
+      // directly, so the dashboard showed "$0.00 monthly expenses" for the
+      // first 30 days even though the system would bill the real $240 on day
+      // 30. Seeding the defaults makes the configured amounts visible from
+      // tick 0; `getExpenseAmount`'s fallback stays as a safety net for old
+      // saves migrated before this fix.
       livingExpenses: {
-        food: '0',
-        housing: '0',
-        utilities: '0',
-        healthcare: '0',
-        transportation: '0',
+        food: PROVISIONAL_PERSONAL_EXPENSE_FOOD_MINOR,
+        housing: PROVISIONAL_PERSONAL_EXPENSE_HOUSING_MINOR,
+        utilities: PROVISIONAL_PERSONAL_EXPENSE_UTILITIES_MINOR,
+        healthcare: PROVISIONAL_PERSONAL_EXPENSE_HEALTHCARE_MINOR,
+        transportation: PROVISIONAL_PERSONAL_EXPENSE_TRANSPORTATION_MINOR,
       },
+      // W46 (inert-expenses fix): sim second of the most recent fired bill.
+      // 0 = no bill has fired yet. Used by `ensureNextBillScheduled` to detect
+      // "first bill ever" (so it schedules at FIRST_BILL_DELAY = day 1, not the
+      // full 30-day cycle boundary). Updated by `processFiredBill` when a bill
+      // is processed. Defaults to 0 for fresh saves + backfilled to 0 by the
+      // migration for pre-W46 saves.
+      lastBillAt: 0,
     },
     originalTree: {
       id: 'original',

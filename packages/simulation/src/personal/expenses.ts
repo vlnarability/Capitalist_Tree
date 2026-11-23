@@ -46,6 +46,7 @@ import {
   PROVISIONAL_PERSONAL_EXPENSE_HEALTHCARE_MINOR,
   PROVISIONAL_PERSONAL_EXPENSE_TRANSPORTATION_MINOR,
   PROVISIONAL_PERSONAL_EXPENSE_UTILITIES_MINOR,
+  PROVISIONAL_PERSONAL_FIRST_BILL_DELAY_SECONDS,
 } from '@capitalist-tree/shared';
 import { transfer, getBalance, parseAmount } from '../economy/ledger.js';
 import { schedule, cancel } from '../events/scheduler.js';
@@ -90,23 +91,27 @@ export function getExpenseAmount(
 }
 
 /**
- * Build the deterministic scheduled-event id for the next bill at a given
- * sim second. Same (saveId, simSecond, cycle) triple always produces the
- * same id — this is the scheduling idempotency key. The PersonalSystem
- * checks for the presence of this id in the scheduler before scheduling a
- * new bill, so a re-scheduled bill (e.g. after a save/load) is not
- * double-added.
+ * Build the deterministic scheduled-event id for a bill at a given sim second.
+ * Same (saveId, atSimSecond) pair always produces the same id — this is the
+ * scheduling idempotency key. `schedule` dedupes by id, so re-scheduling the
+ * same bill (same `at`, e.g. after a save/load) is a no-op; bills at DIFFERENT
+ * sim seconds get distinct ids + can coexist in the scheduler.
  *
- * `cycle` is a monotonic counter (the Nth bill since game start). It's
- * derived from `floor(at / BILLING_INTERVAL_SECONDS)` so the same `at`
- * always maps to the same cycle.
+ * W46 (inert-expenses fix): pre-W46 the id was `bill-due:${saveId}:${cycle}`
+ * where `cycle = floor(at / INTERVAL)`. This assumed one bill per cycle at
+ * `N × INTERVAL`, so two bills in the same cycle (e.g. a test's manual bill at
+ * sim second 60 + the auto-scheduled first bill at FIRST_BILL_DELAY = 86_400,
+ * both `cycle 0`) collided on the id + the second was silently deduped by
+ * `schedule`. With the first bill now at FIRST_BILL_DELAY (not `0 × INTERVAL`),
+ * the cycle number no longer uniquely identifies a bill, so the id encodes the
+ * full `at` sim second. Re-scheduling the same `at` is still idempotent; the
+ * `cycle` field on the payload (for display/debug) is unchanged.
  */
 export function billDueEventId(
   saveId: string,
   atSimSecond: number,
 ): string {
-  const cycle = Math.floor(atSimSecond / PROVISIONAL_PERSONAL_BILLING_INTERVAL_SECONDS);
-  return `bill-due:${saveId}:${cycle}`;
+  return `bill-due:${saveId}:${atSimSecond}`;
 }
 
 /**
@@ -160,9 +165,25 @@ export function buildBillDueEvent(
  * Schedule the next bill if none is currently scheduled for the future.
  *
  * Called by the PersonalSystem each tick. If the scheduler has no `bill-due`
- * event with `at > ctx.now`, schedule the next one at
- * `ctx.now + BILLING_INTERVAL_SECONDS` (aligned to the cycle boundary so
- * the deterministic id is stable across save/load).
+ * event with `at > ctx.now`, schedule the next one. The scheduled `at` is:
+ *   - `PROVISIONAL_PERSONAL_FIRST_BILL_DELAY_SECONDS` (day 1) for the FIRST
+ *     bill ever (detected via `player.lastBillAt === 0` + `now < DELAY`).
+ *   - The next `N × BILLING_INTERVAL_SECONDS` boundary (day 30, 60, ...) for
+ *     all subsequent bills.
+ *
+ * W46 (inert-expenses fix): pre-W46 the first bill fired at the full
+ * BILLING_INTERVAL (day 30), leaving a 30-day dead zone with zero expense
+ * activity. With the defaults now seeded (so the UI shows real amounts from
+ * tick 0) + the first bill at day 1, the player encounters the expense system
+ * within ~24 min of play at 1× speed instead of ~12 hours.
+ *
+ * The `lastBillAt === 0` signal cleanly distinguishes "fresh game, no bill
+ * has fired" from "a bill already fired + was cancelled" (cancelled bills are
+ * gone from the scheduler, so the scheduler state alone can't tell). Once the
+ * first bill fires, `processFiredBill` sets `lastBillAt`, so subsequent calls
+ * fall through to the cycle-boundary path. The `now < DELAY` guard prevents
+ * re-scheduling a stale day-1 slot if the sim was paused/resumed past day 1
+ * without the first bill firing.
  *
  * Pure: returns new state, never mutates input. If a future bill is already
  * scheduled, returns state unchanged.
@@ -177,11 +198,30 @@ export function ensureNextBillScheduled(
   );
   if (hasFutureBill) return state;
 
-  // Schedule the next bill at the next cycle boundary strictly greater
-  // than `now`. This keeps the id deterministic across save/load: the Nth
-  // bill is always at simSecond = N × BILLING_INTERVAL_SECONDS.
-  const nextCycle = Math.floor(now / PROVISIONAL_PERSONAL_BILLING_INTERVAL_SECONDS) + 1;
-  const nextAt = nextCycle * PROVISIONAL_PERSONAL_BILLING_INTERVAL_SECONDS;
+  // Is there a bill-due event already due (at <= now) but not yet processed?
+  // `ensureNextBillScheduled` runs BEFORE `dueBills` in the PersonalSystem, so
+  // at the tick a bill fires it is still in the scheduler as a due (not
+  // future) event. If we ignored this, `isFirstBillEver` (which checks
+  // `lastBillAt === 0`) would re-schedule another first bill — the due bill
+  // hasn't set `lastBillAt` yet. Falling through to the cycle boundary here
+  // queues the next bill correctly; `dueBills` then processes + cancels the
+  // due one + sets `lastBillAt`.
+  const hasDueBill = state.scheduler.events.some(
+    (e) => e.kind === 'bill-due' && e.at <= now,
+  );
+
+  // W46: first bill ever fires at FIRST_BILL_DELAY (day 1); subsequent bills
+  // at the regular cycle boundary (day 30, 60, ...). The cycle id
+  // (`floor(at / INTERVAL)`) is 0 for the first bill + 1, 2, ... after, so
+  // the deterministic id stays stable across save/load.
+  const isFirstBillEver =
+    state.player.lastBillAt === 0 &&
+    now < PROVISIONAL_PERSONAL_FIRST_BILL_DELAY_SECONDS &&
+    !hasDueBill;
+  const nextAt = isFirstBillEver
+    ? PROVISIONAL_PERSONAL_FIRST_BILL_DELAY_SECONDS
+    : (Math.floor(now / PROVISIONAL_PERSONAL_BILLING_INTERVAL_SECONDS) + 1) *
+      PROVISIONAL_PERSONAL_BILLING_INTERVAL_SECONDS;
   const event = buildBillDueEvent(state, nextAt);
   return schedule(state, event);
 }
@@ -383,6 +423,20 @@ export function processFiredBill(
 
   // Cancel the fired event from the scheduler (it's been processed).
   next = cancel(next, event.id);
+
+  // W46 (inert-expenses fix): record the sim second of this fired bill so
+  // `ensureNextBillScheduled` can distinguish "first bill ever" (lastBillAt
+  // === 0 → schedule at FIRST_BILL_DELAY) from "a bill already fired"
+  // (lastBillAt > 0 → schedule at the cycle boundary). Set after the
+  // processExpensePayment loop so this fires whether the bill was paid or
+  // unpaid — either way the bill came due + was processed, which is the
+  // signal we need.
+  if (next.player.lastBillAt !== event.at) {
+    next = {
+      ...next,
+      player: { ...next.player, lastBillAt: event.at },
+    };
+  }
 
   return { state: next, events };
 }

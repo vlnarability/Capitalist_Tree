@@ -291,6 +291,24 @@ export const PROVISIONAL_PERSONAL_BILLING_INTERVAL_DAYS = 30;
 export const PROVISIONAL_PERSONAL_BILLING_INTERVAL_SECONDS =
   PROVISIONAL_PERSONAL_BILLING_INTERVAL_DAYS * 24 * 60 * 60;
 
+// W46 (inert-expenses fix): delay before the FIRST bill fires, in sim seconds.
+// 1 sim day (86_400). Pre-W46 the first bill fired at the full
+// BILLING_INTERVAL (day 30), leaving a 30-day dead zone with zero expense
+// activity — combined with the zero-default `livingExpenses` seeding, the
+// expense system felt entirely inert for the first month. With the defaults
+// now seeded (so the UI shows real amounts from tick 0) + the first bill at
+// day 1, the player encounters the expense system within the first ~24 min
+// of play at 1× speed (1440 ticks), instead of ~12 hours.
+//
+// The first bill is a FULL month's amount (not pro-rated) — this is the
+// "first month's rent due upfront" pattern. `ensureNextBillScheduled` uses
+// `player.lastBillAt === 0` (no bill has fired yet) + `now < FIRST_BILL_DELAY`
+// to detect "first bill ever" + schedule at this delay; subsequent bills
+// resume at the regular BILLING_INTERVAL cycle boundary (day 30, 60, ...).
+// 1 day chosen so the player has a short ramp to earn before the first bill
+// but encounters expenses early; tunable.
+export const PROVISIONAL_PERSONAL_FIRST_BILL_DELAY_SECONDS = 24 * 60 * 60;
+
 // PROVISIONAL (GDD §17: starting currency and initial living expenses)
 //
 // Per-cycle (monthly) amounts for each living-expense category, in bigint

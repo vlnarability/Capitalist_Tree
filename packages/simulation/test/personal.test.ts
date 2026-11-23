@@ -63,9 +63,13 @@ import {
   PROVISIONAL_ECONOMY_CATEGORY_TRANSFER,
   PROVISIONAL_PERSONAL_BILLING_INTERVAL_SECONDS,
   PROVISIONAL_PERSONAL_BILLING_INTERVAL_DAYS,
+  PROVISIONAL_PERSONAL_FIRST_BILL_DELAY_SECONDS,
   PROVISIONAL_PERSONAL_LOW_FUNDS_THRESHOLD_MINOR,
   PROVISIONAL_PERSONAL_EXPENSE_FOOD_MINOR,
   PROVISIONAL_PERSONAL_EXPENSE_HOUSING_MINOR,
+  PROVISIONAL_PERSONAL_EXPENSE_UTILITIES_MINOR,
+  PROVISIONAL_PERSONAL_EXPENSE_HEALTHCARE_MINOR,
+  PROVISIONAL_PERSONAL_EXPENSE_TRANSPORTATION_MINOR,
   PROVISIONAL_WELL_BEING_WEALTH_SCALE_MINOR,
   PROVISIONAL_SIMULATION_STEP_SECONDS as STEP,
   migrations,
@@ -366,12 +370,41 @@ describe('personal — pure helpers', () => {
       expect(getExpenseAmount(customized, 'food')).toBe('9999');
     });
 
-    it('getExpenseAmount falls back to default when set to 0 (fresh save)', () => {
+    it('fresh state seeds livingExpenses with the real default amounts (W46)', () => {
       const s = freshState();
-      // Fresh state: all livingExpenses are '0'.
-      expect(s.player.livingExpenses.food).toBe('0');
+      // W46 (inert-expenses fix): fresh state seeds the actual default
+      // amounts (not '0') so the ExpensesSummary UI shows real expenses from
+      // tick 0. Pre-W46 all five were '0' + the dashboard showed "$0.00".
+      expect(s.player.livingExpenses.food).toBe(PROVISIONAL_PERSONAL_EXPENSE_FOOD_MINOR);
+      expect(s.player.livingExpenses.housing).toBe(PROVISIONAL_PERSONAL_EXPENSE_HOUSING_MINOR);
+      expect(s.player.livingExpenses.utilities).toBe(PROVISIONAL_PERSONAL_EXPENSE_UTILITIES_MINOR);
+      expect(s.player.livingExpenses.healthcare).toBe(PROVISIONAL_PERSONAL_EXPENSE_HEALTHCARE_MINOR);
+      expect(s.player.livingExpenses.transportation).toBe(PROVISIONAL_PERSONAL_EXPENSE_TRANSPORTATION_MINOR);
+      // getExpenseAmount returns the same value (no fallback needed).
       expect(getExpenseAmount(s, 'food')).toBe(PROVISIONAL_PERSONAL_EXPENSE_FOOD_MINOR);
-      expect(getExpenseAmount(s, 'housing')).toBe(PROVISIONAL_PERSONAL_EXPENSE_HOUSING_MINOR);
+    });
+
+    it('getExpenseAmount falls back to default when set to 0 (migrated pre-W46 save)', () => {
+      const s = freshState();
+      // W46: fresh state now seeds the real defaults. Simulate a pre-W46
+      // migrated save (or a player who manually zeroed a category) by
+      // overriding to '0' — the fallback must still resolve to the default
+      // constants so billing never silently drops a category.
+      const migrated: GameState = {
+        ...s,
+        player: {
+          ...s.player,
+          livingExpenses: {
+            food: '0',
+            housing: '0',
+            utilities: '0',
+            healthcare: '0',
+            transportation: '0',
+          },
+        },
+      };
+      expect(getExpenseAmount(migrated, 'food')).toBe(PROVISIONAL_PERSONAL_EXPENSE_FOOD_MINOR);
+      expect(getExpenseAmount(migrated, 'housing')).toBe(PROVISIONAL_PERSONAL_EXPENSE_HOUSING_MINOR);
     });
   });
 
@@ -407,19 +440,41 @@ describe('personal — pure helpers', () => {
       expect(withBill2.scheduler.events.filter((e) => e.kind === 'bill-due')).toHaveLength(1);
     });
 
-    it('ensureNextBillScheduled schedules the next bill at the next cycle boundary', () => {
+    it('ensureNextBillScheduled schedules the FIRST bill at FIRST_BILL_DELAY (day 1) — W46', () => {
       const s = freshState();
+      // Fresh state: lastBillAt === 0, no bills scheduled. The first bill
+      // fires at FIRST_BILL_DELAY (day 1 = 86_400), NOT the full
+      // BILLING_INTERVAL (day 30). Pre-W46 the first bill was at day 30,
+      // leaving a 30-day dead zone with zero expense activity.
       const withBill = ensureNextBillScheduled(s, 60);
       const bill = withBill.scheduler.events.find((e) => e.kind === 'bill-due');
       expect(bill).toBeDefined();
-      // Cycle 1 = sim second 1 × BILLING_INTERVAL_SECONDS = 2_592_000.
+      expect(bill!.at).toBe(PROVISIONAL_PERSONAL_FIRST_BILL_DELAY_SECONDS);
+    });
+
+    it('ensureNextBillScheduled schedules subsequent bills at the next cycle boundary (day 30) — W46', () => {
+      const s = freshState();
+      // After the first bill fired (lastBillAt set), subsequent bills resume
+      // at the regular BILLING_INTERVAL cycle boundary.
+      const afterFirstBill: GameState = {
+        ...s,
+        player: {
+          ...s.player,
+          lastBillAt: PROVISIONAL_PERSONAL_FIRST_BILL_DELAY_SECONDS,
+        },
+      };
+      const withBill = ensureNextBillScheduled(afterFirstBill, PROVISIONAL_PERSONAL_FIRST_BILL_DELAY_SECONDS);
+      const bill = withBill.scheduler.events.find((e) => e.kind === 'bill-due');
+      expect(bill).toBeDefined();
+      // Cycle 1 = sim second 1 × BILLING_INTERVAL_SECONDS = 2_592_000 (day 30).
       expect(bill!.at).toBe(PROVISIONAL_PERSONAL_BILLING_INTERVAL_SECONDS);
     });
 
     it('dueBills returns only bill-due events with at <= now', () => {
       const s = freshState();
       const future = ensureNextBillScheduled(s, 60);
-      // No bill-due events are due at now=60 (the first is at 2_592_000).
+      // No bill-due events are due at now=60 (the first is at
+      // FIRST_BILL_DELAY = 86_400, W46).
       expect(dueBills(future, 60)).toHaveLength(0);
       // Manually schedule one at 60 — it's due at now=60.
       const withPastBill = schedule(future, buildBillDueEvent(future, 60));
@@ -632,15 +687,58 @@ describe('personal — pure helpers', () => {
 });
 
 describe('personal — PersonalSystem (engine.advance integration)', () => {
-  it('schedules the first bill during the first tick', () => {
+  it('schedules the first bill during the first tick (at FIRST_BILL_DELAY = day 1) — W46', () => {
     const s = freshState();
     // Fresh state has no scheduled events.
     expect(s.scheduler.events).toHaveLength(0);
     const r = engine.advance(s, STEP);
-    // After the first tick, a bill-due event is scheduled.
+    // After the first tick, a bill-due event is scheduled at FIRST_BILL_DELAY
+    // (day 1 = 86_400), NOT the full BILLING_INTERVAL (day 30). Pre-W46 the
+    // first bill was at day 30, leaving a 30-day dead zone.
     const bill = r.state.scheduler.events.find((e) => e.kind === 'bill-due');
     expect(bill).toBeDefined();
-    expect(bill!.at).toBe(PROVISIONAL_PERSONAL_BILLING_INTERVAL_SECONDS);
+    expect(bill!.at).toBe(PROVISIONAL_PERSONAL_FIRST_BILL_DELAY_SECONDS);
+  });
+
+  it('W46 regression: first bill fires at day 1, drains the full monthly amount, sets lastBillAt, schedules the next at day 30', () => {
+    const s = freshState();
+    // Sanity: fresh state has real expense defaults + lastBillAt === 0.
+    expect(s.player.lastBillAt).toBe(0);
+    const totalExpected = LIVING_EXPENSE_CATEGORIES.reduce(
+      (sum, cat) => sum + parseAmount(DEFAULT_EXPENSE_AMOUNTS[cat], cat),
+      0n,
+    );
+
+    // Advance to FIRST_BILL_DELAY (day 1) in one step — the first bill fires.
+    const r = engine.advance(s, PROVISIONAL_PERSONAL_FIRST_BILL_DELAY_SECONDS);
+
+    // 5 expense-due events, all paid (player started with $500 ≫ $240).
+    const expenseDueEvents = r.events.filter((e) => e.type === 'expense-due');
+    expect(expenseDueEvents).toHaveLength(5);
+    for (const e of expenseDueEvents) {
+      if (e.type === 'expense-due') expect(e.payload.paid).toBe(true);
+    }
+
+    // Player was debited the FULL monthly amount (no pro-rating — the first
+    // bill is a full month's expenses billed on day 1, the "first month's
+    // rent due upfront" pattern).
+    const before = parseAmount(s.player.personalCash, 'personalCash');
+    const after = getBalance(r.state, PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID);
+    expect(after).toBe(before - totalExpected);
+
+    // lastBillAt recorded to the first bill's sim second.
+    expect(r.state.player.lastBillAt).toBe(PROVISIONAL_PERSONAL_FIRST_BILL_DELAY_SECONDS);
+
+    // The next bill is scheduled at the cycle boundary (day 30), NOT another
+    // day-1 bill.
+    const futureBills = r.state.scheduler.events.filter(
+      (e) => e.kind === 'bill-due' && e.at > r.state.clock.elapsedSeconds,
+    );
+    expect(futureBills).toHaveLength(1);
+    expect(futureBills[0]!.at).toBe(PROVISIONAL_PERSONAL_BILLING_INTERVAL_SECONDS);
+
+    // Conservation invariant holds (expenses are real sinks).
+    expect(conservationDiscrepancy(r.state, INITIAL_SUPPLY)).toBe(0n);
   });
 
   it('does NOT auto-pay the first bill before it is due', () => {
@@ -737,8 +835,9 @@ describe('personal — PersonalSystem (engine.advance integration)', () => {
       ...s,
       player: { ...s.player, unpaidDays: 100 },
     };
-    // Advance 1 tick — no bill is due (the auto-scheduled bill is at
-    // 2_592_000, far in the future). Recovery should kick in.
+    // Advance 1 tick — no bill is due (the auto-scheduled first bill is at
+    // FIRST_BILL_DELAY = 86_400, W46, still in the future at now=60).
+    // Recovery should kick in.
     const r = engine.advance(withDebt, STEP);
     // 100 × (1 - 0.01) = 99 (floored).
     expect(r.state.player.unpaidDays).toBe(99);

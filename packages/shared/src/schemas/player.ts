@@ -80,5 +80,15 @@ export const playerStateSchema = z.object({
    *  — `deserialize`'s `gameStateSchema.safeParse` fills this for pre-existing
    *  saves, so no schema-version bump is required. */
   laborExhaustion: z.number().min(0).max(1).default(0),
+  /** W46 (inert-expenses fix): sim second of the most recent fired `bill-due`
+   *  event. 0 = no bill has fired yet. `ensureNextBillScheduled` uses this to
+   *  detect "first bill ever" so it schedules the first bill at
+   *  `PROVISIONAL_PERSONAL_FIRST_BILL_DELAY_SECONDS` (day 1) instead of the
+   *  full 30-day cycle boundary — pre-W46 the first bill fired at day 30,
+   *  leaving a 30-day dead zone with zero expense activity. Updated by
+   *  `processFiredBill` when a bill is processed. Defaults to 0 for fresh
+   *  saves + backfilled to 0 by the migration for pre-W46 saves, so no
+   *  schema-version bump is required. */
+  lastBillAt: z.number().int().nonnegative().default(0),
 });
 export type PlayerState = z.infer<typeof playerStateSchema>;
