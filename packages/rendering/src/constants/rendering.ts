@@ -407,6 +407,14 @@ export const PROVISIONAL_RENDER_LEAF_TIER2_SIZE_PX = 6;
 // PROVISIONAL (TDD §15.4: Currency Cosmetics — leaf outline width)
 export const PROVISIONAL_RENDER_LEAF_OUTLINE_WIDTH_PX = 0.5;
 
+/**
+ * Per-leaf click hit tolerance (px). Added to each leaf slot's draw radius when
+ * hit-testing a pointer click so small (3-6px) leaves are realistically
+ * clickable. Generous on purpose — the canopy is dense + a near-miss should
+ * register — but not so large that clicks on the trunk/sky hit canopy leaves.
+ */
+export const PROVISIONAL_RENDER_LEAF_HIT_TOLERANCE_PX = 5;
+
 // ----------------------------------------------------------------------------
 // Banknote theme palette (TDD §15.4, GDD §14 currency designs).
 //

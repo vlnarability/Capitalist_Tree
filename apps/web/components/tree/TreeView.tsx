@@ -277,7 +277,41 @@ export function TreeView({
       width={width}
       height={height}
       className={className}
-      onClick={onHarvest}
+      onClick={
+        onHarvest
+          ? (e) => {
+              // Per-leaf click targeting (P4d-leaf-targeting / GDD §5.4):
+              // translate the DOM click into canvas backing-store px (the slot
+              // layout's coordinate space) + hit-test the canopy. The canvas's
+              // CSS box (width:100% up to maxWidth) often differs from its
+              // backing store (width/height props or ResizeObserver-synced), so
+              // the ratio matters. onHarvest receives a LeafHit if a leaf was
+              // struck, or null if the click missed every drawn leaf (trunk /
+              // sky / ground). Keyboard activation (below) passes `undefined`
+              // instead — no pointer position.
+              const canvas = canvasRef.current;
+              const renderer = rendererRef.current;
+              if (!canvas || !renderer) {
+                // No canvas/renderer (unmounted mid-click, or a test env where
+                // the 2D context is unavailable) — treat as a miss so the
+                // click-always-invokes-onHarvest contract holds.
+                onHarvest(null);
+                return;
+              }
+              const rect = canvas.getBoundingClientRect();
+              if (rect.width <= 0 || rect.height <= 0) {
+                // Zero-size canvas (jsdom doesn't lay out canvases; or a
+                // not-yet-laid-out element) — can't translate the click to
+                // backing-store coords. Treat as a miss so the contract holds.
+                onHarvest(null);
+                return;
+              }
+              const cx = ((e.clientX - rect.left) / rect.width) * canvas.width;
+              const cy = ((e.clientY - rect.top) / rect.height) * canvas.height;
+              onHarvest(renderer.hitTestLeaf(cx, cy));
+            }
+          : undefined
+      }
       style={{
         display: 'block',
         // Fluid sizing: the canvas scales to its container's width while
@@ -309,7 +343,10 @@ export function TreeView({
           ? (e) => {
               if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
-                onHarvest();
+                // `undefined` = keyboard activation (no pointer position).
+                // The caller treats this distinctly from a click-miss (null)
+                // so keyboard users still get a harvest.
+                onHarvest(undefined);
               }
             }
           : undefined

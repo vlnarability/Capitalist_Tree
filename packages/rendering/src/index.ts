@@ -31,6 +31,7 @@ export type {
   TreeRendererTarget,
   CreateTreeRendererTarget,
   TreeViewProps,
+  LeafHit,
 } from './types.js';
 
 // Re-export TreeDamageState so consumers building DamageMarkers from raw

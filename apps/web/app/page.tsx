@@ -66,6 +66,7 @@ import {
 import {
   buildTreeRenderData,
   buildEnvironmentRenderData,
+  type LeafHit,
 } from '@capitalist-tree/rendering';
 import { findSpeciesById } from '@capitalist-tree/content';
 import type { GameConfig } from '@capitalist-tree/shared';
@@ -182,29 +183,51 @@ export default function HomePage(): ReactElement {
   // click never throws; TreeView stays interactive because the handler is
   // always defined once the page is past the loading gate.
   const dispatch = useGameStore((s) => s.dispatch);
-  const onTreeClick = useCallback((): void => {
-    const tree = treeState;
-    const clock = clockState;
-    const world = worldState;
-    if (!tree || !clock || !world || !tree.alive) return;
-    const species: TreeSpecies | undefined = findSpeciesById(tree.speciesId);
-    if (!species) return;
-    const ctx: BiologyContext = {
-      now: clock.elapsedSeconds,
-      stepSeconds: SECONDS_PER_DAY,
-      stepDays: 1,
-      season: clock.season,
-      timeOfDay: clock.timeOfDay,
-      species,
-      environment: world.environment,
-    };
-    const estimate = estimateSustainableHarvest(tree, ctx);
-    // Always dispatch at least 1 leaf on a click so the player gets feedback
-    // even when the sustainable estimate rounds to 0 (young tree / winter).
-    // The engine still caps to actual foliage, so this can't over-harvest.
-    const requested = Math.max(1, estimate.leavesPerDay);
-    dispatch(harvest(tree.id, requested));
-  }, [treeState, clockState, worldState, dispatch]);
+  const onTreeClick = useCallback(
+    (hit: LeafHit | null | undefined): void => {
+      const tree = treeState;
+      const clock = clockState;
+      const world = worldState;
+      if (!tree || !clock || !world || !tree.alive) return;
+      // Per-leaf click targeting (P4d-leaf-targeting / GDD §5.4): the TreeView
+      // hit-tests the canopy + reports what the pointer struck.
+      //   - hit (LeafHit)  → the click landed on a drawn leaf → harvest exactly
+      //                      one leaf (the targeted one). Precise per-leaf plucking.
+      //   - undefined      → keyboard activation (Enter/Space) → no pointer
+      //                      position, so harvest the sustainable batch so
+      //                      keyboard users keep the same throughput as before.
+      //   - null           → the click missed every leaf (trunk / sky / ground)
+      //                      → no-op (the click "catches nothing").
+      // The engine still caps to actual foliage + the species'
+      // maximumHarvestFraction, so a click never over-harvests. Batch harvests
+      // also remain available via the HarvestControls panel.
+      if (hit === null) return; // miss — no leaf to pluck.
+      if (hit) {
+        // Precise click on a leaf → harvest exactly one.
+        dispatch(harvest(tree.id, 1));
+        return;
+      }
+      // Keyboard activation → harvest the sustainable batch (max 1 so a young
+      // or winter tree still gives feedback).
+      const species: TreeSpecies | undefined = findSpeciesById(tree.speciesId);
+      if (!species) {
+        dispatch(harvest(tree.id, 1));
+        return;
+      }
+      const ctx: BiologyContext = {
+        now: clock.elapsedSeconds,
+        stepSeconds: SECONDS_PER_DAY,
+        stepDays: 1,
+        season: clock.season,
+        timeOfDay: clock.timeOfDay,
+        species,
+        environment: world.environment,
+      };
+      const estimate = estimateSustainableHarvest(tree, ctx);
+      dispatch(harvest(tree.id, Math.max(1, estimate.leavesPerDay)));
+    },
+    [treeState, clockState, worldState, dispatch],
+  );
 
   // GAP-17 (DR-11) Phase 4: the New Game button opens the climate + species
   // picker modal instead of booting the default config directly. The player

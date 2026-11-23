@@ -53,6 +53,7 @@ import type {
   TreeRenderer,
   CurrencyVisual,
   SeasonalAppearance,
+  LeafHit,
 } from './types.js';
 import { getDefaultCurrencyVisual } from './currency-visuals.js';
 import {
@@ -113,6 +114,7 @@ import {
   PROVISIONAL_RENDER_LEAF_TIER1_SIZE_PX,
   PROVISIONAL_RENDER_LEAF_TIER2_SIZE_PX,
   PROVISIONAL_RENDER_LEAF_OUTLINE_WIDTH_PX,
+  PROVISIONAL_RENDER_LEAF_HIT_TOLERANCE_PX,
   PROVISIONAL_RENDER_BANKNOTE_THEME_US_GREENBACK,
   PROVISIONAL_RENDER_BANKNOTE_THEME_GOLD_FOIL,
   PROVISIONAL_RENDER_BANKNOTE_THEME_EURO_VIOLET,
@@ -501,6 +503,12 @@ export class CanvasTreeRenderer implements TreeRenderer {
   // Cached structure — recomputed only when the structural signature changes.
   private _cachedStructure: CachedTreeStructure | null = null;
 
+  // Cached count of leaves actually drawn in the last _renderLeaves pass.
+  // Reflects canopyFactor × density × conditionFactor rounding — the set of
+  // slots the player can click. Reset to 0 when the structure is invalidated
+  // (resize) or the renderer is disposed. Read by hitTestLeaf().
+  private _cachedActiveLeafCount = 0;
+
   // Particle pools — pre-allocated, reused across frames (no per-frame alloc).
   private readonly _rainPool: Particle[];
   private readonly _snowPool: Particle[];
@@ -581,14 +589,18 @@ export class CanvasTreeRenderer implements TreeRenderer {
     this._height = Math.round(height);
     this._canvas.width = this._width;
     this._canvas.height = this._height;
-    // Layout depends on canvas size — invalidate the cache.
+    // Layout depends on canvas size — invalidate the cache + the active-leaf
+    // count (a stale count would let hitTestLeaf test slots that no longer
+    // exist after the rebuild).
     this._cachedStructure = null;
+    this._cachedActiveLeafCount = 0;
   }
 
   dispose(): void {
     if (this._disposed) return;
     this._disposed = true;
     this._cachedStructure = null;
+    this._cachedActiveLeafCount = 0;
     // Pools are plain-object arrays — drop references so GC can reclaim them.
     this._rainPool.length = 0;
     this._snowPool.length = 0;
@@ -630,6 +642,47 @@ export class CanvasTreeRenderer implements TreeRenderer {
   /** True if the cached layout is a stump (dead tree). */
   get cachedIsStump(): boolean {
     return this._cachedStructure?.stump ?? false;
+  }
+  /**
+   * Hit-test a pointer position against the drawn canopy (P4d-leaf-targeting /
+   * GDD §5.4). Returns the first leaf slot whose hit radius contains the
+   * point, or null if the point missed every drawn leaf (trunk / sky / ground
+   * / winter-bare canopy).
+   *
+   * Coordinates are in canvas backing-store pixels (the slot layout's space),
+   * NOT CSS pixels — the caller (TreeView) translates DOM click coords to
+   * backing-store coords before calling.
+   *
+   * The hit radius is each slot's draw size (leafSizeForTier × sizeJitter)
+   * plus PROVISIONAL_RENDER_LEAF_HIT_TOLERANCE_PX so small (3-6px) leaves are
+   * realistically clickable. The per-frame sway offset (±1.5px) is ignored —
+   * the tolerance absorbs it.
+   *
+   * Tests only the first `_cachedActiveLeafCount` slots (exactly the set drawn
+   * by _renderLeaves). Returns null if no render has occurred yet, the tree is
+   * a stump, or the canopy is bare (activeCount 0).
+   */
+  hitTestLeaf(x: number, y: number): LeafHit | null {
+    if (this._disposed) return null;
+    const struct = this._cachedStructure;
+    if (!struct || struct.stump) return null;
+    const activeCount = this._cachedActiveLeafCount;
+    if (activeCount <= 0) return null;
+    const slots = struct.leafSlots;
+    const tolerance = PROVISIONAL_RENDER_LEAF_HIT_TOLERANCE_PX;
+    for (let i = 0; i < activeCount; i++) {
+      const slot = slots[i];
+      if (!slot) break;
+      const dx = x - slot.x;
+      const dy = y - slot.y;
+      const size = leafSizeForTier(slot.tier) * slot.sizeJitter;
+      const radius = size + tolerance;
+      // Squared distance vs squared radius — avoids a sqrt per slot.
+      if (dx * dx + dy * dy < radius * radius) {
+        return { slotIndex: i, tier: slot.tier };
+      }
+    }
+    return null;
   }
   /**
    * Replace the CurrencyVisual. Useful for P4d's currency-picker UI — the
@@ -997,6 +1050,10 @@ export class CanvasTreeRenderer implements TreeRenderer {
       conditionFactor = 0.3 + 0.4 * (condition / PROVISIONAL_RENDER_FOLIAGE_STRESSED_THRESHOLD);
     }
     const activeCount = Math.round(struct.leafSlots.length * canopyFactor * density * conditionFactor);
+    // Cache the active count so hitTestLeaf() can test exactly the slots that
+    // are currently drawn (the first `activeCount` of the cached layout).
+    // Updated every render pass — includes 0 (winter-bare / dead canopy).
+    this._cachedActiveLeafCount = activeCount;
     if (activeCount <= 0) return;
 
     // Resolve banknote theme + per-tier colours.

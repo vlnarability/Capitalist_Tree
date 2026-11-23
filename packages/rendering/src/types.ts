@@ -340,6 +340,25 @@ export type CreateTreeRendererTarget =
  * The component itself is NOT in P4a — only the props type is. P4d wires
  * the actual React component.
  */
+/**
+ * LeafHit — the result of hit-testing a pointer against the rendered canopy
+ * (P4d-leaf-targeting / GDD §5.4). Returned by `CanvasTreeRenderer.hitTestLeaf`
+ * when a pointer-down lands on a drawn leaf slot.
+ *
+ * The `slotIndex` is an index into the renderer's cached leaf-slot layout —
+ * stable across frames while the structural signature is unchanged (height /
+ * trunkDiameter / branchDevelopment quantised), but NOT a durable biological
+ * identity: growth rebuilds the layout + reshuffles indices. The `tier` is
+ * the currency denomination tier (0..2) of the struck slot, for future
+ * tier-aware harvesting / particle feedback.
+ */
+export interface LeafHit {
+  /** Index into the cached leaf-slot layout (informational; not durable). */
+  readonly slotIndex: number;
+  /** Currency denomination tier (0..2) of the struck leaf slot. */
+  readonly tier: number;
+}
+
 export interface TreeViewProps {
   /** Pre-built tree render data. */
   readonly tree: TreeRenderData;
@@ -357,18 +376,26 @@ export interface TreeViewProps {
    * Optional click-to-harvest handler (GDD §5.4 Harvesting).
    *
    * When provided, the canvas becomes interactive: the cursor turns into a
-   * pointer and a click on the tree dispatches a harvest. The caller decides
-   * the leaf count (typically the sustainable estimate, or a fixed click-batch)
-   * inside this handler; the simulation engine caps the actual harvest by
-   * available foliage AND the species' `maximumHarvestFraction`, so a click
-   * never over-harvests.
+   * pointer and a click on the tree is hit-tested against the rendered canopy.
+   * The handler receives:
+   *   - a `LeafHit` when the pointer landed on a drawn leaf slot (the caller
+   *     typically harvests exactly one leaf — the targeted one);
+   *   - `null` when the pointer missed every leaf slot (clicked trunk / sky /
+   *     ground) — the caller typically no-ops (the click "catches nothing");
+   *   - `undefined` when activation came from the keyboard (Enter/Space) — no
+   *     pointer position exists, so the caller falls back to harvesting one
+   *     leaf so keyboard users aren't penalised.
+   *
+   * The simulation engine caps the actual harvest by available foliage AND
+   * the species' `maximumHarvestFraction`, so a click never over-harvests.
    *
    * If omitted, the canvas remains a non-interactive visualization (the
-   * HarvestControls panel is the keyboard/input fallback). This keeps the
-   * rendering package decoupled from the action surface: TreeView only knows
-   * that a click happened and asks the caller what to do about it.
+   * HarvestControls panel is the keyboard/input fallback for batch harvests).
+   * This keeps the rendering package decoupled from the action surface:
+   * TreeView only knows that a click happened (and where) and asks the caller
+   * what to do about it.
    */
-  readonly onHarvest?: () => void;
+  readonly onHarvest?: (hit: LeafHit | null | undefined) => void;
 }
 
 // Re-export the simulation's TreeDamageState type alias so consumers building

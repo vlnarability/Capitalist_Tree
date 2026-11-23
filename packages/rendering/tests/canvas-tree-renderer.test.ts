@@ -1057,3 +1057,85 @@ describe('CanvasTreeRenderer — multi-frame animation', () => {
     r.dispose();
   });
 });
+
+// ----------------------------------------------------------------------------
+// Per-leaf hit testing (hitTestLeaf — P4d-leaf-targeting / GDD §5.4).
+//
+// The renderer caches the active leaf-slot layout each render; hitTestLeaf
+// tests a pointer position (in canvas backing-store px) against the drawn
+// canopy + returns the first struck slot, or null for a miss. These tests
+// lock in the contract: null before render / after dispose / for a stump /
+// for a winter-bare canopy, and a LeafHit at a real drawn leaf position.
+// ----------------------------------------------------------------------------
+describe('CanvasTreeRenderer — per-leaf hit testing (hitTestLeaf)', () => {
+  it('returns null before any render (no cached structure)', () => {
+    const canvas = createMockCanvas();
+    const r = new CanvasTreeRenderer({ canvas });
+    expect(r.hitTestLeaf(300, 240)).toBeNull();
+  });
+
+  it('returns null after dispose', () => {
+    const canvas = createMockCanvas();
+    const r = new CanvasTreeRenderer({ canvas });
+    r.render(matureSummerTree(), summerMiddayEnv(), 16);
+    r.dispose();
+    expect(r.hitTestLeaf(300, 240)).toBeNull();
+  });
+
+  it('returns null for a dead/stump tree', () => {
+    const canvas = createMockCanvas();
+    const r = new CanvasTreeRenderer({ canvas });
+    const dead = buildTreeRenderData(
+      baseTree({ alive: false, stress: 1, health: 0 }),
+      { season: 'summer' },
+    );
+    r.render(dead, summerMiddayEnv(), 16);
+    expect(r.cachedIsStump).toBe(true);
+    expect(r.hitTestLeaf(300, 240)).toBeNull();
+  });
+
+  it('returns null for a winter-bare canopy (no active leaves)', () => {
+    const canvas = createMockCanvas();
+    const r = new CanvasTreeRenderer({ canvas });
+    const winter = buildTreeRenderData(baseTree(), { season: 'winter' });
+    r.render(winter, summerMiddayEnv(), 16);
+    // Winter → canopyFactor 0 → activeCount 0 → nothing to hit.
+    expect(r.hitTestLeaf(300, 240)).toBeNull();
+  });
+
+  it('returns a LeafHit at a drawn leaf position + null for a far miss', () => {
+    const canvas = createMockCanvas(600, 480);
+    const r = new CanvasTreeRenderer({ canvas });
+    r.render(matureSummerTree(), summerMiddayEnv(), 16);
+    expect(r.cachedLeafSlotCount).toBeGreaterThan(0);
+    // The mock context records every translate() call. Each leaf draw does a
+    // translate(slot.x + swayX, slot.y + swayY) before its ellipse, so the
+    // recorded translate args are drawn leaf positions. For a sunny summer
+    // tree (no rain/snow/falling-leaf particles) the only translate calls are
+    // leaf positions. Hit-testing one of those positions must return a
+    // LeafHit — the per-frame sway offset is ±1.5px, well within the
+    // PROVISIONAL_RENDER_LEAF_HIT_TOLERANCE_PX (5px) + leaf size (3-6px).
+    const calls = canvas._mockContext.calls;
+    const translates = calls.filter((c) => c.op === 'translate');
+    expect(translates.length).toBeGreaterThan(0);
+    let firstHit: { slotIndex: number; tier: number } | null = null;
+    let hitCount = 0;
+    for (const c of translates) {
+      const [x, y] = c.args as [number, number];
+      const hit = r.hitTestLeaf(x, y);
+      if (hit) {
+        hitCount++;
+        if (!firstHit) firstHit = hit;
+      }
+    }
+    // At least one drawn leaf position must hit-test positive.
+    expect(hitCount).toBeGreaterThan(0);
+    expect(firstHit).not.toBeNull();
+    expect(firstHit!.slotIndex).toBeGreaterThanOrEqual(0);
+    expect(firstHit!.tier).toBeGreaterThanOrEqual(0);
+    expect(firstHit!.tier).toBeLessThanOrEqual(2);
+    // A point well outside the canvas must miss.
+    expect(r.hitTestLeaf(-100, -100)).toBeNull();
+    r.dispose();
+  });
+});
