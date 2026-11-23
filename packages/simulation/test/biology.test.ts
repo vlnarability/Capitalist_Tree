@@ -969,6 +969,55 @@ describe('harvest (TDD §7.5, GDD §5.4)', () => {
     expect(result.foliageAfter).toBe(result.foliageBefore);
   });
 
+  it('W47 regression: a tree with 1 leaf can be harvested (last leaf not trapped by floor rounding)', () => {
+    const ctx = testContext();
+    // Pre-W47: foliage=1, fraction=0.5 → maxByFraction = floor(0.5) = 0 →
+    // leavesHarvested = 0 even though the player requested 1. The handler
+    // still queued an issuance with amount '0' → the monetary authority
+    // rejected it with "Issuance amount '0' is not a valid positive bigint
+    // string (amount must be > 0)." The tree was stuck at 1 leaf forever
+    // (the "1/200" the player reported).
+    const tree = testTree({ foliage: { currentLeaves: 1, leafCapacity: 200 } });
+    const result = harvestLeaves(tree, ctx, 1, 0, 'currency:leaf-dollar');
+    expect(result.leavesHarvested).toBe(1);
+    expect(result.foliageAfter).toBe(0);
+    // The issuance amount is the real per-leaf denomination, NOT '0'.
+    expect(result.currencyIssuance.amount).toBe(SPECIES.leafDenominationMinor);
+  });
+
+  it('W47 regression: 0-leaf harvest (requestedLeaves=0) yields leavesHarvested=0 — handler guards queuing', () => {
+    const ctx = testContext();
+    const tree = testTree({ foliage: { currentLeaves: 1000, leafCapacity: 2000 } });
+    // requestedLeaves=0 → leavesHarvested=0. The pure function returns a
+    // currencyIssuance with amount '0' for shape consistency; the action
+    // handler (handlers.ts) guards `if (result.leavesHarvested > 0)` before
+    // queuing on pendingIssuances, so the authority never sees the 0-amount
+    // request. This test pins the pure-function half of that contract.
+    const result = harvestLeaves(tree, ctx, 0, 0, 'currency:leaf-dollar');
+    expect(result.leavesHarvested).toBe(0);
+    expect(result.foliageAfter).toBe(1000);
+  });
+
+  it('W47 regression: harvesting down to 0 across repeated clicks (200 → 0)', () => {
+    const ctx = testContext();
+    // The user's scenario: click until all leaves are gone. Each click
+    // requests a large number (the real action requests max(1, sustainable
+    // estimate), which is large for a healthy tree), capped by maxByFraction
+    // = floor(foliage * 0.5) (min 1, W47). Pre-W47 the chain stalled at 1
+    // (floor(1*0.5)=0). Post-W47 it reaches 0: 200→100→50→25→12→6→3→1→0.
+    let tree = testTree({ foliage: { currentLeaves: 200, leafCapacity: 200 } });
+    let clicks = 0;
+    while (tree.foliage.currentLeaves > 0 && clicks < 20) {
+      const r = harvestLeaves(tree, ctx, 1000, 0, 'currency:leaf-dollar');
+      expect(r.leavesHarvested).toBeGreaterThan(0);
+      tree = { ...tree, foliage: { ...tree.foliage, currentLeaves: r.foliageAfter } };
+      clicks++;
+    }
+    expect(tree.foliage.currentLeaves).toBe(0);
+    // ~9 clicks for 200 leaves (halving each time + the last-leaf step).
+    expect(clicks).toBeLessThanOrEqual(20);
+  });
+
   it('SEVERE_DEFOLIATION_FRACTION is 0.5', () => {
     expect(SEVERE_DEFOLIATION_FRACTION).toBe(0.5);
   });

@@ -53,7 +53,10 @@ const SECONDS_PER_DAY = 24 * 60 * 60;
  * Invariants:
  *   - leavesHarvested >= 0
  *   - leavesHarvested <= foliageBefore
- *   - leavesHarvested <= foliageBefore * species.maximumHarvestFraction
+ *   - leavesHarvested <= floor(foliageBefore * species.maximumHarvestFraction),
+ *     with a minimum of 1 when foliageBefore >= 1 (W47 last-leaf fix — see
+ *     below). Pre-W47 floor(foliage * 0.5) rounded to 0 when foliage === 1,
+ *     trapping the last leaf forever + queueing a rejected 0-amount issuance.
  *   - foliageAfter === foliageBefore - leavesHarvested
  *   - No money is generated from nonexistent leaves (leavesHarvested * denomination
  *     is the exact issuance).
@@ -89,7 +92,17 @@ export function harvestLeaves(
   }
 
   const foliageBefore = tree.foliage.currentLeaves;
-  const maxByFraction = Math.floor(foliageBefore * ctx.species.maximumHarvestFraction);
+  // W47 (last-leaf harvest fix): the per-action fraction cap is
+  // `floor(foliage * maximumHarvestFraction)`, but when foliage === 1 that
+  // rounds to 0 (floor(0.5) = 0) — trapping the last leaf forever + queueing
+  // a rejected 0-amount issuance ("Issuance amount '0' is not a valid
+  // positive bigint string"). The `Math.max(1, …)` floor lets the player
+  // harvest the last leaf (down to 0) when there is at least 1 leaf. For all
+  // foliage >= 2 the value is unchanged (floor(2*0.5)=1, floor(200*0.5)=100).
+  const maxByFraction =
+    foliageBefore >= 1
+      ? Math.max(1, Math.floor(foliageBefore * ctx.species.maximumHarvestFraction))
+      : 0;
   const leavesHarvested = Math.max(0, Math.min(requestedLeaves, maxByFraction, foliageBefore));
   const foliageAfter = foliageBefore - leavesHarvested;
 

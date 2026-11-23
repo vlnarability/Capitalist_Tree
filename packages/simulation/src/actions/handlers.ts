@@ -248,8 +248,18 @@ const harvestLeavesHandler: ActionListener<HarvestLeavesAction> = (state, action
   // Queue the CurrencyIssuanceRequest for P3's EconomySystem to drain.
   // P1 does NOT credit the player's cash here — that's P3's job, after
   // applying monetary authority policy (issuance limits, inflation, etc.).
-  const issuance: CurrencyIssuanceRequest = result.currencyIssuance;
-  tree.pendingIssuances = [...tree.pendingIssuances, issuance];
+  //
+  // W47 (last-leaf harvest fix): skip queuing when nothing was harvested.
+  // Pre-W47 a 0-leaf harvest (the floor-rounded fraction trap on foliage===1,
+  // or a requestedLeaves===0 edge case) still queued an issuance with
+  // amount '0', which the monetary authority later rejected with the scary
+  // "Issuance amount '0' is not a valid positive bigint string" error. With
+  // the harvest.ts maxByFraction fix the 1-leaf case now harvests 1, but this
+  // guard remains as defense-in-depth: no issuance request unless real leaves
+  // were harvested.
+  if (result.leavesHarvested > 0) {
+    tree.pendingIssuances = [...tree.pendingIssuances, result.currencyIssuance];
+  }
 
   // Build the events.
   const events: SimulationEvent[] = [
