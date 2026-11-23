@@ -17,7 +17,7 @@ import {
   applyCarbonTax,
   applyPlayerEnvironmentalImpact,
 } from '../src/environment/player-impact.js';
-import { PLAYER_HOME_REGION_ID } from '@capitalist-tree/shared';
+import { PLAYER_HOME_REGION_ID, PROVISIONAL_LAST_TREE_EXTRACTION_THRESHOLD } from '@capitalist-tree/shared';
 import { createBusinessFromDefinition } from '../src/business/actions.js';
 import { WATER_EXTRACTION_PLANT } from '@capitalist-tree/content';
 import type { GameState, GameConfig } from '@capitalist-tree/shared';
@@ -124,25 +124,29 @@ describe('P11 W6 — player→regional bridge (RV4-F-H3)', () => {
 });
 
 describe('P11 W5 — last-tree objective reachable (RV4-F-H1)', () => {
-  it('sustained extraction raises the population-weighted aggregate ≥ 0.6', () => {
+  it('sustained extraction raises the population-weighted aggregate ≥ the last-tree extraction threshold', () => {
     const { state, businessId } = stateWithBusinessAndRegions(WATER_EXTRACTION_PLANT);
     const baseline = weightedAggregateActivity(state);
-    expect(baseline).toBeLessThan(0.6); // not yet at the threshold
+    expect(baseline).toBeLessThan(PROVISIONAL_LAST_TREE_EXTRACTION_THRESHOLD); // not yet at the threshold
 
     // Operate the extraction business many times. Each operation nudges the
     // home region's industrialActivity up (clamped at 1.0). The home region
-    // carries 50% of the population weight, so raising it to 1.0 pushes the
-    // weighted aggregate past 0.6.
+    // carries 50% of the population weight, so raising it toward 1.0 pushes
+    // the weighted aggregate past the extraction threshold.
+    // W43: the threshold was lowered 0.6 → 0.4 (PROVISIONAL_LAST_TREE_EXTRACTION_THRESHOLD)
+    // + the default regions' IA was lowered to a pre-industrial baseline, so
+    // the home region now starts at ~0.02 (was 0.5) — more operations are
+    // needed to reach the threshold.
     let s = state;
-    for (let i = 0; i < 40; i++) {
+    for (let i = 0; i < 100; i++) {
       const r = engine.executeAction(s, { type: 'operate-business', payload: { businessId } });
       s = r.state;
     }
     const aggregate = weightedAggregateActivity(s);
-    expect(aggregate).toBeGreaterThanOrEqual(0.6);
+    expect(aggregate).toBeGreaterThanOrEqual(PROVISIONAL_LAST_TREE_EXTRACTION_THRESHOLD);
   });
 
-  it('the population-weighted aggregate (W5 fix) crosses 0.6 where unweighted would not', () => {
+  it('the population-weighted aggregate (W5 fix) crosses the extraction threshold where unweighted would not', () => {
     const { state: base, businessId } = stateWithBusinessAndRegions(WATER_EXTRACTION_PLANT);
     // P13-B / GAP-25: neutralize `environmentalRegulations` (default 0.3 now
     // mitigates the industrialActivity delta via the new env-reg curbing) so
@@ -161,8 +165,10 @@ describe('P11 W5 — last-tree objective reachable (RV4-F-H1)', () => {
       },
     };
     // Operate extraction to raise the home region's industrialActivity.
+    // W43: 100 ops (was 40) — the home region now starts at IA ~0.02 (was 0.5
+    // pre-W43), so more ops are needed to clamp it at 1.0.
     let s = state;
-    for (let i = 0; i < 40; i++) {
+    for (let i = 0; i < 100; i++) {
       const r = engine.executeAction(s, { type: 'operate-business', payload: { businessId } });
       s = r.state;
     }
@@ -172,18 +178,20 @@ describe('P11 W5 — last-tree objective reachable (RV4-F-H1)', () => {
 
     // Population-weighted aggregate (the W5 fix — matches evaluateLastTree).
     const weighted = weightedAggregateActivity(s);
-    expect(weighted).toBeGreaterThanOrEqual(0.6);
+    expect(weighted).toBeGreaterThanOrEqual(PROVISIONAL_LAST_TREE_EXTRACTION_THRESHOLD);
 
-    // The OLD unweighted average (pre-W5 fix) would NOT cross 0.6 with just
-    // one region raised — (1.0 + 0.3 + 0.4 + 0.2) / 4 = 0.475. This documents
-    // why the population-weighted fix was necessary to make the last-tree
-    // objective reachable.
+    // The OLD unweighted average (pre-W5 fix) would NOT cross the threshold
+    // with just one region raised — post-W43 the home region at 1.0 + the
+    // other three at ~0.01-0.02 gives unweighted ≈ (1.0 + 0.015 + 0.015 +
+    // 0.01) / 4 ≈ 0.26, below the 0.4 threshold. This documents why the
+    // population-weighted fix was necessary to make the last-tree objective
+    // reachable.
     const regions = s.eventState.global.regions;
     const unweighted =
       regions.length > 0
         ? regions.reduce((a, r) => a + r.industrialActivity, 0) / regions.length
         : 0;
-    expect(unweighted).toBeLessThan(0.6);
+    expect(unweighted).toBeLessThan(PROVISIONAL_LAST_TREE_EXTRACTION_THRESHOLD);
   });
 });
 

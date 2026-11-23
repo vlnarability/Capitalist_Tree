@@ -44,6 +44,7 @@ import type { GameState } from '@capitalist-tree/shared';
 import {
   PROVISIONAL_RESTORATION_THRESHOLD,
   PROVISIONAL_DESTRUCTION_THRESHOLD,
+  PROVISIONAL_LAST_TREE_EXTRACTION_THRESHOLD,
 } from '@capitalist-tree/shared';
 
 // ---------------------------------------------------------------------------
@@ -214,13 +215,17 @@ function evaluateLastTree(state: GameState): ObjectiveResult {
   const indicators = state.eventState.global.aggregatedIndicators;
   const globalBiodiversity = indicators.avgBiodiversity;
   const globalForest = indicators.avgForestCoverage;
-  // High extraction = aggregate industrialActivity above 0.6. @provisional.
+  // High extraction = aggregate industrialActivity above the destruction
+  // extraction threshold. @provisional. W43: the threshold was lowered 0.6 →
+  // 0.4 (PROVISIONAL_LAST_TREE_EXTRACTION_THRESHOLD) because the default
+  // regions' background IA was lowered (biodiversity-collapse fix) — at the
+  // new background levels the player can drive the home region (50% weight)
+  // to IA ~0.8 to clear 0.4, but cannot reach 0.6 (max home IA 1.0 × 0.5
+  // weight + background ~0.02 × 0.5 ≈ 0.51). 0.4 keeps the destruction
+  // objective reachable by player action without background collapse.
   // P11 (W5/W7): use the POPULATION-WEIGHTED aggregate (matching the markets
   // system's `aggregateIndustrialActivity` + GDD §10.2 regional aggregation),
-  // not the unweighted average. Pre-fix the unweighted average meant raising
-  // one region to 1.0 only gave 0.475 — the last-tree objective was
-  // unreachable even with W6's player→regional bridge. Population-weighted,
-  // the home region (50% weight) at 1.0 gives 0.655 ≥ 0.6.
+  // not the unweighted average.
   const regions = state.eventState.global.regions;
   let weightSum = 0;
   let activityAcc = 0;
@@ -230,7 +235,7 @@ function evaluateLastTree(state: GameState): ObjectiveResult {
     weightSum += w;
   }
   const aggregateActivity = weightSum > 0 ? activityAcc / weightSum : 0;
-  const highExtraction = aggregateActivity >= 0.6;
+  const highExtraction = aggregateActivity >= PROVISIONAL_LAST_TREE_EXTRACTION_THRESHOLD;
   const achieved =
     globalBiodiversity <= PROVISIONAL_DESTRUCTION_THRESHOLD &&
     globalForest <= PROVISIONAL_DESTRUCTION_THRESHOLD &&
@@ -239,7 +244,7 @@ function evaluateLastTree(state: GameState): ObjectiveResult {
   // 1.0 → progress 0). Use the max of the two (the less-destroyed one gates).
   const destructionProgress = (PROVISIONAL_DESTRUCTION_THRESHOLD - Math.max(globalBiodiversity, globalForest)) /
     PROVISIONAL_DESTRUCTION_THRESHOLD;
-  const progress = clamp01(Math.min(destructionProgress, aggregateActivity / 0.6));
+  const progress = clamp01(Math.min(destructionProgress, aggregateActivity / PROVISIONAL_LAST_TREE_EXTRACTION_THRESHOLD));
   return {
     id: 'last-tree',
     achieved,

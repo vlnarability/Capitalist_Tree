@@ -388,11 +388,30 @@ describe('regional — seedDefaultRegions', () => {
 
 describe('regional — evolveRegions', () => {
   it('pollution accumulates from industrialActivity over time', () => {
+    // W43: the default regions' industrialActivity was lowered to a
+    // pre-industrial baseline (0.02) so background NPC pollution does NOT
+    // auto-collapse biodiversity. This test validates the MECHANIC (high IA →
+    // pollution accumulates) using an explicitly high-IA region (player-driven
+    // extraction), not the now-low default.
     const state = stateWithRegions();
-    const before = regionById(state, 'region:temperate-lowlands')!;
-    const result = evolveRegions(state, DAY * 10);
+    const heavy: GameState = {
+      ...state,
+      eventState: {
+        ...state.eventState,
+        global: {
+          ...state.eventState.global,
+          regions: state.eventState.global.regions.map((r) =>
+            r.id === 'region:temperate-lowlands'
+              ? { ...r, industrialActivity: 0.5, pollution: { air: 4, water: 2, soil: 1 } }
+              : r,
+          ),
+        },
+      },
+    };
+    const before = regionById(heavy, 'region:temperate-lowlands')!;
+    const result = evolveRegions(heavy, DAY * 10);
     const after = regionById(result.state, 'region:temperate-lowlands')!;
-    // industrialActivity 0.5 → pollution.air should grow over 10 days.
+    // industrialActivity 0.5 → equilibrium air = 100; pollution.air grows.
     expect(after.pollution.air).toBeGreaterThan(before.pollution.air);
   });
 
@@ -430,11 +449,26 @@ describe('regional — evolveRegions', () => {
   });
 
   it('degrades soilHealth when pollution stress is high', () => {
-    // arid-highlands: industrialActivity 0.4 → heavy pollution accumulation
-    // over 100 days drives pollution stress above recovery → soilHealth drops.
+    // W43: uses an explicitly high-IA + high-pollution region (player-driven
+    // extraction) rather than the now-low default background IA, to validate
+    // the MECHANIC (pollution stress > recovery → soilHealth drops).
     const state = stateWithRegions();
-    const before = regionById(state, 'region:arid-highlands')!.soilHealth;
-    const result = evolveRegions(state, DAY * 100);
+    const heavy: GameState = {
+      ...state,
+      eventState: {
+        ...state.eventState,
+        global: {
+          ...state.eventState.global,
+          regions: state.eventState.global.regions.map((r) =>
+            r.id === 'region:arid-highlands'
+              ? { ...r, industrialActivity: 0.5, pollution: { air: 50, water: 25, soil: 15 } }
+              : r,
+          ),
+        },
+      },
+    };
+    const before = regionById(heavy, 'region:arid-highlands')!.soilHealth;
+    const result = evolveRegions(heavy, DAY * 100);
     const after = regionById(result.state, 'region:arid-highlands')!.soilHealth;
     expect(after).toBeLessThan(before);
   });
@@ -478,28 +512,32 @@ describe('regional — evolveRegions', () => {
   });
 
   it('emits regional-condition-shifted when an indicator crosses a threshold', () => {
-    // Inject a region with waterAvailability just above 0.3, then drive a
-    // drought effect that drops it below 0.3 via evolveRegions pollution
-    // stress — OR more directly, set up a region that will cross 0.3 under
-    // heavy pollution.
+    // W43: uses an explicitly high-IA + high-pollution region (player-driven
+    // extraction) rather than the now-low default background IA, to validate
+    // the MECHANIC (heavy pollution stress → waterAvailability crosses below
+    // 0.3 → regional-condition-shifted event fires).
     const state = stateWithRegions();
-    // arid-highlands waterAvailability is 0.3 exactly — set to 0.31 so a
-    // small drop crosses 0.3.
-    const tweaked: GameState = {
+    const heavy: GameState = {
       ...state,
       eventState: {
         ...state.eventState,
         global: {
           ...state.eventState.global,
           regions: state.eventState.global.regions.map((r) =>
-            r.id === 'region:arid-highlands' ? { ...r, waterAvailability: 0.31 } : r,
+            r.id === 'region:arid-highlands'
+              ? {
+                  ...r,
+                  industrialActivity: 0.5,
+                  pollution: { air: 50, water: 25, soil: 15 },
+                  waterAvailability: 0.31,
+                }
+              : r,
           ),
         },
       },
     };
-    // Heavy pollution accumulation over 200 days drops waterAvailability
-    // below 0.3 → crosses the threshold.
-    const result = evolveRegions(tweaked, DAY * 200);
+    // Heavy pollution stress over 200 days drops waterAvailability below 0.3.
+    const result = evolveRegions(heavy, DAY * 200);
     const shifted = result.events.filter((e) => e.type === 'regional-condition-shifted');
     expect(shifted.length).toBeGreaterThan(0);
     const waterShift = shifted.find(

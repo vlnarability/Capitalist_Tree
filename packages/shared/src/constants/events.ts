@@ -57,13 +57,38 @@ export const PROVISIONAL_EVENT_SEVERITY_SCALING = 1.0;
 // PROVISIONAL (GDD §17: Environmental recovery timescales)
 //
 // Fraction of damage a region recovers per simulation day once the damaging
-// event has ended (GDD §10.3 — recovery is possible but costly). 0.01 ≈ 1%
+// event has ended (GDD §10.3 — recovery is possible but costly). 0.03 ≈ 3%
 // of the gap-to-baseline recovered per sim day, so a region knocked 0.3 below
-// its soil-health baseline takes ~30 sim days to fully recover absent new
+// its soil-health baseline takes ~10 sim days to fully recover absent new
 // damage. Irreversible losses (species extinction once biodiversity crosses
 // PROVISIONAL_SPECIES_EXTINCTION_THRESHOLD) do NOT recover. PROVISIONAL —
 // final timescale depends on playtesting.
-export const PROVISIONAL_EVENT_RECOVERY_RATE = 0.01;
+//
+// W43: raised 0.01 → 0.03 as part of the biodiversity-collapse fix. At 0.01
+// the recovery term was ~20× too weak to counteract pollution stress from the
+// auto-seeded default regions, driving biodiversity 0.80→0.00 in 21 sim days
+// with no player action (the destruction objective became trivially reachable
+// + restoration impossible). At 0.03 + the lowered default-region
+// industrialActivity (regional.ts DEFAULT_REGIONS) the world stabilizes;
+// player-driven industrial activity (applyPlayerEnvironmentalImpact) still
+// drives the destruction path. See biodiversity-rebalance.test.ts.
+export const PROVISIONAL_EVENT_RECOVERY_RATE = 0.03;
+
+// ---------------------------------------------------------------------------
+// W43 — Last-Tree extraction threshold (GDD §12 destruction objective).
+// ---------------------------------------------------------------------------
+//
+// PROVISIONAL (GDD §12: the "destruction" ending requires biodiversity < 0.2 +
+// forestCoverage < 0.2 + high extraction). Population-weighted aggregate
+// industrialActivity above this threshold counts as "high extraction". W43:
+// lowered 0.6 → 0.4 because the default regions' background industrialActivity
+// was lowered (see PROVISIONAL_EVENT_RECOVERY_RATE above) — at the new
+// background levels the player can drive the home region (50% population
+// weight) to IA ~0.8 to clear 0.4, but cannot reach 0.6 (max home IA 1.0 ×
+// 0.5 weight + background ~0.02 × 0.5 ≈ 0.51). 0.4 keeps the destruction
+// objective reachable by player action without background collapse doing the
+// work. PROVISIONAL — final threshold depends on playtesting.
+export const PROVISIONAL_LAST_TREE_EXTRACTION_THRESHOLD = 0.4;
 
 // ---------------------------------------------------------------------------
 // Government + monetary policy cadence (GDD §148-152, §404-408; Milestone 9)

@@ -51,6 +51,7 @@ import {
   PROVISIONAL_EVENT_SPECIES_EXTINCTION_RATE_CAP,
 } from '@capitalist-tree/shared';
 import { deriveEcosystemResilience } from '../systems/environment.js';
+import { aggregateResearchEffects } from '../progression/research-effects.js';
 
 const SECONDS_PER_DAY = 24 * 60 * 60;
 
@@ -182,6 +183,17 @@ function thresholdCrossingEvents(
  * Populations size the `'population'` aggregation weighting
  * (`PROVISIONAL_REGIONAL_AGGREGATION_WEIGHTS`).
  */
+// W43 (biodiversity-collapse fix): the default regions' `industrialActivity`
+// was lowered from 0.2-0.5 to a pre-industrial baseline (0.01-0.02) so the
+// world does NOT auto-collapse biodiversity via background NPC pollution.
+// Pre-W43, the auto-seeded IA drove pollution stress ~20× stronger than the
+// 0.01 recovery term, collapsing biodiversity 0.80→0.00 in 21 sim days with
+// no player action (the destruction objective became trivially reachable +
+// restoration impossible). Starting pollution is set to the per-region
+// steady-state for the new IA (IA × 200 / 100 / 60 for air / water / soil)
+// so regions begin at equilibrium (no initial transient). The player drives
+// IA up via `applyPlayerEnvironmentalImpact` (businesses / automation) to
+// pursue the destruction path. See biodiversity-rebalance.test.ts.
 const DEFAULT_REGIONS: readonly RegionState[] = [
   {
     id: 'region:temperate-lowlands',
@@ -191,8 +203,8 @@ const DEFAULT_REGIONS: readonly RegionState[] = [
     waterAvailability: 0.7,
     biodiversity: 0.7,
     forestCoverage: 0.4,
-    industrialActivity: 0.5,
-    pollution: { air: 10, water: 5, soil: 3 },
+    industrialActivity: 0.02,
+    pollution: { air: 4, water: 2, soil: 1 },
     vulnerabilities: ['flood-risk'],
     population: 10_000_000,
   },
@@ -204,8 +216,8 @@ const DEFAULT_REGIONS: readonly RegionState[] = [
     waterAvailability: 0.8,
     biodiversity: 0.9,
     forestCoverage: 0.8,
-    industrialActivity: 0.3,
-    pollution: { air: 5, water: 4, soil: 2 },
+    industrialActivity: 0.015,
+    pollution: { air: 3, water: 1.5, soil: 1 },
     vulnerabilities: ['biodiversity-fragile', 'flood-risk'],
     population: 5_000_000,
   },
@@ -217,8 +229,8 @@ const DEFAULT_REGIONS: readonly RegionState[] = [
     waterAvailability: 0.3,
     biodiversity: 0.3,
     forestCoverage: 0.1,
-    industrialActivity: 0.4,
-    pollution: { air: 8, water: 3, soil: 2 },
+    industrialActivity: 0.015,
+    pollution: { air: 3, water: 1.5, soil: 1 },
     vulnerabilities: ['drought-prone'],
     population: 3_000_000,
   },
@@ -230,8 +242,8 @@ const DEFAULT_REGIONS: readonly RegionState[] = [
     waterAvailability: 0.5,
     biodiversity: 0.6,
     forestCoverage: 0.7,
-    industrialActivity: 0.2,
-    pollution: { air: 4, water: 2, soil: 1 },
+    industrialActivity: 0.01,
+    pollution: { air: 2, water: 1, soil: 0.5 },
     vulnerabilities: ['biodiversity-fragile'],
     population: 2_000_000,
   },
@@ -301,6 +313,10 @@ export function evolveRegions(
   const days = dtSeconds / SECONDS_PER_DAY;
   const events: SimulationEvent[] = [];
   let speciesExtinctionRate = state.eventState.global.aggregatedIndicators.speciesExtinctionRate;
+  // W43: typed research bonuses (biodiversity-enhancement / soil-restoration
+  // nodes) — added to the per-day recovery terms below. Computed once per
+  // evolveRegions call (cheap — loops the save's research-node records).
+  const researchBonuses = aggregateResearchEffects(state);
 
   const evolvedRegions = regions.map((region) => {
     const before = region;
@@ -319,10 +335,18 @@ export function evolveRegions(
     const pollutionStress = (totalPollution / PROVISIONAL_EVENT_POLLUTION_STRESS_SCALE) * days;
 
     // Recovery toward baseline (GDD §10.3 — recovery is possible but costly).
+    // W43: biodiversity + soilHealth recovery terms include the typed research
+    // bonuses (biodiversity-enhancement / soil-restoration nodes) — pre-W43
+    // these nodes were description-only no-ops. waterAvailability +
+    // forestCoverage use the base rate (no research bonus wired yet).
     const recovery = PROVISIONAL_EVENT_RECOVERY_RATE * days;
+    const biodiversityRecovery =
+      (PROVISIONAL_EVENT_RECOVERY_RATE + researchBonuses.biodiversityRecoveryBonus) * days;
+    const soilHealthRecovery =
+      (PROVISIONAL_EVENT_RECOVERY_RATE + researchBonuses.soilHealthRecoveryBonus) * days;
 
     const soilHealth = clamp01(
-      region.soilHealth + recovery * (1 - region.soilHealth) - pollutionStress,
+      region.soilHealth + soilHealthRecovery * (1 - region.soilHealth) - pollutionStress,
     );
     const waterAvailability = clamp01(
       region.waterAvailability + recovery * (1 - region.waterAvailability) - pollutionStress * 0.5,
@@ -338,7 +362,7 @@ export function evolveRegions(
     let biodiversity: number;
     if (region.biodiversity >= PROVISIONAL_SPECIES_EXTINCTION_THRESHOLD) {
       biodiversity = clamp01(
-        region.biodiversity + recovery * (1 - region.biodiversity) - pollutionStress * 0.4,
+        region.biodiversity + biodiversityRecovery * (1 - region.biodiversity) - pollutionStress * 0.4,
       );
     } else {
       biodiversity = Math.max(0, region.biodiversity - pollutionStress * 0.4);
@@ -488,8 +512,12 @@ export function aggregateGlobalIndicators(
   const avgBiodiversity = clamp01(avg((r) => r.biodiversity));
   const avgForestCoverage = clamp01(avg((r) => r.forestCoverage));
   // @provisional composite (GDD §17 — ecosystem resilience derivation).
+  // W43: add the typed ecosystem-resilience research bonus (biodiversity-
+  // enhancement node) — pre-W43 this bonus was a description-only no-op.
+  const resilienceBonuses = aggregateResearchEffects(state);
   const ecosystemResilience = clamp01(
-    0.5 * avgBiodiversity + 0.3 * avgForestCoverage + 0.2 * avgSoilHealth,
+    0.5 * avgBiodiversity + 0.3 * avgForestCoverage + 0.2 * avgSoilHealth +
+      resilienceBonuses.ecosystemResilienceBonus,
   );
 
   const minIndicators = minRegionalIndicators(state);

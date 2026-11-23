@@ -237,6 +237,12 @@ export const SOIL_RESTORATION: ResearchNodeDefinition = {
   effects: {
     description: '+0.1 soil health recovery rate; -10% compaction.',
     multiplier: 0.1,
+    // W43: typed bonus consumed by the engine — the EventSystem adds
+    // soilHealthRecoveryBonus to the per-day soilHealth recovery term
+    // (regional.ts evolveRegions). Pre-W43 this node was a no-op.
+    bonuses: {
+      soilHealthRecoveryBonus: 0.1,
+    },
   },
 };
 
@@ -253,6 +259,15 @@ export const BIODIVERSITY_ENHANCEMENT: ResearchNodeDefinition = {
   effects: {
     description: '+0.1 biodiversity index recovery; +0.1 ecosystem resilience.',
     multiplier: 0.1,
+    // W43: typed bonuses consumed by the engine — the EventSystem adds
+    // biodiversityRecoveryBonus to the per-day biodiversity recovery term
+    // (regional.ts evolveRegions) + ecosystemResilienceBonus to the derived
+    // resilience index (aggregateGlobalIndicators). Pre-W43 this node was a
+    // no-op (description-only).
+    bonuses: {
+      biodiversityRecoveryBonus: 0.1,
+      ecosystemResilienceBonus: 0.1,
+    },
   },
 };
 

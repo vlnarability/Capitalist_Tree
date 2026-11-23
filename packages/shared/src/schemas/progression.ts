@@ -315,11 +315,37 @@ export type ProgressionState = z.infer<typeof progressionStateSchema>;
 // (P9b) reads a definition to derive / validate a state record.
 
 /**
+ * Typed simulation bonuses a research node grants when unlocked (W43 — wires
+ * the previously description-only research effects into the engine). Each
+ * field is a nonnegative additive bonus consumed by the relevant system:
+ * `biodiversityRecoveryBonus` → EventSystem.evolveRegions biodiversity
+ * recovery term; `ecosystemResilienceBonus` → aggregateGlobalIndicators
+ * resilience derivation; `soilHealthRecoveryBonus` → evolveRegions soilHealth
+ * recovery term. All fields are `.optional()` so content authors declare only
+ * the bonuses a node actually grants (a node that boosts biodiversity recovery
+ * omits the soil-health field, etc.); the engine's `aggregateResearchEffects`
+ * aggregator treats omitted fields as 0 via `?? 0`. Pure data — the engine
+ * reads + sums these via `aggregateResearchEffects`
+ * (packages/simulation/src/progression/).
+ */
+export const researchBonusesSchema = z.object({
+  /** Additive bonus to the per-day biodiversity recovery rate (GDD §10.3). */
+  biodiversityRecoveryBonus: z.number().nonnegative().optional(),
+  /** Additive bonus to the derived ecosystem resilience index (GDD §17). */
+  ecosystemResilienceBonus: z.number().nonnegative().optional(),
+  /** Additive bonus to the per-day soil-health recovery rate (GDD §10.3). */
+  soilHealthRecoveryBonus: z.number().nonnegative().optional(),
+});
+export type ResearchBonuses = z.infer<typeof researchBonusesSchema>;
+
+/**
  * Effects a research node grants when unlocked (P9a — GDD §11.2). Pure-data
  * description of what the unlock does; the ProgressionSystem (P9b) interprets
  * it. `description` is human-readable; `unlocks` lists content ids (equipment,
  * business types, trait ids) the node makes available; `multiplier` is an
- * optional numeric bonus the node applies (e.g. +0.1 to a growth rate).
+ * optional numeric bonus the node applies (e.g. +0.1 to a growth rate);
+ * `bonuses` (W43) are typed engine-consumed bonuses (the engine reads these
+ * directly — see `researchBonusesSchema` above).
  */
 export const researchEffectsSchema = z.object({
   /** Human-readable summary of what the unlock does. */
@@ -329,6 +355,9 @@ export const researchEffectsSchema = z.object({
   unlocks: z.array(z.string().min(1)).optional(),
   /** Optional numeric bonus the node applies (e.g. +0.1 growth rate). */
   multiplier: z.number().optional(),
+  /** Typed engine-consumed bonuses (W43). Optional — a node may grant only a
+   *  multiplier / unlocks with no typed bonuses. */
+  bonuses: researchBonusesSchema.optional(),
 });
 export type ResearchEffects = z.infer<typeof researchEffectsSchema>;
 
