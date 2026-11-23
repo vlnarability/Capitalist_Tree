@@ -122,6 +122,7 @@ import {
   PROVISIONAL_ECONOMY_MARKET_PRICE_ELASTICITY,
   PROVISIONAL_ECONOMY_MARKET_PRICE_MAX_MULTIPLIER,
   PROVISIONAL_ECONOMY_MARKET_PRICE_MIN_FRACTION,
+  PROVISIONAL_ECONOMY_MARKET_PRICE_EMIT_REL_THRESHOLD,
   PROVISIONAL_ECONOMY_MARKET_PRICE_SMOOTHING,
   PROVISIONAL_ECONOMY_MARKET_SUPPLY_DECAY,
   PROVISIONAL_ECONOMY_MARKET_SUPPLY_REFILL_RATE,
@@ -365,7 +366,7 @@ export function updateMarkets(
     const currentPrice = parseAmount(m.price, 'price');
     const smoothed = lerpBigInt(currentPrice, target, PROVISIONAL_ECONOMY_MARKET_PRICE_SMOOTHING);
 
-    if (smoothed !== currentPrice) {
+    if (priceMoveIsSignificant(currentPrice, smoothed)) {
       const def = findMarketById(m.id);
       events.push({
         type: 'market-price-changed',
@@ -448,9 +449,62 @@ function lerpBigInt(from: bigint, to: bigint, fraction: number): bigint {
   if (rounded === a && from !== to) {
     // Lerp didn't move the price (rounding swallowed the step). Nudge by
     // 1 minor unit toward the target so prices converge over multiple ticks.
+    //
+    // W45 (event-flood fix) note: this nudge is load-bearing for small-price
+    // markets. With ELASTICITY=0.1 a 10-unit water price whose target is 11
+    // (after a demand spike) has a 1-unit gap; the 0.25 lerp step (0.25)
+    // rounds to 0, so WITHOUT the nudge water could never reach 11 and the
+    // "buying raises the price" contract silently breaks. The nudge keeps
+    // small-gap convergence working.
+    //
+    // The nudge does, however, drive the event flood on high-basePrice
+    // markets: while supply slowly settles (100 → 20 over hundreds of ticks)
+    // land's target drifts ~1 unit per tick, the nudge faithfully follows,
+    // and the bare `!==` emit guard logged every one of those 0.001%-relative
+    // moves (41.5M events in a long sim). That flood is now suppressed one
+    // layer up in `updateMarkets` via `priceMoveIsSignificant`, which requires
+    // a ≥0.5% relative move to emit — so land's 1-unit creep still happens in
+    // state (the panel sees the correct price) but no longer spawns events.
     return from < to ? from + 1n : from - 1n;
   }
   return BigInt(rounded);
+}
+
+/**
+ * W45 (event-flood fix): decide whether a per-tick price movement is large
+ * enough to emit a `market-price-changed` event. Returns true only when the
+ * relative move `|newPrice - oldPrice| / oldPrice` meets
+ * `PROVISIONAL_ECONOMY_MARKET_PRICE_EMIT_REL_THRESHOLD` (0.5%).
+ *
+ * This is the primary flood-suppression layer. The `lerpBigInt` nudge is kept
+ * (it is load-bearing for small-price convergence: water at 10 can only reach
+ * a target of 11 via the ±1 nudge, since the 0.25 lerp step rounds to 0), but
+ * the nudge drives the flood on high-basePrice markets — while supply slowly
+ * settles from INITIAL_SUPPLY (100) toward equilibrium (20) over hundreds of
+ * ticks, land's (basePrice 100000) target drifts ~1 unit per tick, the nudge
+ * follows, and the bare `!==` emit guard logged every one of those
+ * 0.001%-relative moves (41.5M events in a long-running sim, with no consumer
+ * of the event at all). The 0.5% threshold suppresses those sub-threshold
+ * state-price moves from the event log while preserving meaningful ones: a
+ * real purchase shock moves the lerp by ≥0.25 × gap, which exceeds 0.5% on
+ * any market once the target gap is ≥2% of the price, and small-price
+ * markets' 1-unit nudge moves (10% on water, 2.2% on energy) clear the
+ * threshold comfortably.
+ *
+ * Pure: deterministic given the two prices. `oldPrice` must be > 0 (prices are
+ * always ≥ 1 minor unit, enforced by `parseAmount` + the `Math.max(1, ...)`
+ * floor in `computeTargetPrice` / `lerpBigInt`).
+ */
+function priceMoveIsSignificant(oldPrice: bigint, newPrice: bigint): boolean {
+  if (newPrice === oldPrice) return false;
+  const delta =
+    newPrice > oldPrice ? newPrice - oldPrice : oldPrice - newPrice;
+  // Minimum absolute move to qualify: ceil(oldPrice × threshold), at least 1.
+  // Number() is safe — prices are < 2^53 minor units (P3b economy magnitudes).
+  const minMove = BigInt(
+    Math.max(1, Math.ceil(Number(oldPrice) * PROVISIONAL_ECONOMY_MARKET_PRICE_EMIT_REL_THRESHOLD)),
+  );
+  return delta >= minMove;
 }
 
 /**

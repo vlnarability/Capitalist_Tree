@@ -784,9 +784,45 @@ describe('EconomySystem integration — market updates via engine.advance', () =
     // One more tick — should produce no price-changed events (prices converged).
     const final = updateMarkets(st, { now: 60 + 200 * STEP, initialSupply: INITIAL_SUPPLY });
     const priceChanges = final.events.filter((e) => e.type === 'market-price-changed');
-    // Note: due to floating-point smoothing, there may be tiny residual moves;
-    // the assertion is that we're not generating a flood of events.
-    expect(priceChanges.length).toBeLessThanOrEqual(5);
+    // W45 (event-flood fix): with the lerpBigInt ±1 nudge removed, converged
+    // prices are stable to the unit, so the per-tick events array is exactly
+    // empty. (Pre-fix this allowed ≤5 to accommodate residual float jitter the
+    // nudge perpetuated — that jitter is gone.)
+    expect(priceChanges.length).toBe(0);
+  });
+
+  it('W45 regression: no event flood after convergence (O(1) events, not O(ticks))', () => {
+    // The pre-W45 bug: lerpBigInt's forced ±1 nudge followed per-tick
+    // supply/demand float jitter, so EVERY market emitted a
+    // `market-price-changed` event on EVERY tick forever — 8 markets × N ticks
+    // = O(N) events with no consumer, swelling the event log to millions of
+    // entries in a long-running sim. After the fix, prices converge during the
+    // initial price-discovery phase and then go silent.
+    const s = freshState();
+    let st = s;
+    // Phase 1: run 150 ticks so supply (100 → ~20) and prices fully converge.
+    // Events ARE expected here — this is legitimate price discovery.
+    let phase1Events = 0;
+    for (let i = 0; i < 150; i++) {
+      const r = updateMarkets(st, { now: 60 + i * STEP, initialSupply: INITIAL_SUPPLY });
+      phase1Events += r.events.filter((e) => e.type === 'market-price-changed').length;
+      st = r.state;
+    }
+    // Phase 1 produced a bounded burst (8 markets × the convergence window).
+    // The exact count is not asserted (it depends on per-market dynamics), but
+    // it must be well under the old linear rate of 8 × 150 = 1200.
+    expect(phase1Events).toBeLessThan(800);
+
+    // Phase 2: run 50 MORE ticks with NO player action. Prices are converged,
+    // so zero `market-price-changed` events should fire. Pre-fix this would be
+    // ~8 × 50 = 400; post-fix it is exactly 0.
+    let phase2Events = 0;
+    for (let i = 0; i < 50; i++) {
+      const r = updateMarkets(st, { now: 60 + (150 + i) * STEP, initialSupply: INITIAL_SUPPLY });
+      phase2Events += r.events.filter((e) => e.type === 'market-price-changed').length;
+      st = r.state;
+    }
+    expect(phase2Events).toBe(0);
   });
 });
 

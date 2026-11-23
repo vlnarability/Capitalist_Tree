@@ -164,6 +164,30 @@ export const PROVISIONAL_ECONOMY_MONETARY_CONDITIONS_ELASTICITY = 0.5;
 // swing wildly on each purchase. 0.25 is a starter value.
 export const PROVISIONAL_ECONOMY_MARKET_PRICE_SMOOTHING = 0.25;
 
+// W45 (event-flood fix): minimum relative price movement required to emit a
+// `market-price-changed` event. The emit guard in `updateMarkets` is
+// `|newPrice - oldPrice| / oldPrice >= EMIT_THRESHOLD` (not merely `!==`).
+//
+// Why this exists alongside the `lerpBigInt` nudge removal: the nudge removal
+// stops pure float jitter on low-basePrice markets (where ±1 minor unit is a
+// large relative move — 10% on water at price 10 — so the `!==` guard alone
+// would still flood). But high-basePrice markets (land at 93046, equipment at
+// 18609) keep drifting ~1 minor unit per tick for hundreds of ticks while
+// supply slowly converges from INITIAL_SUPPLY (100) toward its equilibrium
+// (20); a 1-unit move on land is 0.001% — genuine noise, but the `!==` guard
+// treats it as a move and emits. The relative threshold suppresses those
+// sub-0.5% moves while preserving meaningful ones (a real purchase shock
+// moves the lerp by ≥0.25 × gap, which on any market exceeds 0.5% once the
+// target gap is ≥2% of the price).
+//
+// 0.005 = 0.5%. Chosen so that: water (price 10) 1-unit move = 10% → emits;
+// energy (46) 1-unit = 2.2% → emits; land (93046) 1-unit = 0.001% →
+// suppressed; equipment (18609) 1-unit = 0.0054% → suppressed. Nothing
+// consumes `market-price-changed` events (verified — they are log-only), so
+// suppressing sub-threshold state-price moves from the event log is safe; the
+// panel reads `market.price` from state directly and is unaffected.
+export const PROVISIONAL_ECONOMY_MARKET_PRICE_EMIT_REL_THRESHOLD = 0.005;
+
 // PROVISIONAL (GDD §17: Exact inflation model)
 //
 // Per-tick supply refill rate (units per tick). Markets passively restock
