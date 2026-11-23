@@ -36,14 +36,14 @@ export function ConcurrentTabGate({ children }: ConcurrentTabGateProps): ReactEl
   if (state === 'blocked') {
     return (
       <div
-        className="flex min-h-screen items-center justify-center bg-slate-950 p-6"
+        className="flex min-h-screen items-center justify-center bg-parchment-2 p-6"
         data-testid="concurrent-tab-blocked"
       >
-        <div className="max-w-md rounded-lg border border-amber-700/50 bg-slate-900 p-6 text-center">
-          <h1 className="mb-2 text-lg font-semibold text-amber-300">
+        <div className="max-w-md rounded-lg border border-amber-700/50 bg-parchment p-6 text-center">
+          <h1 className="mb-2 text-lg font-semibold text-brass-2">
             Another tab is already open
           </h1>
-          <p className="mb-4 text-sm text-slate-300">
+          <p className="mb-4 text-sm text-ink">
             The Capitalist Tree is running in another tab. To protect your save
             from conflicts, this tab is paused. Close the other tab, then reload
             this one to play here.
@@ -51,7 +51,7 @@ export function ConcurrentTabGate({ children }: ConcurrentTabGateProps): ReactEl
           <button
             type="button"
             onClick={() => window.location.reload()}
-            className="rounded border border-slate-600 px-4 py-2 text-sm text-slate-200 hover:border-slate-400"
+            className="rounded border border-ink px-4 py-2 text-sm text-ink hover:border-slate-400"
             data-testid="concurrent-tab-reload"
           >
             Reload this tab
@@ -64,10 +64,10 @@ export function ConcurrentTabGate({ children }: ConcurrentTabGateProps): ReactEl
   if (state === 'acquiring') {
     return (
       <div
-        className="flex min-h-screen items-center justify-center bg-slate-950 p-6"
+        className="flex min-h-screen items-center justify-center bg-parchment-2 p-6"
         data-testid="concurrent-tab-acquiring"
       >
-        <p className="text-sm text-slate-400">Loading…</p>
+        <p className="text-sm text-ink-2">Loading…</p>
       </div>
     );
   }

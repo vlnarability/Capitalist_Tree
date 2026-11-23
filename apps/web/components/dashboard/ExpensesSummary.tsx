@@ -76,14 +76,14 @@ export function ExpensesSummary({ className }: ExpensesSummaryProps = {}): React
             key={c}
             className="flex items-baseline justify-between gap-2 tabular-nums"
           >
-            <span className="text-slate-400">{CATEGORY_LABELS[c]}</span>
-            <span className="text-slate-200">{formatMoneyFromStr(livingExpenses[c])}</span>
+            <span className="text-ink-2 font-serif">{CATEGORY_LABELS[c]}</span>
+            <span className="text-ink font-serif">{formatMoneyFromStr(livingExpenses[c])}</span>
           </li>
         ))}
       </ul>
 
       {showUnpaidWarning ? (
-        <p className="text-xs text-rose-400/80" data-testid="expenses-warning">
+        <p className="text-xs text-accent font-serif italic" data-testid="expenses-warning">
           ⚠ Unpaid bills are accumulating. Your physical health will start to suffer.
         </p>
       ) : null}

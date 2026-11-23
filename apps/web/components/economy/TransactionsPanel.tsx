@@ -96,9 +96,9 @@ function toneForTransaction(t: TransactionRecord): 'emerald' | 'amber' | 'slate'
 }
 
 const TEXT_TONE: Readonly<Record<'emerald' | 'amber' | 'slate', string>> = Object.freeze({
-  emerald: 'text-emerald-300',
-  amber: 'text-amber-300',
-  slate: 'text-slate-300',
+  emerald: 'text-leaf-dark',
+  amber: 'text-brass-2',
+  slate: 'text-ink',
 });
 
 /**
@@ -132,12 +132,12 @@ export function TransactionsPanel({
       className={`flex flex-col gap-2 ${className ?? ''}`}
       data-testid="transactions-panel"
     >
-      <span className="text-[10px] uppercase tracking-wider text-slate-500">
+      <span className="text-[10px] uppercase tracking-wider text-ink-soft">
         Recent transactions ({ordered.length})
       </span>
       {ordered.length === 0 ? (
         <p
-          className="text-xs text-slate-500"
+          className="text-xs text-ink-soft"
           data-testid="transactions-empty"
         >
           No transactions yet — purchases, harvests, and expenses will appear here.
@@ -152,11 +152,11 @@ export function TransactionsPanel({
             return (
               <li
                 key={t.id}
-                className="flex flex-col gap-0.5 rounded border border-slate-800/60 bg-slate-900/40 p-2"
+                className="flex flex-col gap-0.5 rounded border border-ink/60 bg-parchment/40 p-2"
                 data-testid={`transaction-${t.id}`}
               >
                 <div className="flex items-baseline justify-between gap-2">
-                  <span className="text-xs text-slate-400">{category}</span>
+                  <span className="text-xs text-ink-2">{category}</span>
                   <span
                     className={`text-sm font-semibold tabular-nums ${TEXT_TONE[tone]}`}
                     data-testid={`transaction-${t.id}-amount`}
@@ -165,7 +165,7 @@ export function TransactionsPanel({
                   </span>
                 </div>
                 <span
-                  className="text-[11px] text-slate-500"
+                  className="text-[11px] text-ink-soft"
                   data-testid={`transaction-${t.id}-summary`}
                 >
                   {summary}

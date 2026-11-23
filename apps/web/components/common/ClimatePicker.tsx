@@ -134,22 +134,22 @@ function ClimateCard({
         'flex w-full flex-col gap-1 rounded border p-2 text-left transition-colors',
         selected
           ? 'border-emerald-500 bg-emerald-500/10'
-          : 'border-slate-700 bg-slate-900 hover:border-slate-600 hover:bg-slate-800',
+          : 'border-ink bg-parchment hover:border-ink hover:bg-parchment-3',
       ].join(' ')}
     >
       <span className="flex items-center gap-1.5">
-        <span className="font-mono text-xs font-semibold text-sky-300">{climate.koppenCode}</span>
-        <span className="text-sm font-medium text-slate-100">{climate.name}</span>
+        <span className="font-journal text-xs font-semibold text-sky-800">{climate.koppenCode}</span>
+        <span className="text-sm font-medium text-ink">{climate.name}</span>
         {isDefault ? (
-          <span className="ml-auto rounded bg-slate-700 px-1 text-[10px] uppercase tracking-wide text-slate-300">
+          <span className="ml-auto rounded bg-parchment-3 px-1 text-[10px] uppercase tracking-wide text-ink">
             default
           </span>
         ) : null}
       </span>
-      <span className="text-xs text-slate-400 tabular-nums">
+      <span className="text-xs text-ink-2 tabular-nums">
         {fmtTemp(winter)} → {fmtTemp(summer)} · {climate.precipitation.annualMm} mm/yr
       </span>
-      <span className="text-xs text-slate-500">
+      <span className="text-xs text-ink-soft">
         {climate.supportsTrees
           ? `${nativeCount} native species`
           : 'No trees — unplayable'}
@@ -178,7 +178,7 @@ function SpeciesCard({
   const fitPct = Math.round(suitability * 100);
   // The fit badge colour signals the lever: green ≥ 0.7, amber 0.4–0.7, rose < 0.4.
   const fitTone =
-    suitability >= 0.7 ? 'text-emerald-300' : suitability >= 0.4 ? 'text-amber-300' : 'text-rose-300';
+    suitability >= 0.7 ? 'text-leaf-dark' : suitability >= 0.4 ? 'text-brass-2' : 'text-accent';
   return (
     <button
       type="button"
@@ -189,24 +189,24 @@ function SpeciesCard({
         'flex w-full flex-col gap-1 rounded border p-2 text-left transition-colors',
         selected
           ? 'border-emerald-500 bg-emerald-500/10'
-          : 'border-slate-700 bg-slate-900 hover:border-slate-600 hover:bg-slate-800',
+          : 'border-ink bg-parchment hover:border-ink hover:bg-parchment-3',
       ].join(' ')}
     >
       <span className="flex items-center gap-1.5">
-        <span className="text-sm font-medium text-slate-100">{species.name}</span>
+        <span className="text-sm font-medium text-ink">{species.name}</span>
         <span className={`ml-auto text-xs tabular-nums ${fitTone}`} data-testid={`species-fit-${species.id}`}>
           fit {fitPct}%
         </span>
         {showSurvival ? (
-          <span className={`text-xs ${survives ? 'text-emerald-300' : 'text-rose-300'}`}>
+          <span className={`text-xs ${survives ? 'text-leaf-dark' : 'text-accent'}`}>
             {survives ? '✓ survives' : '✗ won’t survive'}
           </span>
         ) : null}
       </span>
       {species.scientificName ? (
-        <span className="text-xs italic text-slate-500">{species.scientificName}</span>
+        <span className="text-xs italic text-ink-soft">{species.scientificName}</span>
       ) : null}
-      <span className="text-xs text-slate-400 tabular-nums">
+      <span className="text-xs text-ink-2 tabular-nums">
         {species.deciduous ? 'Deciduous' : 'Evergreen'} · {fmtTemp(r.minimum)}–{fmtTemp(r.maximum)}
       </span>
     </button>
@@ -307,7 +307,7 @@ export function ClimatePicker({ open, onClose, onSubmit }: ClimatePickerProps): 
 
   return (
     <div
-      className="pointer-events-auto fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm"
+      className="pointer-events-auto fixed inset-0 z-[60] flex items-center justify-center bg-parchment-2/70 p-4 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-labelledby="climate-picker-title"
@@ -318,15 +318,15 @@ export function ClimatePicker({ open, onClose, onSubmit }: ClimatePickerProps): 
     >
       <div
         ref={dialogRef}
-        className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-lg border border-slate-700 bg-slate-900 p-6 shadow-2xl"
+        className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-lg border border-ink bg-parchment p-6 shadow-2xl"
       >
         {/* Header. */}
         <header className="mb-4 flex items-start justify-between gap-4">
           <div>
-            <h2 id="climate-picker-title" className="text-lg font-semibold text-slate-100">
+            <h2 id="climate-picker-title" className="text-lg font-semibold text-ink">
               Choose your climate + tree
             </h2>
-            <p className="text-sm text-slate-400">
+            <p className="text-sm text-ink-2">
               The Köppen zone sets the weather, water, + temperature your tree faces. Pick a
               climate, then a species native to it.
             </p>
@@ -335,7 +335,7 @@ export function ClimatePicker({ open, onClose, onSubmit }: ClimatePickerProps): 
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="rounded border border-slate-700 px-2 py-0.5 text-slate-400 hover:bg-slate-800"
+            className="rounded border border-ink px-2 py-0.5 text-ink-2 hover:bg-parchment-3"
             data-testid="climate-picker-close"
           >
             ✕
@@ -347,8 +347,8 @@ export function ClimatePicker({ open, onClose, onSubmit }: ClimatePickerProps): 
           <section className="flex flex-col gap-3" data-testid="climate-picker-catalog">
             {grouped.map(([cls, climates]) => (
               <div key={cls}>
-                <h3 className="mb-1 text-xs uppercase tracking-wider text-slate-500">
-                  {CLASS_LABEL[cls]} <span className="text-slate-600">({climates.length})</span>
+                <h3 className="mb-1 text-xs uppercase tracking-wider text-ink-soft">
+                  {CLASS_LABEL[cls]} <span className="text-ink-2">({climates.length})</span>
                 </h3>
                 <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
                   {climates.map((c) => (
@@ -367,39 +367,39 @@ export function ClimatePicker({ open, onClose, onSubmit }: ClimatePickerProps): 
           {/* Right: selected climate profile + species + highland. */}
           <section className="flex flex-col gap-3">
             {/* Profile. */}
-            <div className="rounded border border-slate-800 bg-slate-950/40 p-3" data-testid="climate-picker-profile">
+            <div className="rounded border border-ink bg-parchment-2/40 p-3" data-testid="climate-picker-profile">
               <div className="mb-1 flex items-center gap-2">
-                <span className="font-mono text-sm font-semibold text-sky-300">
+                <span className="font-journal text-sm font-semibold text-sky-800">
                   {selectedClimate.koppenCode}
                 </span>
-                <span className="text-sm font-medium text-slate-100">{selectedClimate.name}</span>
+                <span className="text-sm font-medium text-ink">{selectedClimate.name}</span>
               </div>
-              <p className="mb-2 text-xs text-slate-400">{selectedClimate.description}</p>
+              <p className="mb-2 text-xs text-ink-2">{selectedClimate.description}</p>
               <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs tabular-nums">
-                <dt className="text-slate-500">Spring</dt>
-                <dd className="text-slate-300">{fmtTemp(effectiveClimate.seasonalBaseTemp.spring)}</dd>
-                <dt className="text-slate-500">Summer</dt>
-                <dd className="text-slate-300">{fmtTemp(effectiveClimate.seasonalBaseTemp.summer)}</dd>
-                <dt className="text-slate-500">Autumn</dt>
-                <dd className="text-slate-300">{fmtTemp(effectiveClimate.seasonalBaseTemp.autumn)}</dd>
-                <dt className="text-slate-500">Winter</dt>
-                <dd className="text-slate-300">{fmtTemp(effectiveClimate.seasonalBaseTemp.winter)}</dd>
-                <dt className="text-slate-500">Precipitation</dt>
-                <dd className="text-slate-300">
+                <dt className="text-ink-soft">Spring</dt>
+                <dd className="text-ink">{fmtTemp(effectiveClimate.seasonalBaseTemp.spring)}</dd>
+                <dt className="text-ink-soft">Summer</dt>
+                <dd className="text-ink">{fmtTemp(effectiveClimate.seasonalBaseTemp.summer)}</dd>
+                <dt className="text-ink-soft">Autumn</dt>
+                <dd className="text-ink">{fmtTemp(effectiveClimate.seasonalBaseTemp.autumn)}</dd>
+                <dt className="text-ink-soft">Winter</dt>
+                <dd className="text-ink">{fmtTemp(effectiveClimate.seasonalBaseTemp.winter)}</dd>
+                <dt className="text-ink-soft">Precipitation</dt>
+                <dd className="text-ink">
                   {effectiveClimate.precipitation.annualMm} mm/yr ({effectiveClimate.precipitation.pattern})
                 </dd>
-                <dt className="text-slate-500">Seasonality</dt>
-                <dd className="text-slate-300">{effectiveClimate.seasonality}</dd>
-                <dt className="text-slate-500">Frost risk</dt>
-                <dd className="text-slate-300">{effectiveClimate.frostRisk}</dd>
-                <dt className="text-slate-500">Heat risk</dt>
-                <dd className="text-slate-300">{effectiveClimate.heatStressRisk}</dd>
+                <dt className="text-ink-soft">Seasonality</dt>
+                <dd className="text-ink">{effectiveClimate.seasonality}</dd>
+                <dt className="text-ink-soft">Frost risk</dt>
+                <dd className="text-ink">{effectiveClimate.frostRisk}</dd>
+                <dt className="text-ink-soft">Heat risk</dt>
+                <dd className="text-ink">{effectiveClimate.heatStressRisk}</dd>
               </dl>
               <p className="mt-2 text-xs text-amber-200/90" data-testid="climate-picker-suitability">
                 {effectiveClimate.treeSuitabilityNote}
               </p>
               {highlandEnabled && elevationM > 0 ? (
-                <p className="mt-1 text-xs text-sky-300" data-testid="climate-picker-highland-preview">
+                <p className="mt-1 text-xs text-sky-800" data-testid="climate-picker-highland-preview">
                   Highland −{drop.toFixed(1)}°C at {elevationM} m (lapse rate {HIGHLAND_LAPSE_RATE_C_PER_KM} °C/km)
                   {effectiveClimate.frostRisk !== selectedClimate.frostRisk
                     ? ` · frost risk bumped to ${effectiveClimate.frostRisk}`
@@ -410,11 +410,11 @@ export function ClimatePicker({ open, onClose, onSubmit }: ClimatePickerProps): 
 
             {/* Species. */}
             <div data-testid="climate-picker-species">
-              <h3 className="mb-1 text-xs uppercase tracking-wider text-slate-500">
+              <h3 className="mb-1 text-xs uppercase tracking-wider text-ink-soft">
                 Native species {!selectedClimate.supportsTrees ? '(none — unplayable)' : `(${nativeSpecies.length})`}
               </h3>
               {nativeSpecies.length === 0 ? (
-                <p className="rounded border border-rose-800/60 bg-rose-900/20 p-2 text-xs text-rose-300">
+                <p className="rounded border border-rose-800/60 bg-rose-900/20 p-2 text-xs text-accent">
                   No tree species survives this climate. Choose another zone to start a game.
                 </p>
               ) : (
@@ -435,8 +435,8 @@ export function ClimatePicker({ open, onClose, onSubmit }: ClimatePickerProps): 
             </div>
 
             {/* Highland elevation slider. */}
-            <div className="rounded border border-slate-800 bg-slate-950/40 p-3" data-testid="climate-picker-highland">
-              <label className="flex items-center gap-2 text-sm text-slate-200">
+            <div className="rounded border border-ink bg-parchment-2/40 p-3" data-testid="climate-picker-highland">
+              <label className="flex items-center gap-2 text-sm text-ink">
                 <input
                   type="checkbox"
                   checked={highlandEnabled}
@@ -447,7 +447,7 @@ export function ClimatePicker({ open, onClose, onSubmit }: ClimatePickerProps): 
               </label>
               {highlandEnabled ? (
                 <div className="mt-2">
-                  <div className="flex items-center justify-between text-xs text-slate-400 tabular-nums">
+                  <div className="flex items-center justify-between text-xs text-ink-2 tabular-nums">
                     <span>Elevation</span>
                     <span data-testid="climate-picker-elevation-value">{elevationM} m</span>
                   </div>
@@ -461,7 +461,7 @@ export function ClimatePicker({ open, onClose, onSubmit }: ClimatePickerProps): 
                     className="mt-1 w-full"
                     data-testid="climate-picker-elevation-slider"
                   />
-                  <p className="mt-1 text-xs text-slate-500">
+                  <p className="mt-1 text-xs text-ink-soft">
                     Temperature drops {HIGHLAND_LAPSE_RATE_C_PER_KM} °C per km of altitude. The live
                     preview above shows the adjusted seasonal temps + which species survive.
                   </p>
@@ -472,8 +472,8 @@ export function ClimatePicker({ open, onClose, onSubmit }: ClimatePickerProps): 
         </div>
 
         {/* Footer. */}
-        <footer className="mt-4 flex items-center justify-between gap-2 border-t border-slate-800 pt-3">
-          <p className="text-xs text-slate-500" data-testid="climate-picker-footer-summary">
+        <footer className="mt-4 flex items-center justify-between gap-2 border-t border-ink pt-3">
+          <p className="text-xs text-ink-soft" data-testid="climate-picker-footer-summary">
             {selectedSpecies
               ? `Starting: ${selectedClimate.koppenCode} — ${selectedSpecies.name} · fit ${Math.round(computeSpeciesClimateSuitability(selectedSpecies, effectiveClimate) * 100)}%`
               : 'Select a climate + species to start.'}

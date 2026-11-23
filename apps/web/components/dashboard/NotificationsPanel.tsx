@@ -115,23 +115,29 @@ export const ACTIONABLE_NOTIFICATION_CODES: ReadonlySet<string> = Object.freeze(
 const SEVERITY_VISUAL: Readonly<
   Record<UiNotification['severity'], { readonly icon: string; readonly border: string; readonly bg: string; readonly text: string }>
 > = Object.freeze({
+  // W48 (field journal): severity tints re-skinned for parchment. The dark
+  // 950-bg fills (bg-sky-950/40 etc.) were tuned for dark slate; on cream
+  // paper they'd read as dark holes. Switched to light tinted fills + darker
+  // accent text + borders so each severity still reads at a glance (info=sky,
+  // warning=brass, critical=accent-red) without the dark card. The icon is
+  // unchanged — colour is never the only signal (WCAG 1.4.1).
   info: {
     icon: 'ℹ',
-    border: 'border-sky-500/60',
-    bg: 'bg-sky-950/40',
-    text: 'text-sky-200',
+    border: 'border-sky-700/50',
+    bg: 'bg-sky-100/50',
+    text: 'text-sky-800',
   },
   warning: {
     icon: '⚠',
-    border: 'border-amber-500/60',
-    bg: 'bg-amber-950/40',
-    text: 'text-amber-200',
+    border: 'border-brass/50',
+    bg: 'bg-brass/15',
+    text: 'text-brass-2',
   },
   critical: {
     icon: '🛑',
-    border: 'border-rose-500/60',
-    bg: 'bg-rose-950/40',
-    text: 'text-rose-200',
+    border: 'border-accent/50',
+    bg: 'bg-accent/10',
+    text: 'text-accent',
   },
 });
 
@@ -201,7 +207,7 @@ export function NotificationsPanel({
       role="region"
       aria-label="Notifications"
       className={[
-        'rounded-lg border border-slate-700 bg-slate-950/90 backdrop-blur-sm shadow-lg',
+        'rounded-sm border border-ink/30 bg-parchment-2/95 backdrop-blur-sm shadow-lg',
         transitionClass,
         className ?? '',
       ]
@@ -209,11 +215,11 @@ export function NotificationsPanel({
         .join(' ')}
       data-testid="notifications-panel"
     >
-      <header className="flex items-center justify-between gap-2 border-b border-slate-800/60 px-3 py-2">
-        <h2 className="text-xs uppercase tracking-wider text-slate-400">
+      <header className="flex items-center justify-between gap-2 border-b border-dotted border-ink/20 px-3 py-2">
+        <h2 className="text-xs uppercase tracking-wider text-ink-soft font-serif smallcaps">
           Notifications
           <span
-            className="ml-1.5 rounded bg-slate-800/80 px-1.5 py-0.5 text-[10px] tabular-nums text-slate-300"
+            className="ml-1.5 rounded bg-ink/10 px-1.5 py-0.5 text-[10px] tabular-nums text-ink font-journal"
             data-testid="notifications-panel-count"
           >
             {items.length}
@@ -224,7 +230,7 @@ export function NotificationsPanel({
           onClick={onClearAll}
           aria-label="Dismiss all notifications"
           data-testid="notifications-panel-clear-all"
-          className="rounded border border-slate-700 bg-slate-900 px-2 py-0.5 text-[11px] text-slate-300 hover:border-slate-600 hover:bg-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50"
+          className="rounded-sm border border-ink/40 bg-parchment px-2 py-0.5 text-[11px] text-ink font-serif hover:border-ink/60 hover:bg-parchment-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-leaf/50"
         >
           Dismiss all
         </button>
@@ -263,7 +269,7 @@ export function NotificationsPanel({
                 >
                   {n.message}
                 </p>
-                <span className="text-[10px] uppercase tracking-wider text-slate-500 font-mono">
+                <span className="text-[10px] uppercase tracking-wider text-ink-soft font-journal">
                   {n.code}
                 </span>
               </div>
@@ -272,7 +278,7 @@ export function NotificationsPanel({
                 onClick={() => onDismiss(n.id)}
                 aria-label={dismissLabel}
                 data-testid={`notification-${n.id}-dismiss`}
-                className="shrink-0 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-xs text-slate-300 hover:border-slate-600 hover:bg-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50"
+                className="shrink-0 rounded-sm border border-ink/40 bg-parchment px-1.5 py-0.5 text-xs text-ink font-serif hover:border-ink/60 hover:bg-parchment-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-leaf/50"
               >
                 ✕
               </button>

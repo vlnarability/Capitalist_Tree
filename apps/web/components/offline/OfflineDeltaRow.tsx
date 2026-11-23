@@ -57,15 +57,15 @@ export interface OfflineDeltaRowProps {
 }
 
 const TONE_TEXT: Readonly<Record<'good' | 'bad' | 'neutral', string>> = Object.freeze({
-  good: 'text-emerald-300',
-  bad: 'text-rose-300',
-  neutral: 'text-slate-400',
+  good: 'text-leaf-dark',
+  bad: 'text-accent',
+  neutral: 'text-ink-2',
 });
 
 const TONE_BADGE: Readonly<Record<'good' | 'bad' | 'neutral', string>> = Object.freeze({
   good: 'border-emerald-700/60 bg-emerald-500/10 text-emerald-200',
   bad: 'border-rose-700/60 bg-rose-500/10 text-rose-200',
-  neutral: 'border-slate-700/60 bg-slate-700/20 text-slate-300',
+  neutral: 'border-ink/60 bg-parchment-3/20 text-ink',
 });
 
 /**
@@ -107,10 +107,10 @@ export function OfflineDeltaRow({
       className="flex items-center justify-between gap-3 py-1 text-sm"
       data-testid={`offline-delta-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
     >
-      <span className="text-slate-300">{label}</span>
+      <span className="text-ink">{label}</span>
       <span className="flex items-center gap-2 tabular-nums">
-        <span className="text-slate-400">{before}</span>
-        <span aria-hidden="true" className="text-slate-600">→</span>
+        <span className="text-ink-2">{before}</span>
+        <span aria-hidden="true" className="text-ink-2">→</span>
         <span className={TONE_TEXT[resolved]}>{after}</span>
         <span
           className={`inline-flex min-w-[3.5rem] justify-center rounded border px-1.5 py-0.5 text-[11px] font-medium ${TONE_BADGE[resolved]}`}

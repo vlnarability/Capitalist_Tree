@@ -93,18 +93,18 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     return (
       <div
         role="alert"
-        className="min-h-screen flex flex-col items-center justify-center gap-4 p-6 bg-slate-950 text-slate-100 font-sans"
+        className="min-h-screen flex flex-col items-center justify-center gap-4 p-6 bg-parchment-2 text-ink font-sans"
       >
-        <div className="max-w-md w-full space-y-4 rounded-lg border border-rose-800/60 bg-slate-900/60 p-6 backdrop-blur-sm">
-          <h1 className="text-lg font-semibold text-rose-300">
+        <div className="max-w-md w-full space-y-4 rounded-lg border border-rose-800/60 bg-parchment/60 p-6 backdrop-blur-sm">
+          <h1 className="text-lg font-semibold text-accent">
             The tree hit an unexpected error
           </h1>
-          <p className="text-sm text-slate-400">
+          <p className="text-sm text-ink-2">
             The simulation interface failed to render. Your last save is safe —
             reloading the page will restore the game from storage.
           </p>
           {error?.message ? (
-            <pre className="text-xs text-slate-500 font-mono whitespace-pre-wrap break-words rounded bg-slate-950/60 p-3 border border-slate-800">
+            <pre className="text-xs text-ink-soft font-journal whitespace-pre-wrap break-words rounded bg-parchment-2/60 p-3 border border-ink">
               {error.message}
             </pre>
           ) : null}
@@ -116,7 +116,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
             Reload the game
           </button>
         </div>
-        <p className="text-[10px] text-slate-600 font-mono uppercase tracking-wider">
+        <p className="text-[10px] text-ink-2 font-journal uppercase tracking-wider">
           If this keeps happening, check the browser console for details.
         </p>
       </div>

@@ -46,18 +46,18 @@ export function PolicyPanel({ className }: PolicyPanelProps = {}): ReactElement 
 
   return (
     <section
-      className={`rounded-lg border border-slate-700 bg-slate-900/60 p-4 ${className ?? ''}`}
+      className={`rounded-lg border border-ink bg-parchment/60 p-4 ${className ?? ''}`}
       aria-labelledby="policy-panel-title"
     >
-      <h2 id="policy-panel-title" className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400">
+      <h2 id="policy-panel-title" className="mb-3 text-sm font-semibold uppercase tracking-wide text-ink-2">
         Policy
       </h2>
 
       {/* Government */}
       <div className="mb-4">
-        <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">Government</h3>
-        <label className="mb-1 block text-xs text-slate-400">
-          Environmental Regulations: <span className="tabular-nums text-slate-200">{pct(gov.environmentalRegulations)}</span>
+        <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-ink-soft">Government</h3>
+        <label className="mb-1 block text-xs text-ink-2">
+          Environmental Regulations: <span className="tabular-nums text-ink">{pct(gov.environmentalRegulations)}</span>
         </label>
         <input
           type="range"
@@ -70,8 +70,8 @@ export function PolicyPanel({ className }: PolicyPanelProps = {}): ReactElement 
           }
           className="mb-3 w-full accent-emerald-500"
         />
-        <label className="mb-1 block text-xs text-slate-400">
-          Carbon Tax Rate: <span className="tabular-nums text-slate-200">{pct(gov.carbonTaxRate)}</span>
+        <label className="mb-1 block text-xs text-ink-2">
+          Carbon Tax Rate: <span className="tabular-nums text-ink">{pct(gov.carbonTaxRate)}</span>
         </label>
         <input
           type="range"
@@ -85,10 +85,10 @@ export function PolicyPanel({ className }: PolicyPanelProps = {}): ReactElement 
       </div>
 
       {/* Monetary */}
-      <div className="border-t border-slate-700/60 pt-3">
-        <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">Monetary</h3>
-        <label className="mb-1 block text-xs text-slate-400">
-          Interest Rate (annual): <span className="tabular-nums text-slate-200">{pct1(mon.interestRate)}</span>
+      <div className="border-t border-ink/60 pt-3">
+        <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-ink-soft">Monetary</h3>
+        <label className="mb-1 block text-xs text-ink-2">
+          Interest Rate (annual): <span className="tabular-nums text-ink">{pct1(mon.interestRate)}</span>
         </label>
         <input
           type="range"
@@ -99,8 +99,8 @@ export function PolicyPanel({ className }: PolicyPanelProps = {}): ReactElement 
           onChange={(e) => dispatch(setMonetaryPolicy({ interestRate: Number(e.target.value) }, nowTick))}
           className="mb-3 w-full accent-sky-500"
         />
-        <label className="mb-1 block text-xs text-slate-400">
-          Inflation Target (annual): <span className="tabular-nums text-slate-200">{pct1(mon.inflationTarget)}</span>
+        <label className="mb-1 block text-xs text-ink-2">
+          Inflation Target (annual): <span className="tabular-nums text-ink">{pct1(mon.inflationTarget)}</span>
         </label>
         <input
           type="range"
@@ -111,8 +111,8 @@ export function PolicyPanel({ className }: PolicyPanelProps = {}): ReactElement 
           onChange={(e) => dispatch(setMonetaryPolicy({ inflationTarget: Number(e.target.value) }, nowTick))}
           className="mb-3 w-full accent-sky-500"
         />
-        <label className="mb-1 block text-xs text-slate-400">
-          Money Supply Growth (annual): <span className="tabular-nums text-slate-200">{pct1(mon.moneySupplyGrowth)}</span>
+        <label className="mb-1 block text-xs text-ink-2">
+          Money Supply Growth (annual): <span className="tabular-nums text-ink">{pct1(mon.moneySupplyGrowth)}</span>
         </label>
         <input
           type="range"

@@ -54,16 +54,16 @@ export function SeedControls({ className }: SeedControlsProps = {}): ReactElemen
   return (
     <div className={`flex flex-col gap-3 ${className ?? ''}`} data-testid="seed-controls">
       <div className="rounded border border-amber-800/40 bg-amber-900/10 p-3">
-        <span className="text-[10px] uppercase tracking-wider text-slate-500">
+        <span className="text-[10px] uppercase tracking-wider text-ink-soft">
           Seeds · Genetic legacy (GDD §11.2)
         </span>
         <div className="mt-1 flex items-baseline justify-between">
-          <span className="text-2xl font-bold tabular-nums text-amber-300" data-testid="seed-count">
+          <span className="text-2xl font-bold tabular-nums text-brass-2" data-testid="seed-count">
             {seeds}
           </span>
-          <span className="text-xs text-slate-500">seeds ready to plant</span>
+          <span className="text-xs text-ink-soft">seeds ready to plant</span>
         </div>
-        <p className="mt-1 text-xs text-slate-400" data-testid="seed-legacy-balance">
+        <p className="mt-1 text-xs text-ink-2" data-testid="seed-legacy-balance">
           Genetic-legacy points: {geneticLegacyPoints}
         </p>
       </div>
@@ -79,13 +79,13 @@ export function SeedControls({ className }: SeedControlsProps = {}): ReactElemen
       </Button>
 
       {seeds < 1 ? (
-        <p className="text-xs text-slate-500" data-testid="seed-empty-hint">
+        <p className="text-xs text-ink-soft" data-testid="seed-empty-hint">
           The tree has no seeds yet. A tree past its fruiting age produces seeds
           over time (the BiologySystem seed-dispersed flow, fed by
           alloc.reproduction) — wait for it to mature + fruit.
         </p>
       ) : (
-        <p className="text-xs text-slate-500" data-testid="seed-hint">
+        <p className="text-xs text-ink-soft" data-testid="seed-hint">
           Planting a seed consumes one + grants genetic-legacy points (the
           prestige currency that funds unlock-research). A dead tree&apos;s stored
           seeds remain plantable — the genetic legacy persists.

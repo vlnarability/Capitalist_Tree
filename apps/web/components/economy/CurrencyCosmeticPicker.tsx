@@ -65,10 +65,10 @@ export function CurrencyCosmeticPicker({
       className={`flex flex-col gap-2 ${className ?? ''}`}
       data-testid="currency-cosmetic-picker"
     >
-      <span className="text-[10px] uppercase tracking-wider text-slate-500">
+      <span className="text-[10px] uppercase tracking-wider text-ink-soft">
         Currency appearance (GDD §6.1 / §14)
       </span>
-      <p className="text-xs text-slate-500">
+      <p className="text-xs text-ink-soft">
         Cosmetic only — does not change the underlying monetary value
         (TDD §15.4).
       </p>
@@ -87,22 +87,22 @@ export function CurrencyCosmeticPicker({
                   'focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50',
                   isSelected
                     ? 'border-emerald-500 bg-emerald-500/10'
-                    : 'border-slate-700 bg-slate-900 hover:border-slate-600 hover:bg-slate-800',
+                    : 'border-ink bg-parchment hover:border-ink hover:bg-parchment-3',
                 ].join(' ')}
               >
                 <div className="flex flex-col">
                   <span
                     className={`text-sm font-medium ${
-                      isSelected ? 'text-emerald-200' : 'text-slate-200'
+                      isSelected ? 'text-emerald-200' : 'text-ink'
                     }`}
                   >
                     {visual.name}
                   </span>
-                  <span className="text-[11px] text-slate-500">
+                  <span className="text-[11px] text-ink-soft">
                     {visual.banknoteTheme} · {visual.leafAppearance}
                   </span>
                 </div>
-                <span className="text-2xl font-bold tabular-nums text-slate-100">
+                <span className="text-2xl font-bold tabular-nums text-ink">
                   {visual.symbol}
                 </span>
               </button>
@@ -110,8 +110,8 @@ export function CurrencyCosmeticPicker({
           );
         })}
       </ul>
-      <p className="text-[11px] text-slate-500" data-testid="currency-cosmetic-selected">
-        Selected: <span className="text-slate-300">{selectedId}</span>
+      <p className="text-[11px] text-ink-soft" data-testid="currency-cosmetic-selected">
+        Selected: <span className="text-ink">{selectedId}</span>
       </p>
     </div>
   );

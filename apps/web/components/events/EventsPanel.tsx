@@ -68,21 +68,21 @@ export function EventsPanel({ className }: EventsPanelProps = {}): ReactElement 
 
   return (
     <section
-      className={`rounded-lg border border-slate-700 bg-slate-900/60 p-4 ${className ?? ''}`}
+      className={`rounded-lg border border-ink bg-parchment/60 p-4 ${className ?? ''}`}
       aria-labelledby="events-panel-title"
     >
-      <h2 id="events-panel-title" className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400">
+      <h2 id="events-panel-title" className="mb-3 text-sm font-semibold uppercase tracking-wide text-ink-2">
         Events
       </h2>
 
       {/* Trigger */}
       <div className="mb-4">
-        <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">Trigger Now</h3>
+        <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-ink-soft">Trigger Now</h3>
         <div className="flex flex-wrap items-center gap-1.5">
           <select
             value={triggerTypeId}
             onChange={(e) => setTriggerTypeId(e.target.value)}
-            className="max-w-[10rem] rounded border border-slate-600 bg-slate-900 px-1.5 py-0.5 text-xs text-slate-200"
+            className="max-w-[10rem] rounded border border-ink bg-parchment px-1.5 py-0.5 text-xs text-ink"
           >
             {EVENT_DEFINITIONS.map((def) => (
               <option key={def.id} value={def.id}>
@@ -93,7 +93,7 @@ export function EventsPanel({ className }: EventsPanelProps = {}): ReactElement 
           <select
             value={triggerSeverity}
             onChange={(e) => setTriggerSeverity(e.target.value as EventSeverity)}
-            className="rounded border border-slate-600 bg-slate-900 px-1.5 py-0.5 text-xs text-slate-200"
+            className="rounded border border-ink bg-parchment px-1.5 py-0.5 text-xs text-ink"
           >
             {SEVERITIES.map((s) => (
               <option key={s} value={s}>
@@ -109,12 +109,12 @@ export function EventsPanel({ className }: EventsPanelProps = {}): ReactElement 
 
       {/* Schedule */}
       <div className="mb-4">
-        <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">Schedule</h3>
+        <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-ink-soft">Schedule</h3>
         <div className="flex flex-wrap items-center gap-1.5">
           <select
             value={scheduleTypeId}
             onChange={(e) => setScheduleTypeId(e.target.value)}
-            className="max-w-[10rem] rounded border border-slate-600 bg-slate-900 px-1.5 py-0.5 text-xs text-slate-200"
+            className="max-w-[10rem] rounded border border-ink bg-parchment px-1.5 py-0.5 text-xs text-ink"
           >
             {EVENT_DEFINITIONS.map((def) => (
               <option key={def.id} value={def.id}>
@@ -122,37 +122,37 @@ export function EventsPanel({ className }: EventsPanelProps = {}): ReactElement 
               </option>
             ))}
           </select>
-          <label className="text-[0.65rem] text-slate-500">in</label>
+          <label className="text-[0.65rem] text-ink-soft">in</label>
           <input
             type="number"
             min="0"
             step="1"
             value={scheduleDelayDays}
             onChange={(e) => setScheduleDelayDays(e.target.value)}
-            className="w-16 rounded border border-slate-600 bg-slate-900 px-1.5 py-0.5 text-xs tabular-nums text-slate-200"
+            className="w-16 rounded border border-ink bg-parchment px-1.5 py-0.5 text-xs tabular-nums text-ink"
           />
-          <span className="text-[0.65rem] text-slate-500">sim days</span>
+          <span className="text-[0.65rem] text-ink-soft">sim days</span>
           <Button onClick={onSchedule}>Schedule</Button>
         </div>
       </div>
 
       {/* Active */}
       <div className="mb-4">
-        <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">
-          Active {active.length > 0 && <span className="text-slate-400">({active.length})</span>}
+        <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-ink-soft">
+          Active {active.length > 0 && <span className="text-ink-2">({active.length})</span>}
         </h3>
         {active.length === 0 ? (
-          <p className="text-xs text-slate-500">No active events.</p>
+          <p className="text-xs text-ink-soft">No active events.</p>
         ) : (
           <ul className="flex flex-col gap-1.5">
             {active.map((ev) => (
               <li
                 key={ev.id}
-                className="flex items-center justify-between gap-2 rounded border border-slate-700/60 bg-slate-800/40 px-3 py-1.5"
+                className="flex items-center justify-between gap-2 rounded border border-ink/60 bg-parchment-3/40 px-3 py-1.5"
               >
                 <div className="min-w-0 flex-1">
-                  <span className="block truncate text-sm text-slate-200">{eventName(ev.type)}</span>
-                  <span className="text-xs tabular-nums text-slate-400">{ev.remaining}s remaining</span>
+                  <span className="block truncate text-sm text-ink">{eventName(ev.type)}</span>
+                  <span className="text-xs tabular-nums text-ink-2">{ev.remaining}s remaining</span>
                 </div>
                 <Button tone="warning" onClick={() => onResolve(ev.id)}>
                   Resolve
@@ -165,11 +165,11 @@ export function EventsPanel({ className }: EventsPanelProps = {}): ReactElement 
 
       {/* Scheduled */}
       <div>
-        <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">
-          Scheduled {scheduled.length > 0 && <span className="text-slate-400">({scheduled.length})</span>}
+        <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-ink-soft">
+          Scheduled {scheduled.length > 0 && <span className="text-ink-2">({scheduled.length})</span>}
         </h3>
         {scheduled.length === 0 ? (
-          <p className="text-xs text-slate-500">No scheduled events.</p>
+          <p className="text-xs text-ink-soft">No scheduled events.</p>
         ) : (
           <ul className="flex flex-col gap-1.5">
             {scheduled.map((ev) => {
@@ -177,11 +177,11 @@ export function EventsPanel({ className }: EventsPanelProps = {}): ReactElement 
               return (
                 <li
                   key={ev.id}
-                  className="flex items-center justify-between gap-2 rounded border border-slate-700/60 bg-slate-800/40 px-3 py-1.5"
+                  className="flex items-center justify-between gap-2 rounded border border-ink/60 bg-parchment-3/40 px-3 py-1.5"
                 >
                   <div className="min-w-0 flex-1">
-                    <span className="block truncate text-sm text-slate-200">{eventName(ev.type)}</span>
-                    <span className="text-xs tabular-nums text-slate-400">in {delayDays.toFixed(1)} sim days</span>
+                    <span className="block truncate text-sm text-ink">{eventName(ev.type)}</span>
+                    <span className="text-xs tabular-nums text-ink-2">in {delayDays.toFixed(1)} sim days</span>
                   </div>
                   <Button tone="warning" onClick={() => onCancel(ev.id)}>
                     Cancel

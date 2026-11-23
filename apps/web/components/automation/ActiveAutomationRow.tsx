@@ -60,23 +60,23 @@ export function ActiveAutomationRow({
 
   return (
     <li
-      className="flex flex-col gap-1.5 rounded border border-slate-800/60 bg-slate-900/40 p-3"
+      className="flex flex-col gap-1.5 rounded border border-ink/60 bg-parchment/40 p-3"
       data-testid={`automation-row-${automation.id}`}
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div className="flex items-baseline gap-2">
           <span
-            className="text-sm font-semibold text-slate-100"
+            className="text-sm font-semibold text-ink"
             data-testid={`automation-row-${automation.id}-name`}
           >
             {name}
           </span>
           {equipment ? (
-            <span className="text-[10px] uppercase tracking-wider text-slate-500">
+            <span className="text-[10px] uppercase tracking-wider text-ink-soft">
               {equipment.category} · tier {equipment.tier}
             </span>
           ) : (
-            <span className="text-[10px] uppercase tracking-wider text-amber-400/70">
+            <span className="text-[10px] uppercase tracking-wider text-brass-2/70">
               unknown equipment
             </span>
           )}
@@ -92,7 +92,7 @@ export function ActiveAutomationRow({
         </Button>
       </div>
 
-      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-[11px] text-slate-500">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-[11px] text-ink-soft">
         <span data-testid={`automation-row-${automation.id}-target`}>
           Target {automation.targetId}
         </span>

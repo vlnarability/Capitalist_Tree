@@ -182,10 +182,10 @@ export function AutomationPanel({
       {/* Equipment shop. */}
       <section className="flex flex-col gap-2" data-testid="automation-shop">
         <div className="flex items-baseline justify-between">
-          <span className="text-[10px] uppercase tracking-wider text-slate-500">
+          <span className="text-[10px] uppercase tracking-wider text-ink-soft">
             Equipment shop ({EQUIPMENT.length})
           </span>
-          <span className="text-xs tabular-nums text-slate-300" data-testid="automation-cash">
+          <span className="text-xs tabular-nums text-ink" data-testid="automation-cash">
             Cash {formatMoneyFromStr(personalCash)}
           </span>
         </div>
@@ -194,7 +194,7 @@ export function AutomationPanel({
           if (items.length === 0) return null;
           return (
             <div key={cat} className="flex flex-col gap-1.5" data-testid={`automation-shop-${cat}`}>
-              <span className="text-[11px] font-medium uppercase tracking-wider text-slate-400">
+              <span className="text-[11px] font-medium uppercase tracking-wider text-ink-2">
                 {CATEGORY_LABEL[cat]}
               </span>
               <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -214,12 +214,12 @@ export function AutomationPanel({
 
       {/* Active automations. */}
       <section className="flex flex-col gap-2" data-testid="automation-active">
-        <span className="text-[10px] uppercase tracking-wider text-slate-500">
+        <span className="text-[10px] uppercase tracking-wider text-ink-soft">
           Active automations ({joined.length})
         </span>
         {joined.length === 0 ? (
           <p
-            className="text-xs text-slate-500"
+            className="text-xs text-ink-soft"
             data-testid="automation-empty"
           >
             No automation purchased yet. Buy equipment from the shop above.
@@ -242,7 +242,7 @@ export function AutomationPanel({
         )}
       </section>
 
-      <p className="text-xs text-slate-500" data-testid="automation-hint">
+      <p className="text-xs text-ink-soft" data-testid="automation-hint">
         Purchasing debits your personal cash and instantiates an automation.
         Policies describe <em>when</em> the automation fires — the engine
         evaluates them each tick (TDD §12). The UI never runs automation

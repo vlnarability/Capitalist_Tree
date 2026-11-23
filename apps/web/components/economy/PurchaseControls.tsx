@@ -165,10 +165,10 @@ export function PurchaseControls({
 
       <section className="flex flex-col gap-2" data-testid="purchase-water">
         <div className="flex items-baseline justify-between">
-          <span className="text-[10px] uppercase tracking-wider text-slate-500">
+          <span className="text-[10px] uppercase tracking-wider text-ink-soft">
             Water market ({WATER_MARKET_ID})
           </span>
-          <span className="text-xs tabular-nums text-slate-300">
+          <span className="text-xs tabular-nums text-ink">
             {formatUnitPrice(waterMarket, 'litre')}
           </span>
         </div>
@@ -179,11 +179,11 @@ export function PurchaseControls({
             step={1}
             value={waterQty}
             onChange={(e) => setWaterQty(Math.max(1, Math.floor(Number(e.target.value) || 1)))}
-            className="w-24 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100 tabular-nums focus:border-sky-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50"
+            className="w-24 rounded border border-ink bg-parchment px-2 py-1 text-sm text-ink tabular-nums focus:border-sky-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50"
             data-testid="purchase-water-qty"
             aria-label="Water quantity (litres)"
           />
-          <span className="text-[10px] uppercase tracking-wider text-slate-500">
+          <span className="text-[10px] uppercase tracking-wider text-ink-soft">
             L
           </span>
           <div className="flex gap-1">
@@ -200,8 +200,8 @@ export function PurchaseControls({
           </div>
         </div>
         <div className="flex items-baseline justify-between text-xs">
-          <span className="text-slate-500">Cost</span>
-          <span className="tabular-nums text-slate-300" data-testid="purchase-water-cost">
+          <span className="text-ink-soft">Cost</span>
+          <span className="tabular-nums text-ink" data-testid="purchase-water-cost">
             {formatMoneyFromStr(String(waterCost))}
           </span>
         </div>
@@ -215,7 +215,7 @@ export function PurchaseControls({
           Buy {waterQty} L · Apply
         </Button>
         {!canAffordWater ? (
-          <p className="text-xs text-rose-400/80" data-testid="purchase-water-insufficient">
+          <p className="text-xs text-accent/80" data-testid="purchase-water-insufficient">
             Insufficient funds for {waterQty} L.
           </p>
         ) : null}
@@ -223,10 +223,10 @@ export function PurchaseControls({
 
       <section className="flex flex-col gap-2" data-testid="purchase-fertilizer">
         <div className="flex items-baseline justify-between">
-          <span className="text-[10px] uppercase tracking-wider text-slate-500">
+          <span className="text-[10px] uppercase tracking-wider text-ink-soft">
             Fertilizer market ({FERTILIZER_MARKET_ID})
           </span>
-          <span className="text-xs tabular-nums text-slate-300">
+          <span className="text-xs tabular-nums text-ink">
             {formatUnitPrice(fertMarket, 'unit')}
           </span>
         </div>
@@ -237,11 +237,11 @@ export function PurchaseControls({
             step={1}
             value={fertQty}
             onChange={(e) => setFertQty(Math.max(1, Math.floor(Number(e.target.value) || 1)))}
-            className="w-24 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100 tabular-nums focus:border-emerald-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/50"
+            className="w-24 rounded border border-ink bg-parchment px-2 py-1 text-sm text-ink tabular-nums focus:border-emerald-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/50"
             data-testid="purchase-fertilizer-qty"
             aria-label="Fertilizer quantity (units)"
           />
-          <span className="text-[10px] uppercase tracking-wider text-slate-500">
+          <span className="text-[10px] uppercase tracking-wider text-ink-soft">
             units
           </span>
           <div className="flex gap-1">
@@ -258,8 +258,8 @@ export function PurchaseControls({
           </div>
         </div>
         <div className="flex items-baseline justify-between text-xs">
-          <span className="text-slate-500">Cost</span>
-          <span className="tabular-nums text-slate-300" data-testid="purchase-fertilizer-cost">
+          <span className="text-ink-soft">Cost</span>
+          <span className="tabular-nums text-ink" data-testid="purchase-fertilizer-cost">
             {formatMoneyFromStr(String(fertCost))}
           </span>
         </div>
@@ -273,13 +273,13 @@ export function PurchaseControls({
           Buy {fertQty} unit{fertQty === 1 ? '' : 's'} · Apply
         </Button>
         {!canAffordFert ? (
-          <p className="text-xs text-rose-400/80" data-testid="purchase-fertilizer-insufficient">
+          <p className="text-xs text-accent/80" data-testid="purchase-fertilizer-insufficient">
             Insufficient funds for {fertQty} unit{fertQty === 1 ? '' : 's'}.
           </p>
         ) : null}
       </section>
 
-      <p className="text-xs text-slate-500" data-testid="purchase-hint">
+      <p className="text-xs text-ink-soft" data-testid="purchase-hint">
         Each purchase credits your inventory with the commodity and
         immediately applies it to the soil. P3c will wire the inventory
         deduction for apply-water / apply-fertilizer; until then the apply

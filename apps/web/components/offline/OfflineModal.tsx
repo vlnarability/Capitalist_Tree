@@ -278,7 +278,7 @@ export function OfflineModal({ className }: OfflineModalProps = {}): ReactElemen
 
   return (
     <div
-      className="pointer-events-auto fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm"
+      className="pointer-events-auto fixed inset-0 z-[60] flex items-center justify-center bg-parchment-2/70 p-4 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-labelledby="offline-modal-title"
@@ -286,19 +286,19 @@ export function OfflineModal({ className }: OfflineModalProps = {}): ReactElemen
     >
       <div
         ref={dialogRef}
-        className={`max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-lg border border-slate-700 bg-slate-900 p-6 shadow-2xl ${className ?? ''}`}
+        className={`max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-lg border border-ink bg-parchment p-6 shadow-2xl ${className ?? ''}`}
       >
         {/* Header. */}
         <header className="mb-4 flex flex-col gap-1">
           <h2
             id="offline-modal-title"
-            className="text-lg font-semibold text-slate-100"
+            className="text-lg font-semibold text-ink"
             data-testid="offline-modal-title"
           >
             While You Were Away
           </h2>
           <p
-            className="text-sm text-slate-400 tabular-nums"
+            className="text-sm text-ink-2 tabular-nums"
             data-testid="offline-modal-range"
           >
             {formatDayRange(summary.fromDay, summary.toDay)}
@@ -306,14 +306,14 @@ export function OfflineModal({ className }: OfflineModalProps = {}): ReactElemen
         </header>
 
         {/* Workload summary + capped warning. */}
-        <section className="mb-4 rounded border border-slate-800 bg-slate-950/40 p-3" data-testid="offline-modal-workload">
-          <p className="text-sm text-slate-300">
-            Simulated <span className="font-semibold text-slate-100 tabular-nums">{simDays}</span> sim days in{' '}
-            <span className="font-semibold text-slate-100 tabular-nums">{summary.chunksRun}</span> chunks.
+        <section className="mb-4 rounded border border-ink bg-parchment-2/40 p-3" data-testid="offline-modal-workload">
+          <p className="text-sm text-ink">
+            Simulated <span className="font-semibold text-ink tabular-nums">{simDays}</span> sim days in{' '}
+            <span className="font-semibold text-ink tabular-nums">{summary.chunksRun}</span> chunks.
           </p>
           {summary.capped ? (
             <p
-              className="mt-2 text-xs text-amber-300"
+              className="mt-2 text-xs text-brass-2"
               data-testid="offline-modal-capped-warning"
             >
               Your absence exceeded the 30-day cap; only the first 30 real days were simulated.
@@ -323,10 +323,10 @@ export function OfflineModal({ className }: OfflineModalProps = {}): ReactElemen
 
         {/* Biological deltas. */}
         <section className="mb-4" data-testid="offline-modal-biological">
-          <h3 className="mb-1 text-xs uppercase tracking-wider text-slate-500">Biological</h3>
+          <h3 className="mb-1 text-xs uppercase tracking-wider text-ink-soft">Biological</h3>
           {treeDied ? (
             <p
-              className="mb-2 text-sm font-semibold text-rose-300"
+              className="mb-2 text-sm font-semibold text-accent"
               data-testid="offline-modal-tree-died"
             >
               Your tree died while you were away.
@@ -341,7 +341,7 @@ export function OfflineModal({ className }: OfflineModalProps = {}): ReactElemen
 
         {/* Economic deltas. */}
         <section className="mb-4" data-testid="offline-modal-economic">
-          <h3 className="mb-1 text-xs uppercase tracking-wider text-slate-500">Economic</h3>
+          <h3 className="mb-1 text-xs uppercase tracking-wider text-ink-soft">Economic</h3>
           <ul className="divide-y divide-slate-800/60">
             <OfflineDeltaRow
               label="Personal Cash"
@@ -373,7 +373,7 @@ export function OfflineModal({ className }: OfflineModalProps = {}): ReactElemen
             />
           </ul>
           <p
-            className="mt-2 text-xs text-slate-500 tabular-nums"
+            className="mt-2 text-xs text-ink-soft tabular-nums"
             data-testid="offline-modal-transactions"
           >
             {summary.economic.transactionsCount.after - summary.economic.transactionsCount.before} transactions recorded.
@@ -382,7 +382,7 @@ export function OfflineModal({ className }: OfflineModalProps = {}): ReactElemen
 
         {/* Environmental deltas. */}
         <section className="mb-5" data-testid="offline-modal-environmental">
-          <h3 className="mb-1 text-xs uppercase tracking-wider text-slate-500">Environmental</h3>
+          <h3 className="mb-1 text-xs uppercase tracking-wider text-ink-soft">Environmental</h3>
           <ul className="divide-y divide-slate-800/60">
             {envRows.map((r) => (
               <OfflineDeltaRow key={r.label} {...r} />

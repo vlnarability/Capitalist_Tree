@@ -61,30 +61,30 @@ export function EquipmentCard({
 }: EquipmentCardProps): ReactElement {
   return (
     <li
-      className="flex flex-col gap-1.5 rounded border border-slate-800/60 bg-slate-900/40 p-3"
+      className="flex flex-col gap-1.5 rounded border border-ink/60 bg-parchment/40 p-3"
       data-testid={`equipment-card-${equipment.id}`}
     >
       <div className="flex items-baseline justify-between gap-2">
         <span
-          className="text-sm font-semibold text-slate-100"
+          className="text-sm font-semibold text-ink"
           data-testid={`equipment-card-${equipment.id}-name`}
         >
           {equipment.name}
         </span>
         <span
-          className="text-[10px] uppercase tracking-wider text-slate-500"
+          className="text-[10px] uppercase tracking-wider text-ink-soft"
           data-testid={`equipment-card-${equipment.id}-tier`}
         >
           {tierLabel(equipment.tier)}
         </span>
       </div>
       <p
-        className="text-xs text-slate-400"
+        className="text-xs text-ink-2"
         data-testid={`equipment-card-${equipment.id}-description`}
       >
         {equipment.description}
       </p>
-      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 text-[11px] text-slate-500">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 text-[11px] text-ink-soft">
         <span data-testid={`equipment-card-${equipment.id}-cost`}>
           Cost {formatMoneyFromStr(equipment.cost)}
         </span>
@@ -96,13 +96,13 @@ export function EquipmentCard({
         </span>
       </div>
       <p
-        className="text-[11px] text-slate-500"
+        className="text-[11px] text-ink-soft"
         data-testid={`equipment-card-${equipment.id}-env`}
       >
         Env: {envSummary(equipment)}
       </p>
       <div className="mt-1 flex items-center justify-between">
-        <span className="text-[10px] uppercase tracking-wider text-slate-600">
+        <span className="text-[10px] uppercase tracking-wider text-ink-2">
           {equipment.category}
         </span>
         <Button
@@ -118,7 +118,7 @@ export function EquipmentCard({
       </div>
       {!affordable ? (
         <p
-          className="text-[11px] text-rose-400/80"
+          className="text-[11px] text-accent/80"
           data-testid={`equipment-card-${equipment.id}-insufficient`}
         >
           Insufficient funds.

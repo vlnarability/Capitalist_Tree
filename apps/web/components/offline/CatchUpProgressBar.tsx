@@ -33,16 +33,16 @@ export function CatchUpProgressBar({ className }: CatchUpProgressBarProps = {}):
       aria-live="polite"
       aria-label={`Catching up ${progress.completed} of ${progress.total} chunks`}
       className={
-        'fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm ' +
+        'fixed inset-0 z-50 flex items-center justify-center bg-parchment-2/80 backdrop-blur-sm ' +
         (className ?? '')
       }
     >
-      <div className="w-[min(90vw,28rem)] rounded-xl border border-slate-700 bg-slate-900 p-6 shadow-2xl">
-        <h2 className="mb-3 text-lg font-semibold text-slate-100">Catching up…</h2>
-        <p className="mb-4 text-sm text-slate-400">
+      <div className="w-[min(90vw,28rem)] rounded-xl border border-ink bg-parchment p-6 shadow-2xl">
+        <h2 className="mb-3 text-lg font-semibold text-ink">Catching up…</h2>
+        <p className="mb-4 text-sm text-ink-2">
           Simulating your absence offline. The game will resume shortly.
         </p>
-        <div className="h-2 w-full overflow-hidden rounded-full bg-slate-700">
+        <div className="h-2 w-full overflow-hidden rounded-full bg-parchment-3">
           {indeterminate ? (
             <div
               className="h-full w-1/3 animate-pulse rounded-full bg-emerald-500"
@@ -57,7 +57,7 @@ export function CatchUpProgressBar({ className }: CatchUpProgressBarProps = {}):
           )}
         </div>
         {!indeterminate && (
-          <p className="mt-2 text-right text-xs tabular-nums text-slate-400">
+          <p className="mt-2 text-right text-xs tabular-nums text-ink-2">
             {progress.completed} / {progress.total} chunks
           </p>
         )}

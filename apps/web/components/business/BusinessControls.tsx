@@ -72,11 +72,11 @@ export function BusinessControls({ business: b }: BusinessControlsProps): ReactE
   };
 
   return (
-    <div className="border-t border-slate-700/40 pt-1.5">
+    <div className="border-t border-ink/40 pt-1.5">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="text-[0.65rem] uppercase tracking-wide text-slate-500 hover:text-slate-300"
+        className="text-[0.65rem] uppercase tracking-wide text-ink-soft hover:text-ink"
         aria-expanded={open}
       >
         {open ? '▾ Manage' : '▸ Manage'}
@@ -85,27 +85,27 @@ export function BusinessControls({ business: b }: BusinessControlsProps): ReactE
         <div className="mt-1.5 flex flex-col gap-2">
           {/* Loan */}
           <div className="flex flex-wrap items-center gap-1.5">
-            <label className="text-[0.65rem] text-slate-500">Loan $</label>
+            <label className="text-[0.65rem] text-ink-soft">Loan $</label>
             <input
               type="number"
               min="1"
               step="1"
               value={loanInput}
               onChange={(e) => setLoanInput(e.target.value)}
-              className="w-20 rounded border border-slate-600 bg-slate-900 px-1.5 py-0.5 text-xs tabular-nums text-slate-200"
+              className="w-20 rounded border border-ink bg-parchment px-1.5 py-0.5 text-xs tabular-nums text-ink"
             />
             <Button onClick={onTakeLoan}>Take Loan</Button>
-            <span className="text-[0.6rem] text-slate-600">@ {(DEFAULT_LOAN_INTEREST_RATE * 100).toFixed(0)}% / 30d</span>
+            <span className="text-[0.6rem] text-ink-2">@ {(DEFAULT_LOAN_INTEREST_RATE * 100).toFixed(0)}% / 30d</span>
           </div>
 
           {/* Repay (if liabilities exist) */}
           {liabilities.length > 0 && (
             <div className="flex flex-wrap items-center gap-1.5">
-              <label className="text-[0.65rem] text-slate-500">Repay</label>
+              <label className="text-[0.65rem] text-ink-soft">Repay</label>
               <select
                 value={repayLiability}
                 onChange={(e) => setRepayLiability(e.target.value)}
-                className="max-w-[8rem] rounded border border-slate-600 bg-slate-900 px-1.5 py-0.5 text-xs text-slate-200"
+                className="max-w-[8rem] rounded border border-ink bg-parchment px-1.5 py-0.5 text-xs text-ink"
               >
                 <option value="">Select loan…</option>
                 {liabilities.map((l) => (
@@ -120,7 +120,7 @@ export function BusinessControls({ business: b }: BusinessControlsProps): ReactE
                 step="1"
                 value={repayAmount}
                 onChange={(e) => setRepayAmount(e.target.value)}
-                className="w-16 rounded border border-slate-600 bg-slate-900 px-1.5 py-0.5 text-xs tabular-nums text-slate-200"
+                className="w-16 rounded border border-ink bg-parchment px-1.5 py-0.5 text-xs tabular-nums text-ink"
               />
               <Button tone="warning" onClick={onRepay}>
                 Repay
@@ -130,7 +130,7 @@ export function BusinessControls({ business: b }: BusinessControlsProps): ReactE
 
           {/* Employees + status */}
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-[0.65rem] text-slate-500">Employees: {b.employees}</span>
+            <span className="text-[0.65rem] text-ink-soft">Employees: {b.employees}</span>
             <Button onClick={onHire}>+ Hire</Button>
             <Button tone="warning" onClick={onLayOff} disabled={b.employees === 0}>
               − Lay Off

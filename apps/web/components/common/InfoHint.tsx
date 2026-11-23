@@ -68,7 +68,7 @@ export function InfoHint({ explanation, label, className }: InfoHintProps): Reac
         onBlur={hide}
         onClick={toggle}
         onKeyDown={onKey}
-        className="flex h-3.5 w-3.5 items-center justify-center rounded-full border border-slate-600 text-[9px] font-semibold leading-none text-slate-400 hover:border-slate-400 hover:text-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+        className="flex h-3.5 w-3.5 items-center justify-center rounded-full border border-ink text-[9px] font-semibold leading-none text-ink-2 hover:border-slate-400 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
         data-testid="info-hint-trigger"
       >
         ?
@@ -78,7 +78,7 @@ export function InfoHint({ explanation, label, className }: InfoHintProps): Reac
           role="tooltip"
           id={tooltipId}
           data-testid="info-hint-tooltip"
-          className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1 w-56 -translate-x-1/2 rounded border border-slate-700 bg-slate-950 px-2 py-1.5 text-[11px] leading-snug text-slate-200 shadow-lg"
+          className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1 w-56 -translate-x-1/2 rounded border border-ink bg-parchment-2 px-2 py-1.5 text-[11px] leading-snug text-ink shadow-lg"
         >
           {explanation}
         </span>

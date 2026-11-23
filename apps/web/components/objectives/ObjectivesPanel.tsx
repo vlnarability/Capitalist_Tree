@@ -47,7 +47,7 @@ const STATUS_LABEL: Readonly<Record<ObjectiveStatus, string>> = {
 const STATUS_TONE: Readonly<Record<ObjectiveStatus, string>> = {
   completed: 'bg-emerald-100 text-emerald-800',
   'in-progress': 'bg-amber-100 text-amber-800',
-  available: 'bg-slate-100 text-slate-600',
+  available: 'bg-slate-100 text-ink-2',
 };
 
 export interface ObjectivesPanelProps {
@@ -64,7 +64,7 @@ export function ObjectivesPanel({ className }: ObjectivesPanelProps = {}): React
 
   return (
     <div className={className} data-testid="objectives-panel">
-      <p className="mb-3 text-xs text-slate-500">
+      <p className="mb-3 text-xs text-ink-soft">
         Six long-term endings (GDD §12). Pursue any through play — completed
         objectives persist across save/load.
       </p>
@@ -95,7 +95,7 @@ export function ObjectivesPanel({ className }: ObjectivesPanelProps = {}): React
                   {STATUS_LABEL[status]}
                 </span>
               </div>
-              <p className="mt-1 text-xs text-slate-500">{result.description}</p>
+              <p className="mt-1 text-xs text-ink-soft">{result.description}</p>
               {/* Progress bar — 0% to 100%. Completed objectives render full. */}
               <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
                 <div

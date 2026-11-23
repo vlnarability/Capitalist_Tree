@@ -88,7 +88,7 @@ const DEFAULT_HEIGHT_PX = 480;
  *     currency={LEAF_BANKNOTE}
  *     width={600}
  *     height={480}
- *     className="rounded-lg border border-slate-800"
+ *     className="rounded-lg border border-ink"
  *   />
  */
 export function TreeView({

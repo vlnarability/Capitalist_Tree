@@ -144,11 +144,11 @@ export function PolicyConfigurator({
 
   return (
     <div
-      className="mt-2 flex flex-col gap-2 rounded border border-slate-800/60 bg-slate-950/40 p-3"
+      className="mt-2 flex flex-col gap-2 rounded border border-ink/60 bg-parchment-2/40 p-3"
       data-testid={`policy-configurator-${automation.id}`}
     >
       <div className="flex items-baseline justify-between">
-        <span className="text-[10px] uppercase tracking-wider text-slate-500">
+        <span className="text-[10px] uppercase tracking-wider text-ink-soft">
           Configure policy
         </span>
         <div className="flex gap-1">
@@ -175,22 +175,22 @@ export function PolicyConfigurator({
 
       {kind === 'threshold' ? (
         <div className="flex flex-col gap-1.5" data-testid={`policy-threshold-form-${automation.id}`}>
-          <label className="text-[10px] uppercase tracking-wider text-slate-500">
+          <label className="text-[10px] uppercase tracking-wider text-ink-soft">
             Field (dotted state path)
           </label>
           <input
             type="text"
             value={field}
             onChange={(e) => setField(e.target.value)}
-            className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50"
+            className="w-full rounded border border-ink bg-parchment px-2 py-1 text-sm text-ink focus:border-sky-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50"
             data-testid={`policy-field-${automation.id}`}
           />
           <div className="flex flex-wrap items-center gap-2">
-            <label className="text-[10px] uppercase tracking-wider text-slate-500">Op</label>
+            <label className="text-[10px] uppercase tracking-wider text-ink-soft">Op</label>
             <select
               value={op}
               onChange={(e) => setOp(e.target.value as AutomationThresholdOperator)}
-              className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50"
+              className="rounded border border-ink bg-parchment px-2 py-1 text-sm text-ink focus:border-sky-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50"
               data-testid={`policy-op-${automation.id}`}
             >
               {OPERATORS.map((o) => (
@@ -199,23 +199,23 @@ export function PolicyConfigurator({
                 </option>
               ))}
             </select>
-            <label className="text-[10px] uppercase tracking-wider text-slate-500">Value</label>
+            <label className="text-[10px] uppercase tracking-wider text-ink-soft">Value</label>
             <input
               type="number"
               step="any"
               value={valueStr}
               onChange={(e) => setValueStr(e.target.value)}
-              className="w-28 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100 tabular-nums focus:border-sky-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50"
+              className="w-28 rounded border border-ink bg-parchment px-2 py-1 text-sm text-ink tabular-nums focus:border-sky-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50"
               data-testid={`policy-value-${automation.id}`}
             />
           </div>
-          <p className="text-[11px] text-slate-500">
+          <p className="text-[11px] text-ink-soft">
             Fractional values in (0, 1] render as a percentage in the summary.
           </p>
         </div>
       ) : (
         <div className="flex flex-col gap-1.5" data-testid={`policy-schedule-form-${automation.id}`}>
-          <label className="text-[10px] uppercase tracking-wider text-slate-500">
+          <label className="text-[10px] uppercase tracking-wider text-ink-soft">
             Interval (sim seconds; 86400 = 1 sim day)
           </label>
           <input
@@ -224,7 +224,7 @@ export function PolicyConfigurator({
             step={1}
             value={intervalStr}
             onChange={(e) => setIntervalStr(e.target.value)}
-            className="w-32 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100 tabular-nums focus:border-sky-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50"
+            className="w-32 rounded border border-ink bg-parchment px-2 py-1 text-sm text-ink tabular-nums focus:border-sky-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50"
             data-testid={`policy-interval-${automation.id}`}
           />
         </div>

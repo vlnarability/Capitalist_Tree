@@ -55,18 +55,18 @@ export function BusinessesPanel({ className }: BusinessesPanelProps = {}): React
 
   return (
     <section
-      className={`rounded-lg border border-slate-700 bg-slate-900/60 p-4 ${className ?? ''}`}
+      className={`rounded-lg border border-ink bg-parchment/60 p-4 ${className ?? ''}`}
       aria-labelledby="businesses-panel-title"
     >
-      <h2 id="businesses-panel-title" className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400">
+      <h2 id="businesses-panel-title" className="mb-3 text-sm font-semibold uppercase tracking-wide text-ink-2">
         Businesses
       </h2>
 
       {/* Acquire */}
       <div className="mb-4">
-        <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">Acquire</h3>
-        <p className="mb-2 text-xs text-slate-500">
-          Cash: <span className="tabular-nums text-slate-300">{formatMoneyFromStr(simState.player.personalCash)}</span>
+        <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-ink-soft">Acquire</h3>
+        <p className="mb-2 text-xs text-ink-soft">
+          Cash: <span className="tabular-nums text-ink">{formatMoneyFromStr(simState.player.personalCash)}</span>
         </p>
         <ul className="flex flex-col gap-1.5">
           {BUSINESS_TYPES.map((def) => {
@@ -76,14 +76,14 @@ export function BusinessesPanel({ className }: BusinessesPanelProps = {}): React
             return (
               <li
                 key={def.id}
-                className="flex items-center justify-between gap-2 rounded border border-slate-700/60 bg-slate-800/40 px-3 py-1.5"
+                className="flex items-center justify-between gap-2 rounded border border-ink/60 bg-parchment-3/40 px-3 py-1.5"
               >
                 <div className="min-w-0 flex-1">
                   <div className="flex items-baseline gap-2">
-                    <span className="truncate text-sm font-medium text-slate-200">{def.name}</span>
-                    <span className="shrink-0 text-[0.65rem] uppercase tracking-wide text-slate-500">{tier}</span>
+                    <span className="truncate text-sm font-medium text-ink">{def.name}</span>
+                    <span className="shrink-0 text-[0.65rem] uppercase tracking-wide text-ink-soft">{tier}</span>
                   </div>
-                  <span className="text-xs tabular-nums text-slate-400">{formatMoneyFromStr(def.baseCost)}</span>
+                  <span className="text-xs tabular-nums text-ink-2">{formatMoneyFromStr(def.baseCost)}</span>
                 </div>
                 <Button
                   tone={affordable ? 'active' : 'default'}
@@ -100,25 +100,25 @@ export function BusinessesPanel({ className }: BusinessesPanelProps = {}): React
 
       {/* Owned */}
       <div>
-        <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">
-          Owned {owned.length > 0 && <span className="text-slate-400">({owned.length})</span>}
+        <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-ink-soft">
+          Owned {owned.length > 0 && <span className="text-ink-2">({owned.length})</span>}
         </h3>
         {owned.length === 0 ? (
-          <p className="text-xs text-slate-500">No businesses yet. Acquire one above to start producing.</p>
+          <p className="text-xs text-ink-soft">No businesses yet. Acquire one above to start producing.</p>
         ) : (
           <ul className="flex flex-col gap-1.5">
             {owned.map((b: BusinessState) => (
               <li
                 key={b.id}
-                className="rounded border border-slate-700/60 bg-slate-800/40 px-3 py-1.5"
+                className="rounded border border-ink/60 bg-parchment-3/40 px-3 py-1.5"
               >
                 <div className="flex items-center justify-between gap-2">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-baseline gap-2">
-                      <span className="truncate text-sm font-medium text-slate-200">{b.name}</span>
-                      <span className="shrink-0 text-[0.65rem] uppercase tracking-wide text-slate-500">{b.status}</span>
+                      <span className="truncate text-sm font-medium text-ink">{b.name}</span>
+                      <span className="shrink-0 text-[0.65rem] uppercase tracking-wide text-ink-soft">{b.status}</span>
                     </div>
-                    <span className="text-xs tabular-nums text-slate-400">
+                    <span className="text-xs tabular-nums text-ink-2">
                       Cash {formatMoneyFromStr(b.cash)} · Val {formatMoneyFromStr(b.valuation)}
                       {b.employees > 0 && ` · ${b.employees} emp`}
                     </span>

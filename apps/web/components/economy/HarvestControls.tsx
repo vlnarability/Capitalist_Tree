@@ -165,7 +165,7 @@ export function HarvestControls({
   if (!species || !estimate) {
     return (
       <div className={className ?? ''} data-testid="harvest-controls">
-        <p className="text-xs text-slate-500">Harvest estimate unavailable.</p>
+        <p className="text-xs text-ink-soft">Harvest estimate unavailable.</p>
       </div>
     );
   }
@@ -183,16 +183,16 @@ export function HarvestControls({
         className="rounded border border-emerald-800/40 bg-emerald-900/10 p-3"
         data-testid="harvest-recommendation"
       >
-        <span className="text-[10px] uppercase tracking-wider text-slate-500">
+        <span className="text-[10px] uppercase tracking-wider text-ink-soft">
           Sustainable estimate (GDD §5.4)
         </span>
         <div className="mt-1 flex items-baseline justify-between">
-          <span className="text-2xl font-bold tabular-nums text-emerald-300" data-testid="harvest-recommended">
+          <span className="text-2xl font-bold tabular-nums text-leaf-dark" data-testid="harvest-recommended">
             {recommended}
           </span>
-          <span className="text-xs text-slate-500">leaves / day</span>
+          <span className="text-xs text-ink-soft">leaves / day</span>
         </div>
-        <p className="mt-1 text-xs text-slate-400" data-testid="harvest-recommendation-summary">
+        <p className="mt-1 text-xs text-ink-2" data-testid="harvest-recommendation-summary">
           {recommendation.summary}
         </p>
       </div>
@@ -200,7 +200,7 @@ export function HarvestControls({
       <div className="flex flex-col gap-1.5">
         <label
           htmlFor="harvest-amount"
-          className="text-[10px] uppercase tracking-wider text-slate-500"
+          className="text-[10px] uppercase tracking-wider text-ink-soft"
         >
           Harvest amount (leaves)
         </label>
@@ -213,7 +213,7 @@ export function HarvestControls({
             step={1}
             value={inputValue}
             onChange={onInputChange}
-            className="w-32 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100 tabular-nums focus:border-emerald-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/50"
+            className="w-32 rounded border border-ink bg-parchment px-2 py-1 text-sm text-ink tabular-nums focus:border-emerald-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/50"
             data-testid="harvest-input"
           />
           <Button
@@ -224,7 +224,7 @@ export function HarvestControls({
             Accept recommended
           </Button>
         </div>
-        <p className="text-[11px] text-slate-500">
+        <p className="text-[11px] text-ink-soft">
           Max per harvest: {maxHarvest} leaves (50% of current foliage). Engine caps higher requests.
         </p>
       </div>
@@ -240,12 +240,12 @@ export function HarvestControls({
       </Button>
 
       {!tree.alive ? (
-        <p className="text-xs text-rose-400/80" data-testid="harvest-dead-warning">
+        <p className="text-xs text-accent/80" data-testid="harvest-dead-warning">
           A dead tree has no live leaves to harvest.
         </p>
       ) : null}
 
-      <p className="text-xs text-slate-500" data-testid="harvest-hint">
+      <p className="text-xs text-ink-soft" data-testid="harvest-hint">
         Each harvested leaf carries its species denomination
         ({species.leafDenominationMinor} minor units) and induces a small
         stress bump. Repeated severe defoliation raises mortality risk

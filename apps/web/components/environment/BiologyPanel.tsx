@@ -238,15 +238,15 @@ type EnergyRowTone = 'emerald' | 'amber' | 'rose' | 'sky' | 'cyan';
 function textClassForTone(tone: EnergyRowTone): string {
   switch (tone) {
     case 'emerald':
-      return 'text-emerald-300';
+      return 'text-leaf-dark';
     case 'amber':
-      return 'text-amber-300';
+      return 'text-brass-2';
     case 'rose':
-      return 'text-rose-300';
+      return 'text-accent';
     case 'sky':
-      return 'text-sky-300';
+      return 'text-sky-800';
     case 'cyan':
-      return 'text-cyan-300';
+      return 'text-teal-800';
   }
 }
 
@@ -284,7 +284,7 @@ export function BiologyPanel({ className }: BiologyPanelProps = {}): ReactElemen
   if (!species || !metrics) {
     return (
       <div className={className ?? ''} data-testid="biology-panel">
-        <p className="text-xs text-slate-500">Biology metrics unavailable.</p>
+        <p className="text-xs text-ink-soft">Biology metrics unavailable.</p>
       </div>
     );
   }
@@ -320,19 +320,19 @@ export function BiologyPanel({ className }: BiologyPanelProps = {}): ReactElemen
         data-testid="biology-photosynthesis"
       >
         <div className="flex items-baseline justify-between">
-          <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-slate-500">
+          <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-ink-soft">
             Photosynthesis
             <InfoHint
               label={getExplanation('biology-photosynthesis').label}
               explanation={getExplanation('biology-photosynthesis').text}
             />
           </span>
-          <span className="tabular-nums text-lg font-semibold text-emerald-300">
+          <span className="tabular-nums text-lg font-semibold text-leaf-dark">
             {metrics.production.toFixed(2)} eu/day
           </span>
         </div>
         <p
-          className="text-xs text-slate-400"
+          className="text-xs text-ink-2"
           data-testid="biology-limiting-factor"
         >
           {limitingSentence}
@@ -361,8 +361,8 @@ export function BiologyPanel({ className }: BiologyPanelProps = {}): ReactElemen
                 .replace(/[^a-z]/g, '')}`}
             >
               <div className="flex items-baseline justify-between">
-                <span className="text-slate-400">{label}</span>
-                <span className="tabular-nums text-slate-300">
+                <span className="text-ink-2">{label}</span>
+                <span className="tabular-nums text-ink">
                   {Math.round(clampProgress(value) * 100)}%
                 </span>
               </div>
@@ -377,7 +377,7 @@ export function BiologyPanel({ className }: BiologyPanelProps = {}): ReactElemen
         className="flex flex-col gap-2"
         data-testid="biology-energy-allocation"
       >
-        <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-slate-500">
+        <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-ink-soft">
           Energy allocation (eu/day)
           <InfoHint
             label={getExplanation('biology-energy-allocation').label}
@@ -385,7 +385,7 @@ export function BiologyPanel({ className }: BiologyPanelProps = {}): ReactElemen
           />
         </span>
         <p
-          className="text-xs text-slate-400"
+          className="text-xs text-ink-2"
           data-testid="biology-energy-balance"
         >
           {energySentence}
@@ -410,7 +410,7 @@ export function BiologyPanel({ className }: BiologyPanelProps = {}): ReactElemen
                 .toLowerCase()
                 .replace(/\s+/g, '-')}`}
             >
-              <span className="text-slate-400">{label}</span>
+              <span className="text-ink-2">{label}</span>
               <span className={textClassForTone(tone)}>{value.toFixed(3)}</span>
             </li>
           ))}
@@ -419,7 +419,7 @@ export function BiologyPanel({ className }: BiologyPanelProps = {}): ReactElemen
 
       {/* Stress + damage. */}
       <section className="flex flex-col gap-2" data-testid="biology-stress">
-        <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-slate-500">
+        <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-ink-soft">
           Stress factors
           <InfoHint
             label={getExplanation('biology-stress').label}
@@ -428,8 +428,8 @@ export function BiologyPanel({ className }: BiologyPanelProps = {}): ReactElemen
         </span>
         <div className="flex flex-col gap-1">
           <div className="flex items-baseline justify-between">
-            <span className="text-xs text-slate-400">Cumulative stress</span>
-            <span className="text-xs tabular-nums text-slate-300">
+            <span className="text-xs text-ink-2">Cumulative stress</span>
+            <span className="text-xs tabular-nums text-ink">
               {Math.round(clampProgress(tree.stress) * 100)}%
             </span>
           </div>
@@ -450,8 +450,8 @@ export function BiologyPanel({ className }: BiologyPanelProps = {}): ReactElemen
                 key={`${d.type}-${d.appliedAt}-${i}`}
                 className="flex items-baseline justify-between gap-2"
               >
-                <span className="text-rose-300">{d.type}</span>
-                <span className="tabular-nums text-slate-500">
+                <span className="text-accent">{d.type}</span>
+                <span className="tabular-nums text-ink-soft">
                   sev {Math.round(clampProgress(d.severity) * 100)}% · day{' '}
                   {Math.floor(d.appliedAt / SECONDS_PER_DAY)}
                 </span>
@@ -466,7 +466,7 @@ export function BiologyPanel({ className }: BiologyPanelProps = {}): ReactElemen
         className="flex flex-col gap-1"
         data-testid="biology-sustainable-harvest"
       >
-        <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-slate-500">
+        <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-ink-soft">
           Sustainable harvest estimate (GDD §5.4)
           <InfoHint
             label={getExplanation('biology-sustainable-harvest').label}
@@ -486,10 +486,10 @@ export function BiologyPanel({ className }: BiologyPanelProps = {}): ReactElemen
 
       {/* Derived health explanation — the headline relationship sentence. */}
       <section
-        className="rounded border border-slate-800/60 bg-slate-900/40 p-3 text-xs text-slate-200"
+        className="rounded border border-ink/60 bg-parchment/40 p-3 text-xs text-ink"
         data-testid="biology-health-explanation"
       >
-        <span className="mb-1 block text-[10px] uppercase tracking-wider text-slate-500">
+        <span className="mb-1 block text-[10px] uppercase tracking-wider text-ink-soft">
           Derived health explanation
         </span>
         {healthExplanation}

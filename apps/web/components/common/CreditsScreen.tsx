@@ -17,10 +17,10 @@ import { CREDITS, ATTRIBUTION_LINES } from '@capitalist-tree/content';
 function LicenseBadge({ license }: { license: 'CC0' | 'CC-BY' | 'CC-BY-SA' }): ReactElement {
   const tone =
     license === 'CC0'
-      ? 'bg-emerald-900/60 text-emerald-300 ring-emerald-700'
+      ? 'bg-emerald-900/60 text-leaf-dark ring-emerald-700'
       : license === 'CC-BY'
-        ? 'bg-sky-900/60 text-sky-300 ring-sky-700'
-        : 'bg-amber-900/60 text-amber-300 ring-amber-700';
+        ? 'bg-sky-900/60 text-sky-800 ring-sky-700'
+        : 'bg-amber-900/60 text-brass-2 ring-amber-700';
   return (
     <span
       className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold ring-1 ${tone}`}
@@ -41,30 +41,30 @@ export function CreditsScreen(): ReactElement {
   const audio = CREDITS.filter((c) => c.category === 'audio');
 
   return (
-    <section className="flex flex-col gap-4 rounded-lg border border-slate-800 bg-slate-900/60 p-4">
+    <section className="flex flex-col gap-4 rounded-lg border border-ink bg-parchment/60 p-4">
       <header className="flex flex-col gap-1">
-        <h2 className="text-lg font-semibold text-slate-100">Credits — Artwork &amp; Audio</h2>
-        <p className="text-xs text-slate-400">
+        <h2 className="text-lg font-semibold text-ink">Credits — Artwork &amp; Audio</h2>
+        <p className="text-xs text-ink-2">
           All artwork + audio is from free, public-domain, or free-use sources (CC0 / CC-BY).
           No AI-generated art. Full provenance + license verification in{' '}
-          <code className="text-slate-300">docs/credits.md</code>.
+          <code className="text-ink">docs/credits.md</code>.
         </p>
       </header>
 
       <div className="flex flex-col gap-3">
-        <h3 className="text-xs uppercase tracking-wider text-slate-500">Artwork</h3>
+        <h3 className="text-xs uppercase tracking-wider text-ink-soft">Artwork</h3>
         <ul className="flex flex-col gap-2">
           {art.map((c) => (
             <li key={c.file} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm">
-              <span className="font-medium text-slate-200">{c.slot}</span>
-              <span className="text-slate-400">— {c.title}</span>
-              <span className="text-slate-500">by {c.author}</span>
+              <span className="font-medium text-ink">{c.slot}</span>
+              <span className="text-ink-2">— {c.title}</span>
+              <span className="text-ink-soft">by {c.author}</span>
               <LicenseBadge license={c.license} />
               <a
                 href={c.sourceUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-[11px] text-sky-400 hover:text-sky-300 underline-offset-2 hover:underline"
+                className="text-[11px] text-sky-800 hover:text-sky-800 underline-offset-2 hover:underline"
               >
                 source
               </a>
@@ -74,19 +74,19 @@ export function CreditsScreen(): ReactElement {
       </div>
 
       <div className="flex flex-col gap-3">
-        <h3 className="text-xs uppercase tracking-wider text-slate-500">Audio</h3>
+        <h3 className="text-xs uppercase tracking-wider text-ink-soft">Audio</h3>
         <ul className="flex flex-col gap-2">
           {audio.map((c) => (
             <li key={c.file} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm">
-              <span className="font-medium text-slate-200">{c.slot}</span>
-              <span className="text-slate-400">— {c.title}</span>
-              <span className="text-slate-500">by {c.author}</span>
+              <span className="font-medium text-ink">{c.slot}</span>
+              <span className="text-ink-2">— {c.title}</span>
+              <span className="text-ink-soft">by {c.author}</span>
               <LicenseBadge license={c.license} />
               <a
                 href={c.sourceUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-[11px] text-sky-400 hover:text-sky-300 underline-offset-2 hover:underline"
+                className="text-[11px] text-sky-800 hover:text-sky-800 underline-offset-2 hover:underline"
               >
                 source
               </a>
@@ -96,11 +96,11 @@ export function CreditsScreen(): ReactElement {
       </div>
 
       {ATTRIBUTION_LINES.length > 0 ? (
-        <div className="flex flex-col gap-1 rounded border border-slate-800 bg-slate-950/40 p-3">
-          <h3 className="text-xs uppercase tracking-wider text-slate-500">
+        <div className="flex flex-col gap-1 rounded border border-ink bg-parchment-2/40 p-3">
+          <h3 className="text-xs uppercase tracking-wider text-ink-soft">
             Attribution (required by license)
           </h3>
-          <ul className="flex flex-col gap-1 text-xs text-slate-300">
+          <ul className="flex flex-col gap-1 text-xs text-ink">
             {ATTRIBUTION_LINES.map((line) => (
               <li key={line}>{line}</li>
             ))}

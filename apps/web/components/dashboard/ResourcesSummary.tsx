@@ -87,10 +87,10 @@ export function ResourcesSummary({
     <div className={`flex flex-col gap-3 ${className ?? ''}`} data-testid="resources-summary">
       <div className="flex flex-col gap-1">
         <div className="flex items-baseline justify-between">
-          <span className="text-[10px] uppercase tracking-wider text-slate-500">
+          <span className="text-[10px] uppercase tracking-wider text-ink-soft">
             Soil Health
           </span>
-          <span className="text-xs tabular-nums text-slate-400">
+          <span className="text-xs tabular-nums text-ink-2">
             {Math.round(soilHealthClamped * 100)}% · {soilLabel}
           </span>
         </div>
@@ -103,10 +103,10 @@ export function ResourcesSummary({
 
       <div className="flex flex-col gap-1">
         <div className="flex items-baseline justify-between">
-          <span className="text-[10px] uppercase tracking-wider text-slate-500">
+          <span className="text-[10px] uppercase tracking-wider text-ink-soft">
             Tree Hydration
           </span>
-          <span className="text-xs tabular-nums text-slate-400">
+          <span className="text-xs tabular-nums text-ink-2">
             {Math.round(clampProgress(treeWaterFraction) * 100)}% · {treeMoisture.label}
           </span>
         </div>

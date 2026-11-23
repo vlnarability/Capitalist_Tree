@@ -89,15 +89,15 @@ function describeToneToTextClass(
 ): string {
   switch (tone) {
     case 'sky':
-      return 'text-sky-300';
+      return 'text-sky-800';
     case 'emerald':
-      return 'text-emerald-300';
+      return 'text-leaf-dark';
     case 'amber':
-      return 'text-amber-300';
+      return 'text-brass-2';
     case 'rose':
-      return 'text-rose-300';
+      return 'text-accent';
     case 'slate':
-      return 'text-slate-300';
+      return 'text-ink';
   }
 }
 
@@ -166,15 +166,15 @@ function SoilSection({ environment, species }: SoilSectionProps): ReactElement {
 
   return (
     <section className="flex flex-col gap-2" data-testid="environment-soil">
-      <span className="text-[10px] uppercase tracking-wider text-slate-500">
+      <span className="text-[10px] uppercase tracking-wider text-ink-soft">
         Soil nutrients + condition
       </span>
       {nutrientSummary ? (
-        <p className="text-xs text-slate-400" data-testid="environment-nutrient-summary">
+        <p className="text-xs text-ink-2" data-testid="environment-nutrient-summary">
           {nutrientSummary.summary}
         </p>
       ) : (
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-ink-soft">
           Soil nutrient ratios unavailable (species not resolved).
         </p>
       )}
@@ -188,17 +188,17 @@ function SoilSection({ environment, species }: SoilSectionProps): ReactElement {
         ).map(([key, value]) => (
           <li
             key={key}
-            className="flex flex-col gap-0.5 rounded border border-slate-800/60 bg-slate-900/40 p-2"
+            className="flex flex-col gap-0.5 rounded border border-ink/60 bg-parchment/40 p-2"
             data-testid={`environment-npk-${key}`}
           >
-            <span className="text-[10px] uppercase tracking-wider text-slate-500">
+            <span className="text-[10px] uppercase tracking-wider text-ink-soft">
               {NUTRIENT_LABELS[key]}
             </span>
-            <span className="text-base font-semibold text-slate-100">
+            <span className="text-base font-semibold text-ink">
               {value.toFixed(1)}
             </span>
             {requirement ? (
-              <span className="text-[10px] text-slate-500">
+              <span className="text-[10px] text-ink-soft">
                 req {requirement[key].toFixed(1)}
               </span>
             ) : null}
@@ -249,7 +249,7 @@ function WaterSection({ environment }: WaterSectionProps): ReactElement {
   const balance = describeSoilWaterBalance(soil.soilWater, SOIL_WATER_CAPACITY);
   return (
     <section className="flex flex-col gap-2" data-testid="environment-water">
-      <span className="text-[10px] uppercase tracking-wider text-slate-500">
+      <span className="text-[10px] uppercase tracking-wider text-ink-soft">
         Water balance
       </span>
       <p
@@ -300,7 +300,7 @@ function WeatherSection({ weather }: WeatherSectionProps): ReactElement {
         : 'sky';
   return (
     <section className="flex flex-col gap-2" data-testid="environment-weather">
-      <span className="text-[10px] uppercase tracking-wider text-slate-500">
+      <span className="text-[10px] uppercase tracking-wider text-ink-soft">
         Weather details
       </span>
       <div className="grid grid-cols-2 gap-2 text-xs">
@@ -345,10 +345,10 @@ function AtmosphereSection({ environment, clock }: AtmosphereSectionProps): Reac
   );
   return (
     <section className="flex flex-col gap-2" data-testid="environment-atmosphere">
-      <span className="text-[10px] uppercase tracking-wider text-slate-500">
+      <span className="text-[10px] uppercase tracking-wider text-ink-soft">
         Pollution + atmosphere
       </span>
-      <p className="text-xs text-slate-400" data-testid="environment-pollution">
+      <p className="text-xs text-ink-2" data-testid="environment-pollution">
         {pollution}
       </p>
       <div className="grid grid-cols-2 gap-2 text-xs">
@@ -397,7 +397,7 @@ function BiodiversitySection({
   const bio = environment.biodiversity;
   return (
     <section className="flex flex-col gap-2" data-testid="environment-biodiversity">
-      <span className="text-[10px] uppercase tracking-wider text-slate-500">
+      <span className="text-[10px] uppercase tracking-wider text-ink-soft">
         Biodiversity
       </span>
       <div className="grid grid-cols-2 gap-2 text-xs">
@@ -446,8 +446,8 @@ function BiodiversitySection({
               key={sp.speciesId}
               className="flex items-baseline justify-between gap-2"
             >
-              <span className="text-slate-400">{sp.speciesId}</span>
-              <span className="text-slate-300">
+              <span className="text-ink-2">{sp.speciesId}</span>
+              <span className="text-ink">
                 pop {sp.population.toFixed(1)}
               </span>
             </li>
@@ -496,10 +496,10 @@ function IndicatorsSection({
     v >= 0.7 ? 'emerald' : v >= 0.3 ? 'amber' : 'rose';
   return (
     <section className="flex flex-col gap-2" data-testid="environment-indicators">
-      <span className="text-[10px] uppercase tracking-wider text-slate-500">
+      <span className="text-[10px] uppercase tracking-wider text-ink-soft">
         Environmental indicators (GAP-21)
       </span>
-      <p className="text-xs text-slate-400" data-testid="environment-indicators-summary">
+      <p className="text-xs text-ink-2" data-testid="environment-indicators-summary">
         Long-horizon ecological pressure (GDD §10.1) — relaxes toward targets
         set by emissions, warming, land use, + soil nutrients.
       </p>

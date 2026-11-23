@@ -107,7 +107,7 @@ export function WelcomePanel({ className }: WelcomePanelProps = {}): ReactElemen
 
   return (
     <div
-      className="pointer-events-auto fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm"
+      className="pointer-events-auto fixed inset-0 z-[60] flex items-center justify-center bg-parchment-2/70 p-4 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-labelledby="welcome-panel-title"
@@ -115,18 +115,18 @@ export function WelcomePanel({ className }: WelcomePanelProps = {}): ReactElemen
     >
       <div
         ref={dialogRef}
-        className={`max-h-[85vh] w-full max-w-xl overflow-y-auto rounded-lg border border-slate-700 bg-slate-900 p-6 shadow-2xl ${className ?? ''}`}
+        className={`max-h-[85vh] w-full max-w-xl overflow-y-auto rounded-lg border border-ink bg-parchment p-6 shadow-2xl ${className ?? ''}`}
       >
         {/* Header. */}
         <header className="mb-4">
           <h2
             id="welcome-panel-title"
-            className="text-lg font-semibold text-slate-100"
+            className="text-lg font-semibold text-ink"
             data-testid="welcome-panel-title"
           >
             {tutorial.title}
           </h2>
-          <p className="mt-1 text-sm text-slate-400" data-testid="welcome-panel-intro">
+          <p className="mt-1 text-sm text-ink-2" data-testid="welcome-panel-intro">
             {tutorial.intro}
           </p>
         </header>
@@ -135,12 +135,12 @@ export function WelcomePanel({ className }: WelcomePanelProps = {}): ReactElemen
         <ol className="mb-5 flex flex-col gap-3" data-testid="welcome-panel-tips">
           {tutorial.tips.map((tip, i) => (
             <li key={tip.heading} className="flex gap-2" data-testid={`welcome-panel-tip-${i}`}>
-              <span className="flex h-5 w-5 flex-none items-center justify-center rounded-full bg-emerald-900/60 text-[10px] font-semibold text-emerald-300">
+              <span className="flex h-5 w-5 flex-none items-center justify-center rounded-full bg-emerald-900/60 text-[10px] font-semibold text-leaf-dark">
                 {i + 1}
               </span>
               <div className="flex flex-col gap-0.5">
-                <h3 className="text-sm font-semibold text-slate-200">{tip.heading}</h3>
-                <p className="text-xs leading-relaxed text-slate-400">{tip.body}</p>
+                <h3 className="text-sm font-semibold text-ink">{tip.heading}</h3>
+                <p className="text-xs leading-relaxed text-ink-2">{tip.body}</p>
               </div>
             </li>
           ))}
@@ -148,7 +148,7 @@ export function WelcomePanel({ className }: WelcomePanelProps = {}): ReactElemen
 
         {/* Dismiss. */}
         <footer className="flex items-center justify-between gap-2">
-          <p className="text-[10px] text-slate-500" data-testid="welcome-panel-hint">
+          <p className="text-[10px] text-ink-soft" data-testid="welcome-panel-hint">
             Press Esc or click Get Started to dismiss.
           </p>
           <Button

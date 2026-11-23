@@ -95,23 +95,23 @@ export function WeatherDisplay({ className }: WeatherDisplayProps = {}): ReactEl
           {w.icon}
         </span>
         <div className="flex flex-col">
-          <span className={`text-lg font-semibold ${textClassForTone(w.tone)}`}>
+          <span className={`text-lg font-semibold font-serif ${textClassForTone(w.tone)}`}>
             {w.label}
           </span>
-          <span className="text-xs text-slate-500">{tempStr}</span>
+          <span className="text-xs text-ink-soft font-serif">{tempStr}</span>
         </div>
       </div>
 
-      <p className="text-xs text-slate-400" data-testid="weather-hint">
+      <p className="text-xs text-ink-2 font-serif italic" data-testid="weather-hint">
         {w.hint}
       </p>
 
       <div className="flex flex-col gap-1">
         <div className="flex items-baseline justify-between">
-          <span className="text-[10px] uppercase tracking-wider text-slate-500">
+          <span className="text-[10px] uppercase tracking-wider text-ink-soft font-serif">
             Intensity
           </span>
-          <span className="text-xs tabular-nums text-slate-400">
+          <span className="text-xs tabular-nums text-ink-2 font-serif">
             {Math.round(intensityClamped * 100)}%
           </span>
         </div>
@@ -122,16 +122,16 @@ export function WeatherDisplay({ className }: WeatherDisplayProps = {}): ReactEl
         />
       </div>
 
-      <div className="flex items-center justify-between border-t border-slate-800/80 pt-2">
+      <div className="flex items-center justify-between border-t border-dotted border-ink/25 pt-2">
         <div className="flex items-center gap-1.5">
           <span aria-hidden="true">{s.icon}</span>
-          <span className={`text-sm font-medium ${textClassForTone(s.tone)}`}>
+          <span className={`text-sm font-medium font-serif ${textClassForTone(s.tone)}`}>
             {s.label}
           </span>
         </div>
         <div className="flex flex-col items-end">
-          <span className="font-mono text-sm text-slate-200">{todStr}</span>
-          <span className="text-[10px] text-slate-500">{elapsedStr}</span>
+          <span className="font-journal text-sm text-ink">{todStr}</span>
+          <span className="text-[10px] text-ink-soft font-journal">{elapsedStr}</span>
         </div>
       </div>
     </div>
@@ -142,22 +142,24 @@ export function WeatherDisplay({ className }: WeatherDisplayProps = {}): ReactEl
 function textClassForTone(
   tone: 'amber' | 'slate' | 'sky' | 'indigo' | 'rose' | 'cyan' | 'emerald' | 'orange',
 ): string {
+  // W48 (field journal): weather/season tone text re-skinned for parchment
+  // contrast. The bright -300 Tailwind defaults blew out on cream paper.
   switch (tone) {
     case 'amber':
-      return 'text-amber-300';
+      return 'text-brass-2';
     case 'slate':
-      return 'text-slate-300';
+      return 'text-ink';
     case 'sky':
-      return 'text-sky-300';
+      return 'text-sky-800';
     case 'indigo':
-      return 'text-indigo-300';
+      return 'text-ink';
     case 'rose':
-      return 'text-rose-300';
+      return 'text-accent';
     case 'cyan':
-      return 'text-cyan-300';
+      return 'text-teal-800';
     case 'emerald':
-      return 'text-emerald-300';
+      return 'text-leaf-dark';
     case 'orange':
-      return 'text-orange-300';
+      return 'text-brass-2';
   }
 }

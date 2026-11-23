@@ -136,7 +136,7 @@ export function TradePanel({
         />
       </div>
 
-      <p className="text-xs text-slate-400" data-testid="trade-summary">
+      <p className="text-xs text-ink-2" data-testid="trade-summary">
         Foreign (world) prices are independent of the domestic market — import
         when foreign + tariff beats the domestic price; export when foreign
         tops it (or to liquidate surplus).
@@ -229,31 +229,31 @@ function TradeRow({
 }: TradeRowProps): ReactElement {
   return (
     <li
-      className="flex flex-col gap-2 rounded border border-slate-800/60 bg-slate-900/40 p-2"
+      className="flex flex-col gap-2 rounded border border-ink/60 bg-parchment/40 p-2"
       data-testid={`trade-row-${def.id}`}
     >
       <div className="flex items-baseline justify-between">
-        <span className="text-[10px] uppercase tracking-wider text-slate-500">
+        <span className="text-[10px] uppercase tracking-wider text-ink-soft">
           {def.id} ({def.unit})
         </span>
-        <span className="text-[10px] text-slate-500">
+        <span className="text-[10px] text-ink-soft">
           held {held}
         </span>
       </div>
       <div className="grid grid-cols-2 gap-2 text-xs tabular-nums">
         <div className="flex flex-col">
-          <span className="text-[10px] uppercase tracking-wider text-slate-500">
+          <span className="text-[10px] uppercase tracking-wider text-ink-soft">
             Domestic
           </span>
-          <span className="text-slate-300" data-testid={`trade-domestic-${def.id}`}>
+          <span className="text-ink" data-testid={`trade-domestic-${def.id}`}>
             {formatMoneyFromStr(domesticPrice)} / {def.unit}
           </span>
         </div>
         <div className="flex flex-col">
-          <span className="text-[10px] uppercase tracking-wider text-slate-500">
+          <span className="text-[10px] uppercase tracking-wider text-ink-soft">
             Foreign (world)
           </span>
-          <span className="text-slate-300" data-testid={`trade-foreign-${def.id}`}>
+          <span className="text-ink" data-testid={`trade-foreign-${def.id}`}>
             {formatMoneyFromStr(String(foreignUnit))} / {def.unit}
           </span>
         </div>
@@ -265,24 +265,24 @@ function TradeRow({
           step={1}
           value={qty}
           onChange={(e) => onQty(Math.floor(Number(e.target.value) || 1))}
-          className="w-20 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100 tabular-nums focus:border-sky-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50"
+          className="w-20 rounded border border-ink bg-parchment px-2 py-1 text-sm text-ink tabular-nums focus:border-sky-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50"
           data-testid={`trade-qty-${def.id}`}
           aria-label={`${def.id} trade quantity`}
         />
-        <span className="text-[10px] uppercase tracking-wider text-slate-500">
+        <span className="text-[10px] uppercase tracking-wider text-ink-soft">
           {def.unit}s
         </span>
       </div>
       <div className="grid grid-cols-2 gap-2 text-xs tabular-nums">
-        <span className="text-slate-500">
+        <span className="text-ink-soft">
           Import{' '}
-          <span className="text-slate-300" data-testid={`trade-import-cost-${def.id}`}>
+          <span className="text-ink" data-testid={`trade-import-cost-${def.id}`}>
             {formatMoneyFromStr(String(importCost))}
           </span>
         </span>
-        <span className="text-slate-500">
+        <span className="text-ink-soft">
           Export{' '}
-          <span className="text-slate-300" data-testid={`trade-export-rev-${def.id}`}>
+          <span className="text-ink" data-testid={`trade-export-rev-${def.id}`}>
             {formatMoneyFromStr(String(exportRevenue))}
           </span>
         </span>
@@ -306,12 +306,12 @@ function TradeRow({
         </Button>
       </div>
       {!canAffordImport ? (
-        <p className="text-xs text-rose-400/80" data-testid={`trade-import-short-${def.id}`}>
+        <p className="text-xs text-accent/80" data-testid={`trade-import-short-${def.id}`}>
           Insufficient funds to import {qty} {def.unit}.
         </p>
       ) : null}
       {!canExport ? (
-        <p className="text-xs text-rose-400/80" data-testid={`trade-export-short-${def.id}`}>
+        <p className="text-xs text-accent/80" data-testid={`trade-export-short-${def.id}`}>
           Held {held} {def.unit} — short for {qty}.
         </p>
       ) : null}

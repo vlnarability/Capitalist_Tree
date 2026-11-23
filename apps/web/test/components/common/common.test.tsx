@@ -50,7 +50,7 @@ describe('Panel (P5b common)', () => {
       </Panel>,
     );
     const section = container.querySelector('section');
-    expect(section?.className).toContain('border-emerald-800/60');
+    expect(section?.className).toContain('border-leaf/45');
   });
 
   it('omits the header when no title is provided', () => {
@@ -76,13 +76,13 @@ describe('Button (P5b common)', () => {
   it('applies the active tone classes', () => {
     const { getByText } = render(<Button tone="active">1x</Button>);
     const btn = getByText('1x');
-    expect(btn.className).toContain('border-emerald-500');
-    expect(btn.className).toContain('bg-emerald-500/10');
+    expect(btn.className).toContain('border-leaf');
+    expect(btn.className).toContain('bg-leaf/20');
   });
 
   it('applies the warning tone classes', () => {
     const { getByText } = render(<Button tone="warning">Pause</Button>);
-    expect(getByText('Pause').className).toContain('border-amber-500');
+    expect(getByText('Pause').className).toContain('border-brass');
   });
 
   it('renders an icon when provided', () => {
@@ -126,12 +126,12 @@ describe('Stat (P5b common)', () => {
 
   it('applies the tone text class (emerald)', () => {
     const { getByText } = render(<Stat label="Tier" value="Healthy" tone="emerald" />);
-    expect(getByText('Healthy').className).toContain('text-emerald-300');
+    expect(getByText('Healthy').className).toContain('text-leaf-dark');
   });
 
   it('applies slate tone by default', () => {
     const { getByText } = render(<Stat label="Cash" value="$0" />);
-    expect(getByText('$0').className).toContain('text-slate-100');
+    expect(getByText('$0').className).toContain('text-ink');
   });
 });
 
@@ -178,6 +178,6 @@ describe('ProgressBar (P5b common)', () => {
       <ProgressBar value={0.5} label="X" tone="emerald" />,
     );
     const fill = container.querySelector('[role="progressbar"] > div');
-    expect(fill?.className).toContain('bg-emerald-500');
+    expect(fill?.className).toContain('bg-leaf');
   });
 });
