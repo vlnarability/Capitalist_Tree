@@ -33,6 +33,12 @@
   --ct-brass: 106 82 34;
   --ct-brass-2: 82 58 20;
   --ct-steward: 176 133 48;
+  /* W52 — corner radius (score 5 midpoint = 0.125rem). Sharp (0) at brutalist,
+   * soft (0.25rem = Tailwind DEFAULT base) at floral. Tailwind's borderRadius
+   * tokens are remapped as multiples of this var (see tailwind.config.mjs), so
+   * at score 10 every token resolves to its original Tailwind value (no
+   * regression at full sustainability) and at score 0 all corners go sharp. */
+  --ct-radius: 0.125rem;
   /* Neutral sans tier (score 5 = balanced). The hook swaps this per tier. */
   --ct-font-body: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
