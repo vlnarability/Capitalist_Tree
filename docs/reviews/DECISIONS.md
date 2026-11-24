@@ -99,6 +99,51 @@ severe). Re-run results:
 - 25yr/100yr need a detached runner (~11min/~23min per scenario). Report at
   `download/dr1-long-run-report.md`.
 
+**W61 + W62 balance tuning (2026-11-24).** The W59 bot surfaced two follow-up
+issues once the tree could survive long-term: the sustainable player went broke
+(financial independence FAIL) + the env collapsed under conservative harvesting.
+Both root-caused + fixed:
+
+- **W61 (financial independence):** the leaf-to-cash conversion was a FIXED
+  $10/leaf (`PROVISIONAL_BIOLOGY_DEFAULT_LEAF_DENOMINATION_MINOR = '1000'`). The
+  conservative harvest needed for sustainability (~0.43 leaves/day) yielded only
+  ~430 minor/day against the ~800 minor/day living-expense drain (24000 minor /
+  30d, 3 bills in 60d) — a ~2:1 shortfall (cash dropped 50000→33000 by day 60).
+  Fix: raised the denomination 1000→2500 ($25/leaf; break-even ~$18.60). At
+  $25/leaf the conservative harvest yields ~1075 minor/day (net +275/day).
+- **W62 (env collapse — TWO root causes):**
+  (a) `industrialActivity` had NO passive decay — it only decreased via the
+  soil-gated climate feedback (far too slow + only fires once soil is already
+  degraded). Each harvest's IA delta (+0.012 for 12 leaves) accumulated forever
+  (a ratchet), so conservative harvesting collapsed the env over ~3mo. Fix:
+  added a 2%/day passive IA decay in `evolveRegions` (regional.ts) — a +0.012
+  harvest mostly decays before the next (28d × 2% ≈ 43% decay), so conservative
+  harvesting reaches a low equilibrium IA (~0.02) rather than ratcheting toward
+  the 0.4 destruction threshold.
+  (b) A separate sapling→mature `forestCoverage` cliff at day 90: the global
+  tree-derived `forestCoverage` dropped from 0.3 (sapling baseline) to ~0.108 the
+  moment the tree turned 90d (canopy≈0 after harvest), regardless of play. Fix:
+  floored the mature formula at the sapling baseline in `deriveForestCoverage`
+  (environment.ts) so a young tree with a thin canopy doesn't read as deforested.
+
+Re-run results (5yr bot):
+- ✅ **Financial independence ≤60d:** PASS for ALL 4 scenarios. Sustainable cash
+  50000→115500 by day 60 (was 33000/FAIL). Balanced 50000→138000.
+- ✅ **Env does NOT collapse under sustainable/balanced:** forestCoverage stable
+  at 0.300 throughout (was 0.110 by day 95); `collapsed = no` at all checkpoints.
+  Biodiversity hovers at ~0.25 (above the 0.2 irreversible threshold).
+- ✅ **Sustainable + balanced trees survive to 5yr** (W59 holds).
+- ✅ **Extractive tree still dies day 44** (max harvesting fatal — correct).
+- ⚠️ **Recovery ≥1yr:** still INCONCLUSIVE — the env doesn't actively recover
+  within 5yr after exploitation stops (the starting forestCoverage 0.300 is below
+  the regional recovery equilibrium, so the regional env settles at a degraded
+  steady state rather than recovering). This is a lower-bound target (not
+  collapsing is not a violation) + needs a higher starting forestCoverage or a
+  separate recovery mechanic. Follow-up.
+- **Sustainable play is now fully viable:** tree survives + player is financially
+  independent + env doesn't collapse. The DR-1 design promise holds for the
+  sustainable/balanced/extractive scenarios.
+
 **Status:** Adopted — targets provisional; balance audit complete. Replaces the
 GDD §17 "Environmental recovery timescales" + "Detailed photosynthesis and
 energy allocation equations" open items with concrete measured goals.

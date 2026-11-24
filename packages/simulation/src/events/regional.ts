@@ -78,6 +78,24 @@ const PROVISIONAL_EVENT_POLLUTION_RATE = 10;
 // reaches equilibrium when accumulation equals decay. PROVISIONAL.
 const PROVISIONAL_EVENT_POLLUTION_DECAY_RATE = 0.05;
 
+// W62 (2026-11-24): passive industrialActivity decay rate per sim day.
+// Pre-W62, industrialActivity had NO passive decay — it only decreased via the
+// soil-gated climate feedback (climate.ts: soilDeficit × 0.001 × days), which is
+// far too slow + only fires once soil is already degraded. So each harvest's IA
+// delta (+0.012 for 12 leaves, +0.025 for 25 leaves — handlers.ts:308-310)
+// accumulated forever (a ratchet, clamped at 1.0). Conservative harvesting
+// (12 leaves/28d) piled IA onto the home region faster than the climate feedback
+// could remove it, collapsing the env even under sustainable play (the W59 bot
+// found forestCoverage 0.300→0.110 + biodiversity 0.800→0.241 by day 95). A
+// 2%/day decay means a +0.012 harvest mostly decays before the next (28d × 2%
+// ≈ 43% decay), so conservative harvesting reaches a low equilibrium IA
+// (~0.02, near the baseline) rather than ratcheting toward the 0.4 destruction
+// threshold. Extractive play (max harvests every 14d, tree dies ~day 44) adds
+// little IA before death, so the decay doesn't weaken the extractive-collapse
+// dynamic. The climate feedback (soil-degradation-driven IA reduction) still
+// runs on top of this passive decay for the acute-collapse case.
+const PROVISIONAL_EVENT_IA_DECAY_RATE = 0.02;
+
 // PROVISIONAL (GDD §17: Environmental recovery timescales)
 // Total pollution load (air + water + soil) at which ecosystem stress ≈ 1 per
 // sim day (i.e. a region with this much pollution loses ~1 full point of
@@ -334,6 +352,15 @@ export function evolveRegions(
     const totalPollution = pollution.air + pollution.water + pollution.soil;
     const pollutionStress = (totalPollution / PROVISIONAL_EVENT_POLLUTION_STRESS_SCALE) * days;
 
+    // W62: passive industrialActivity decay. Pre-W62, IA never decayed here
+    // (only via the soil-gated climate feedback in climate.ts, which is too
+    // slow), so each harvest's IA delta accumulated forever. The decay applies
+    // AFTER the pollution accumulation (which uses the current IA) so the
+    // pollution reflects this step's activity, then the IA relaxes for the next.
+    const industrialActivity = clamp01(
+      region.industrialActivity * Math.pow(1 - PROVISIONAL_EVENT_IA_DECAY_RATE, days),
+    );
+
     // Recovery toward baseline (GDD §10.3 — recovery is possible but costly).
     // W43: biodiversity + soilHealth recovery terms include the typed research
     // bonuses (biodiversity-enhancement / soil-restoration nodes) — pre-W43
@@ -378,6 +405,7 @@ export function evolveRegions(
 
     const after: RegionState = {
       ...region,
+      industrialActivity,
       pollution,
       soilHealth,
       waterAvailability,

@@ -74,7 +74,7 @@ export const PROVISIONAL_BIOLOGY_RESERVE_CAPACITY_DEVELOPMENT_GAIN = 1.0;
 // PROVISIONAL (GDD §17: initial leaf denomination and production rules)
 //
 // Default leaf denomination (minor currency units) when a species doesn't
-// specify one. $10.00 = 1000 minor units. The White Oak species uses this.
+// specify one. $25.00 = 2500 minor units. The White Oak species uses this.
 //
 // P12-C follow-up #3 (economy tuning for the DR-1 financial-independence
 // target ≤60d): raised 100 → 1000 (10×). At $1/leaf, a young tree (~30
@@ -88,7 +88,19 @@ export const PROVISIONAL_BIOLOGY_RESERVE_CAPACITY_DEVELOPMENT_GAIN = 1.0;
 // met. The 10× raise preserves the relative bill weights (housing still
 // dominates) and the $500 starting-cash runway (now ~2 months at the bill,
 // giving the player time to start harvesting).
-export const PROVISIONAL_BIOLOGY_DEFAULT_LEAF_DENOMINATION_MINOR = '1000';
+//
+// W61 (2026-11-24): raised 1000 → 2500 (2.5×). The W59 wear-recovery fix made
+// sustainable play viable (the tree survives), but the W59 bot then surfaced
+// that the CONSERVATIVE harvest needed for sustainability (25% of foliage
+// every 28d ≈ 0.43 leaves/day) yields only ~430 minor/day at $10/leaf — below
+// the ~800 minor/day living-expense drain (24000 minor / 30d, 3 bills in 60d),
+// a ~2:1 shortfall. The sustainable player's cash dropped 50000→33000 by day
+// 60 (DR-1 FAIL). At $25/leaf, the conservative harvest yields ~1075 minor/day
+// (net +275/day), so cash grows ~16500 by day 60 (DR-1 PASS). The extractive
+// scenario's income scales proportionally so it still passes. Break-even is
+// ~$18.60/leaf (800 / 0.43); $25 gives a comfortable margin above RNG/seasonal
+// variance in the tree's growth rate.
+export const PROVISIONAL_BIOLOGY_DEFAULT_LEAF_DENOMINATION_MINOR = '2500';
 
 // PROVISIONAL (GDD §17: maximum harvesting rates)
 //

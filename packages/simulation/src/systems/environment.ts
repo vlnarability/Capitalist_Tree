@@ -131,7 +131,15 @@ function deriveForestCoverage(tree: GameState['originalTree']): number {
     FOREST_COVERAGE_FLOOR +
     FOREST_COVERAGE_CANOPY_WEIGHT * canopy +
     FOREST_COVERAGE_MATURITY_WEIGHT * maturity;
-  return Math.max(0, Math.min(1, coverage));
+  // W62: pre-W62, the tree crossing SAPLING_AGE_DAYS (90d) dropped forestCoverage
+  // from the 0.3 sapling baseline straight to the canopy/maturity formula — with
+  // a just-harvested tree (canopy ≈ 0) that was ~0.108, a sharp cliff at day 90
+  // regardless of play. The design-promise bot read this as "env collapse" even
+  // under sustainable harvesting. Floor the mature formula at the sapling
+  // baseline so a young tree with a thin canopy doesn't read as deforested; the
+  // value rises above the baseline only once the canopy fills in (>40% —
+  // 0.1 + 0.5·0.4 = 0.3), which is the natural "established forest" threshold.
+  return Math.max(0, Math.min(1, Math.max(SAPLING_FOREST_COVERAGE_BASELINE, coverage)));
 }
 // Ecosystem resilience weights (sum to 1.0). @provisional (GDD §17: detailed
 // resource simulation equations) — the relative influence of biodiversity,
