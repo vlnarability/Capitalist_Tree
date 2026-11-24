@@ -62,6 +62,15 @@ above real-time targets hold (financial independence ≤ 60d, neglect death ≥
 `@provisional` rate constants (growth, mortality, market scarcity,
 environmental recovery) are tuned against these targets.
 
+**W58 verification (5yr bot, 2026-11-24).** The design-promise bot
+(`packages/simulation/test/dr1-long-run.test.ts`) runs 4 scenarios at 5yr
+(600d, 1-day steps, seed 7) + verifies the DR-1 targets. Results:
+- ✅ **Financial independence ≤60d:** PASS — cash grew by day 60 in all 4 scenarios.
+- ✅ **Collapse ≥2yr:** PASS — the extractive env did not collapse within 5yr.
+- ⚠️ **Recovery ≥1yr:** INCONCLUSIVE — the env did not recover within 5yr after exploitation stopped (the starting forestCoverage=0.300 is below the 0.5 recovery threshold, so the env was never "healthy"; needs the 25yr run + a higher starting forestCoverage to settle).
+- **Balance issue surfaced:** the tree dies by day 44 (extractive) / day 85 (sustainable/balanced) — the "sustainable" harvest amounts (30-40 leaves/28d) are too aggressive against the tree's wear/health mechanics. The sustainable scenario should keep the tree alive long-term; tuning needed.
+- 25yr/100yr need a detached runner (~11min/~23min per scenario at ~114ms/day). Report at `download/dr1-long-run-report.md`.
+
 **Status:** Adopted — targets provisional; balance audit complete. Replaces the
 GDD §17 "Environmental recovery timescales" + "Detailed photosynthesis and
 energy allocation equations" open items with concrete measured goals.
