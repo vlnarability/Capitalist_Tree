@@ -58,6 +58,7 @@ import {
 } from '@capitalist-tree/rendering';
 import type { TreeViewProps } from '@capitalist-tree/rendering';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
+import { labelForTier, tierFromHealth } from '../../lib/format/tree';
 
 // Re-export TreeViewProps so consumers can `import { TreeView, type TreeViewProps }`
 // from one place. P4a declared the type; P4d wires the component.
@@ -74,6 +75,54 @@ export type { TreeViewProps } from '@capitalist-tree/rendering';
 const DEFAULT_WIDTH_PX = 600;
 /** Default canvas backing-store height (px). Matches PROVISIONAL_RENDER_CANVAS_DEFAULT_HEIGHT_PX. */
 const DEFAULT_HEIGHT_PX = 480;
+
+// ----------------------------------------------------------------------------
+// RV6-7 — live textual alternative for the canvas.
+//
+// The canvas's aria-label was static ('Capitalist tree — click to harvest
+// leaves' / 'Procedural capitalist-tree visualization'). This helper builds a
+// DYNAMIC label reflecting the tree's current biological state, bucketed so it
+// only changes on meaningful transitions (condition tier / canopy fullness /
+// season / weather) — not every tick. A visually-hidden `aria-live="polite"`
+// region (rendered alongside the canvas) announces condition-tier changes so
+// screen readers surface them without the player navigating to the canvas.
+// ----------------------------------------------------------------------------
+
+/** Bucket the foliage density into a plain-language canopy fullness label. */
+function canopyFullness(density: number): string {
+  if (density >= 0.75) return 'full canopy';
+  if (density >= 0.5) return 'moderate canopy';
+  if (density >= 0.25) return 'sparse canopy';
+  return 'bare canopy';
+}
+
+/**
+ * Build a live textual alternative for the canvas. Pure: given the same
+ * (tree, environment, interactive) inputs, returns the same string. The label
+ * buckets the condition tier (Healthy/Stressed/Critical/Dead) + canopy
+ * fullness + season + weather so it only changes on meaningful transitions.
+ */
+function buildCanvasAriaLabel(
+  tree: TreeViewProps['tree'],
+  environment: TreeViewProps['environment'],
+  interactive: boolean,
+): string {
+  const tier = tree.alive
+    ? labelForTier(tierFromHealth(tree.foliageCondition))
+    : labelForTier('dead');
+  const season =
+    environment.season.charAt(0).toUpperCase() + environment.season.slice(1);
+  const weather = String(environment.weatherCondition).replace(/-/g, ' ');
+  const base = interactive
+    ? 'Capitalist tree'
+    : 'Procedural capitalist-tree visualization';
+  // Dead trees have no canopy — skip the fullness bucket to avoid redundancy.
+  const state = !tree.alive
+    ? 'Dead'
+    : `${tier.label}, ${canopyFullness(tree.foliageDensity)}`;
+  const action = interactive ? '. Click to harvest leaves.' : '';
+  return `${base}. ${state}. ${season}, ${weather}${action}`;
+}
 
 /**
  * TreeView — renders one procedural tree to a <canvas> element.
@@ -271,8 +320,18 @@ export function TreeView({
     }
   }, [width, height]);
 
+  // RV6-7 — live textual alternative: the aria-label reflects the tree's
+  // current biological state (condition tier + canopy fullness + season +
+  // weather), bucketed so it only changes on meaningful transitions. The
+  // visually-hidden live region below announces condition-tier changes.
+  const ariaLabel = buildCanvasAriaLabel(tree, environment, Boolean(onHarvest));
+  const conditionLabel = tree.alive
+    ? labelForTier(tierFromHealth(tree.foliageCondition)).label
+    : 'Dead';
+
   return (
-    <canvas
+    <>
+      <canvas
       ref={canvasRef}
       width={width}
       height={height}
@@ -329,11 +388,7 @@ export function TreeView({
         cursor: onHarvest ? 'pointer' : 'default',
       }}
       role={onHarvest ? 'button' : 'img'}
-      aria-label={
-        onHarvest
-          ? 'Capitalist tree — click to harvest leaves'
-          : 'Procedural capitalist-tree visualization'
-      }
+      aria-label={ariaLabel}
       // The canvas is focusable only when interactive, so keyboard users can
       // trigger the harvest via Enter/Space (the button role maps these to
       // click). A non-interactive canvas is not focusable (role="img").
@@ -352,5 +407,15 @@ export function TreeView({
           : undefined
       }
     />
+      {/* RV6-7: visually-hidden live region announces condition-tier
+          transitions (Healthy → Stressed → Critical → Dead) so screen
+          readers surface significant state changes without the player
+          navigating to the canvas. `sr-only` hides it visually; `aria-live`
+          announces content changes. The content only changes when the tier
+          changes, so it doesn't flood. */}
+      <div aria-live="polite" className="sr-only" data-testid="canvas-live-region">
+        Tree condition: {conditionLabel}.
+      </div>
+    </>
   );
 }
