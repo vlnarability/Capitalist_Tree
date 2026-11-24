@@ -3,24 +3,60 @@
 @tailwind utilities;
 
 /*
- * Field Journal aesthetic (W48): parchment paper, ink text, paper grain.
- * The body is the page of a naturalist's notebook; panels are cards laid on
- * it. Per the global HTML-responsiveness rule nothing here fixes a width.
+ * Dynamic aesthetic (W51): parchment / ink / leaf / bark / brass are driven by
+ * RGB-channel CSS variables (`--ct-*`) defined in `:root` below and overridden
+ * on `<html>` by the `useAestheticTheme` hook from the sustainability score
+ * (0–10). The color form `rgb(var(--ct-X) / <alpha-value>)` preserves every
+ * existing opacity modifier (`bg-parchment/45`, `border-ink/25`) without
+ * touching any component — the whole app re-themes by swapping the vars.
+ * `accent` (rust) stays a fixed literal: it is the error/warning color
+ * (insufficient-funds, dead-tree, severe-weather) and must not shift with the
+ * tier. `--ct-steward` is the piecewise red→brass→green score indicator,
+ * used only by the aesthetic meter.
+ *
+ * The `:root` defaults below are the score=5 (neutral midpoint) values —
+ * byte-identical to `interpolatePalette(5)` — so SSR renders identically to
+ * the hook's first client write (no theme flash on hydration).
  */
-html,
-body {
-  background-color: #f4ecd8;
-  color: #3a2a1a;
-  font-family: Georgia, 'Times New Roman', serif;
+:root {
+  --ct-parchment: 145 141 131;
+  --ct-parchment-2: 147 141 127;
+  --ct-parchment-3: 147 141 125;
+  --ct-ink: 129 121 113;
+  --ct-ink-2: 123 112 101;
+  --ct-ink-soft: 138 130 114;
+  --ct-leaf: 114 122 58;
+  --ct-leaf-2: 138 146 74;
+  --ct-leaf-dark: 82 90 42;
+  --ct-bark: 83 57 33;
+  --ct-bark-2: 58 37 16;
+  --ct-brass: 106 82 34;
+  --ct-brass-2: 82 58 20;
+  --ct-steward: 176 133 48;
+  /* Neutral sans tier (score 5 = balanced). The hook swaps this per tier. */
+  --ct-font-body: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
-/* Subtle paper grain — two soft radial stains + faint horizontal rules
-   like ledger paper. Kept very light so chart/tree contrast is unaffected. */
+html,
+body {
+  background-color: rgb(var(--ct-parchment));
+  color: rgb(var(--ct-ink));
+  font-family: var(--ct-font-body);
+}
+
+/*
+ * Paper grain — two soft radial stains + faint horizontal ledger rules. The
+ * stain color follows `--ct-ink`, so it shifts with the theme: faint steel
+ * stains on concrete at the brutalist end, ink stains on parchment at the
+ * floral end (the original W48 field-journal look). Kept very light so
+ * chart/tree contrast is unaffected. `background-attachment: fixed` keeps it
+ * stable under scroll.
+ */
 body {
   background-image:
-    radial-gradient(circle at 18% 28%, rgba(58, 42, 26, 0.05) 0, transparent 55%),
-    radial-gradient(circle at 82% 72%, rgba(58, 42, 26, 0.045) 0, transparent 50%),
-    repeating-linear-gradient(0deg, transparent 0 27px, rgba(58, 42, 26, 0.025) 27px 28px);
+    radial-gradient(circle at 18% 28%, rgba(var(--ct-ink) / 0.05) 0, transparent 55%),
+    radial-gradient(circle at 82% 72%, rgba(var(--ct-ink) / 0.045) 0, transparent 50%),
+    repeating-linear-gradient(0deg, transparent 0 27px, rgba(var(--ct-ink) / 0.025) 27px 28px);
   background-attachment: fixed;
 }
 

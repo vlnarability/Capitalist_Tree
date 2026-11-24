@@ -108,6 +108,9 @@ import {
   recordSimSummaryIfDue,
   setAnalyticsSimTime,
 } from '../lib/analytics/analytics';
+// W51 — sustainability score (drives the dynamic aesthetic). Pure derivation
+// off the raw GameState; the selector below exposes it to the UI hook + meter.
+import { computeSustainabilityScore } from '../lib/aesthetic/score';
 
 // ----------------------------------------------------------------------------
 // Public types.
@@ -379,6 +382,18 @@ export function selectEngineStatus(state: GameStoreState): EngineStatus {
 }
 export function selectEvents(state: GameStoreState): readonly SimulationEvent[] {
   return state.events;
+}
+
+/**
+ * W51 — the sustainability score (0–10, integer) that drives the dynamic
+ * aesthetic. Returns 5 (balanced) for the pristine initial state; `null`
+ * before boot (simState null) so the hook + meter render the `:root` neutral
+ * defaults. The selector returns a primitive integer, so components using it
+ * only re-render when the score actually changes (not every tick).
+ */
+export function selectSustainabilityScore(state: GameStoreState): number | null {
+  if (!state.simState) return null;
+  return computeSustainabilityScore(state.simState);
 }
 
 // ----------------------------------------------------------------------------

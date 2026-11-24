@@ -71,10 +71,12 @@ import {
 import { findSpeciesById } from '@capitalist-tree/content';
 import type { GameConfig } from '@capitalist-tree/shared';
 import { useSimulationLoop } from '../hooks/useSimulationLoop';
+import { useAestheticTheme } from '../hooks/useAestheticTheme';
 import { useGameStore } from '../stores/game-store';
 import { createBrowserStorage } from '../lib/persistence';
 import { harvest } from '../lib/actions';
 import { TreeView } from '../components/tree';
+import { AestheticMeter } from '../components/dashboard/AestheticMeter';
 import { Panel, Button, ClimatePicker, type ClimatePickerSelection } from '../components/common';
 import {
   MoneyDisplay,
@@ -129,6 +131,11 @@ export default function HomePage(): ReactElement {
   // Drive the simulation loop. Returns `ready` (boot done), `accumulator`
   // (rAF remainder, sim seconds), and the Save/Load/NewGame callbacks.
   const loop = useSimulationLoop(config, storage);
+
+  // W51 — drive the dynamic aesthetic (brutalist → neutral → floral) from the
+  // sustainability score. Writes the --ct-* CSS vars + --ct-steward + font tier
+  // onto <html>. Mount once at the page root; no-op during SSR / pre-boot.
+  useAestheticTheme();
 
   // Narrow subscriptions: only the slices needed to build TreeView's props.
   // Each selector returns a sub-slice reference; Zustand re-renders this page
@@ -533,6 +540,7 @@ function Header(): ReactElement {
           a field journal of speculative botany
         </p>
       </div>
+      <AestheticMeter />
     </header>
   );
 }
