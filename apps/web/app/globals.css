@@ -19,12 +19,15 @@
  * the hook's first client write (no theme flash on hydration).
  */
 :root {
-  --ct-parchment: 145 141 131;
-  --ct-parchment-2: 147 141 127;
-  --ct-parchment-3: 147 141 125;
-  --ct-ink: 129 121 113;
-  --ct-ink-2: 123 112 101;
-  --ct-ink-soft: 138 130 114;
+  /* W57: these are the score=5 midpoint values from the NEW palette endpoints
+   * (gray-cream bg + dark text at BOTH endpoints). Pre-W57 the midpoint drove
+   * text-ink-on-parchment to ~1.29:1 (WCAG AA needs 4.5:1); now it's ~10:1. */
+  --ct-parchment: 222 214 192;
+  --ct-parchment-2: 208 198 172;
+  --ct-parchment-3: 190 180 152;
+  --ct-ink: 49 37 23;
+  --ct-ink-2: 91 73 52;
+  --ct-ink-soft: 90 74 50;
   --ct-leaf: 114 122 58;
   --ct-leaf-2: 138 146 74;
   --ct-leaf-dark: 82 90 42;
@@ -73,4 +76,15 @@ body {
     font-variant: small-caps;
     letter-spacing: 0.08em;
   }
+}
+
+/*
+ * W57 — global focus-visible baseline (WCAG 2.4.7 Focus Visible). Every
+ * focusable element gets a visible focus ring even if the component doesn't
+ * define its own. Component-level rings (Button, inputs, etc.) override this
+ * for styling. The brass accent is visible on both cream + gray-cream bgs.
+ */
+:focus-visible {
+  outline: 2px solid rgb(var(--ct-brass));
+  outline-offset: 2px;
 }

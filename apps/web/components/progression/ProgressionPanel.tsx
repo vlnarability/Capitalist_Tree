@@ -200,12 +200,14 @@ export function ProgressionPanel({ className }: ProgressionPanelProps = {}): Rea
         <div className="flex flex-col gap-1.5">
           <input
             type="text"
+            aria-label="Historical event title"
             placeholder="Title (e.g. 'First million earned')"
             value={histTitle}
             onChange={(e) => setHistTitle(e.target.value)}
             className="rounded border border-ink bg-parchment px-2 py-1 text-sm text-ink"
           />
           <textarea
+            aria-label="Historical event description"
             placeholder="Description (optional)"
             value={histDesc}
             onChange={(e) => setHistDesc(e.target.value)}

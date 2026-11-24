@@ -40,12 +40,20 @@ export type PaletteToken = (typeof PALETTE_TOKENS)[number];
  * trunk. RGB triples (space-separated, for `rgb(var(--ct-X) / <alpha>)`).
  */
 export const BRUTALIST: Record<PaletteToken, string> = {
-  parchment: '46 46 46', // #2e2e2e concrete bg
-  'parchment-2': '58 58 58', // #3a3a3a dark panel
-  'parchment-3': '74 74 74', // #4a4a4a lighter concrete
-  ink: '200 200 200', // #c8c8c8 steel text
-  'ink-2': '138 138 138', // #8a8a8a mid steel
-  'ink-soft': '138 138 138', // #8a8a8a mid steel
+  // W57: bg stays in the cream range (gray-cream at brutalist -> warm-cream at
+  // floral) + text stays dark at BOTH endpoints, so bg + text never converge to
+  // the same mid-gray at the score=5 midpoint. Pre-W57 the linear lerp between
+  // a dark-bg/light-text endpoint and a light-bg/dark-text endpoint drove
+  // text-ink-on-parchment to ~1.29:1 at score 5 (WCAG AA needs 4.5:1). Now the
+  // minimum is ~5:1 at every score. The brutalist aesthetic is conveyed through
+  // sickly accents (yellowed leaf, dark bark/brass) + sharp corners + the mono
+  // font tier, not through a dark bg.
+  parchment: '200 192 168', // #c8c0a8 gray-cream (colder/harsher than floral)
+  'parchment-2': '180 172 148', // #b4ac94 darker gray-cream panel
+  'parchment-3': '160 152 128', // #a09880 even darker nested surface
+  ink: '40 32 20', // #282014 very dark primary text
+  'ink-2': '75 60 40', // #4b3c28 dark secondary text
+  'ink-soft': '85 70 48', // #554630 dark labels (passes 4.5:1 on cream)
   leaf: '138 122 58', // #8a7a3a yellowed/sick canopy
   'leaf-2': '154 138 74', // #9a8a4a yellowed
   'leaf-dark': '106 90 42', // #6a5a2a sickly dark
@@ -65,7 +73,7 @@ export const FLORAL: Record<PaletteToken, string> = {
   'parchment-3': '220 207 176', // #dccfb0
   ink: '58 42 26', // #3a2a1a
   'ink-2': '107 86 64', // #6b5640
-  'ink-soft': '138 122 90', // #8a7a5a
+  'ink-soft': '95 78 52', // #5f4e34 DARKENED (W57) from #8a7a5a to pass 4.5:1 on cream
   leaf: '90 122 58', // #5a7a3a
   'leaf-2': '122 154 74', // #7a9a4a
   'leaf-dark': '58 90 42', // #3a5a2a

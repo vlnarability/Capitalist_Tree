@@ -76,7 +76,7 @@ export function BusinessControls({ business: b }: BusinessControlsProps): ReactE
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="text-[0.65rem] uppercase tracking-wide text-ink-soft hover:text-ink"
+        className="text-[0.65rem] uppercase tracking-wide text-ink-soft hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-brass/50"
         aria-expanded={open}
       >
         {open ? '▾ Manage' : '▸ Manage'}
@@ -85,8 +85,9 @@ export function BusinessControls({ business: b }: BusinessControlsProps): ReactE
         <div className="mt-1.5 flex flex-col gap-2">
           {/* Loan */}
           <div className="flex flex-wrap items-center gap-1.5">
-            <label className="text-[0.65rem] text-ink-soft">Loan $</label>
+            <label htmlFor="bc-loan" className="text-[0.65rem] text-ink-soft">Loan $</label>
             <input
+              id="bc-loan"
               type="number"
               min="1"
               step="1"
@@ -101,8 +102,9 @@ export function BusinessControls({ business: b }: BusinessControlsProps): ReactE
           {/* Repay (if liabilities exist) */}
           {liabilities.length > 0 && (
             <div className="flex flex-wrap items-center gap-1.5">
-              <label className="text-[0.65rem] text-ink-soft">Repay</label>
+              <label htmlFor="bc-repay-loan" className="text-[0.65rem] text-ink-soft">Repay</label>
               <select
+                id="bc-repay-loan"
                 value={repayLiability}
                 onChange={(e) => setRepayLiability(e.target.value)}
                 className="max-w-[8rem] rounded border border-ink bg-parchment px-1.5 py-0.5 text-xs text-ink"
@@ -116,6 +118,7 @@ export function BusinessControls({ business: b }: BusinessControlsProps): ReactE
               </select>
               <input
                 type="number"
+                aria-label="Repay amount"
                 min="1"
                 step="1"
                 value={repayAmount}

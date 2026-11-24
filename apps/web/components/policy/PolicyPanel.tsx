@@ -49,17 +49,18 @@ export function PolicyPanel({ className }: PolicyPanelProps = {}): ReactElement 
       className={`rounded-lg border border-ink bg-parchment/60 p-4 ${className ?? ''}`}
       aria-labelledby="policy-panel-title"
     >
-      <h2 id="policy-panel-title" className="mb-3 text-sm font-semibold uppercase tracking-wide text-ink-2">
+      <h3 id="policy-panel-title" className="mb-3 text-sm font-semibold uppercase tracking-wide text-ink-2 sr-only">
         Policy
-      </h2>
+      </h3>
 
       {/* Government */}
       <div className="mb-4">
         <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-ink-soft">Government</h3>
-        <label className="mb-1 block text-xs text-ink-2">
+        <label htmlFor="policy-env-regs" className="mb-1 block text-xs text-ink-2">
           Environmental Regulations: <span className="tabular-nums text-ink">{pct(gov.environmentalRegulations)}</span>
         </label>
         <input
+          id="policy-env-regs"
           type="range"
           min="0"
           max="1"
@@ -70,10 +71,11 @@ export function PolicyPanel({ className }: PolicyPanelProps = {}): ReactElement 
           }
           className="mb-3 w-full accent-emerald-500"
         />
-        <label className="mb-1 block text-xs text-ink-2">
+        <label htmlFor="policy-carbon-tax" className="mb-1 block text-xs text-ink-2">
           Carbon Tax Rate: <span className="tabular-nums text-ink">{pct(gov.carbonTaxRate)}</span>
         </label>
         <input
+          id="policy-carbon-tax"
           type="range"
           min="0"
           max="1"
@@ -87,10 +89,11 @@ export function PolicyPanel({ className }: PolicyPanelProps = {}): ReactElement 
       {/* Monetary */}
       <div className="border-t border-ink/60 pt-3">
         <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-ink-soft">Monetary</h3>
-        <label className="mb-1 block text-xs text-ink-2">
+        <label htmlFor="policy-interest-rate" className="mb-1 block text-xs text-ink-2">
           Interest Rate (annual): <span className="tabular-nums text-ink">{pct1(mon.interestRate)}</span>
         </label>
         <input
+          id="policy-interest-rate"
           type="range"
           min="0"
           max="0.3"
@@ -99,10 +102,11 @@ export function PolicyPanel({ className }: PolicyPanelProps = {}): ReactElement 
           onChange={(e) => dispatch(setMonetaryPolicy({ interestRate: Number(e.target.value) }, nowTick))}
           className="mb-3 w-full accent-sky-500"
         />
-        <label className="mb-1 block text-xs text-ink-2">
+        <label htmlFor="policy-inflation-target" className="mb-1 block text-xs text-ink-2">
           Inflation Target (annual): <span className="tabular-nums text-ink">{pct1(mon.inflationTarget)}</span>
         </label>
         <input
+          id="policy-inflation-target"
           type="range"
           min="0"
           max="0.1"
@@ -111,10 +115,11 @@ export function PolicyPanel({ className }: PolicyPanelProps = {}): ReactElement 
           onChange={(e) => dispatch(setMonetaryPolicy({ inflationTarget: Number(e.target.value) }, nowTick))}
           className="mb-3 w-full accent-sky-500"
         />
-        <label className="mb-1 block text-xs text-ink-2">
+        <label htmlFor="policy-money-supply" className="mb-1 block text-xs text-ink-2">
           Money Supply Growth (annual): <span className="tabular-nums text-ink">{pct1(mon.moneySupplyGrowth)}</span>
         </label>
         <input
+          id="policy-money-supply"
           type="range"
           min="0"
           max="0.1"

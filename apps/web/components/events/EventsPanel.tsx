@@ -71,15 +71,16 @@ export function EventsPanel({ className }: EventsPanelProps = {}): ReactElement 
       className={`rounded-lg border border-ink bg-parchment/60 p-4 ${className ?? ''}`}
       aria-labelledby="events-panel-title"
     >
-      <h2 id="events-panel-title" className="mb-3 text-sm font-semibold uppercase tracking-wide text-ink-2">
+      <h3 id="events-panel-title" className="mb-3 text-sm font-semibold uppercase tracking-wide text-ink-2 sr-only">
         Events
-      </h2>
+      </h3>
 
       {/* Trigger */}
       <div className="mb-4">
         <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-ink-soft">Trigger Now</h3>
         <div className="flex flex-wrap items-center gap-1.5">
           <select
+            aria-label="Event type"
             value={triggerTypeId}
             onChange={(e) => setTriggerTypeId(e.target.value)}
             className="max-w-[10rem] rounded border border-ink bg-parchment px-1.5 py-0.5 text-xs text-ink"
@@ -91,6 +92,7 @@ export function EventsPanel({ className }: EventsPanelProps = {}): ReactElement 
             ))}
           </select>
           <select
+            aria-label="Event severity"
             value={triggerSeverity}
             onChange={(e) => setTriggerSeverity(e.target.value as EventSeverity)}
             className="rounded border border-ink bg-parchment px-1.5 py-0.5 text-xs text-ink"
@@ -112,6 +114,7 @@ export function EventsPanel({ className }: EventsPanelProps = {}): ReactElement 
         <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-ink-soft">Schedule</h3>
         <div className="flex flex-wrap items-center gap-1.5">
           <select
+            aria-label="Scheduled event type"
             value={scheduleTypeId}
             onChange={(e) => setScheduleTypeId(e.target.value)}
             className="max-w-[10rem] rounded border border-ink bg-parchment px-1.5 py-0.5 text-xs text-ink"
@@ -125,6 +128,7 @@ export function EventsPanel({ className }: EventsPanelProps = {}): ReactElement 
           <label className="text-[0.65rem] text-ink-soft">in</label>
           <input
             type="number"
+            aria-label="Delay (sim days)"
             min="0"
             step="1"
             value={scheduleDelayDays}

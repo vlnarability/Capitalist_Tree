@@ -175,10 +175,11 @@ export function PolicyConfigurator({
 
       {kind === 'threshold' ? (
         <div className="flex flex-col gap-1.5" data-testid={`policy-threshold-form-${automation.id}`}>
-          <label className="text-[10px] uppercase tracking-wider text-ink-soft">
+          <label htmlFor={`policy-field-input-${automation.id}`} className="text-[10px] uppercase tracking-wider text-ink-soft">
             Field (dotted state path)
           </label>
           <input
+            id={`policy-field-input-${automation.id}`}
             type="text"
             value={field}
             onChange={(e) => setField(e.target.value)}
@@ -186,8 +187,9 @@ export function PolicyConfigurator({
             data-testid={`policy-field-${automation.id}`}
           />
           <div className="flex flex-wrap items-center gap-2">
-            <label className="text-[10px] uppercase tracking-wider text-ink-soft">Op</label>
+            <label htmlFor={`policy-op-input-${automation.id}`} className="text-[10px] uppercase tracking-wider text-ink-soft">Op</label>
             <select
+              id={`policy-op-input-${automation.id}`}
               value={op}
               onChange={(e) => setOp(e.target.value as AutomationThresholdOperator)}
               className="rounded border border-ink bg-parchment px-2 py-1 text-sm text-ink focus:border-sky-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50"
@@ -199,8 +201,9 @@ export function PolicyConfigurator({
                 </option>
               ))}
             </select>
-            <label className="text-[10px] uppercase tracking-wider text-ink-soft">Value</label>
+            <label htmlFor={`policy-value-input-${automation.id}`} className="text-[10px] uppercase tracking-wider text-ink-soft">Value</label>
             <input
+              id={`policy-value-input-${automation.id}`}
               type="number"
               step="any"
               value={valueStr}
@@ -215,10 +218,11 @@ export function PolicyConfigurator({
         </div>
       ) : (
         <div className="flex flex-col gap-1.5" data-testid={`policy-schedule-form-${automation.id}`}>
-          <label className="text-[10px] uppercase tracking-wider text-ink-soft">
+          <label htmlFor={`policy-interval-input-${automation.id}`} className="text-[10px] uppercase tracking-wider text-ink-soft">
             Interval (sim seconds; 86400 = 1 sim day)
           </label>
           <input
+            id={`policy-interval-input-${automation.id}`}
             type="number"
             min={1}
             step={1}

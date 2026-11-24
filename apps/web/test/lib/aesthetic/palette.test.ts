@@ -37,9 +37,9 @@ describe('interpolatePalette (W51)', () => {
 
   it('score 5 = the :root defaults in globals.css (no SSR theme flash)', () => {
     const p = interpolatePalette(5);
-    expect(p['--ct-parchment']).toBe('145 141 131');
-    expect(p['--ct-ink']).toBe('129 121 113');
-    expect(p['--ct-ink-soft']).toBe('138 130 114');
+    expect(p['--ct-parchment']).toBe('222 214 192');
+    expect(p['--ct-ink']).toBe('49 37 23');
+    expect(p['--ct-ink-soft']).toBe('90 74 50');
     expect(p['--ct-leaf']).toBe('114 122 58');
     expect(p['--ct-bark']).toBe('83 57 33');
     expect(p['--ct-brass']).toBe('106 82 34');

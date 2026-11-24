@@ -453,6 +453,7 @@ export function ClimatePicker({ open, onClose, onSubmit }: ClimatePickerProps): 
                   </div>
                   <input
                     type="range"
+                    aria-label="Elevation (metres)"
                     min={0}
                     max={4000}
                     step={100}
