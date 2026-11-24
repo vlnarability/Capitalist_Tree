@@ -77,12 +77,14 @@ const scenarios: Scenario[] = [
   {
     name: 'sustainable',
     description:
-      'Harvest 30 leaves every 28d + water 20L every 7d + compost every 28d. A cared-for tree — should stay stable + financially independent.',
+      'Harvest 25% of current foliage every 28d (below the 50% severe-defoliation threshold) + water 20L every 7d + compost every 28d. A cared-for tree — should stay stable + financially independent + survive long-term.',
     step: (state, stepIdx) => {
       const treeId = state.originalTree.id;
       const actions: any[] = [];
       if (stepIdx % 28 === 0) {
-        actions.push({ type: 'harvest-leaves', payload: { treeId, requestedLeaves: 30 } });
+        const leaves = state.originalTree.foliage.currentLeaves;
+        const harvest = Math.max(1, Math.floor(leaves * 0.25));
+        actions.push({ type: 'harvest-leaves', payload: { treeId, requestedLeaves: harvest } });
         actions.push({ type: 'apply-fertilizer', payload: { fertilizerId: 'fertilizer:compost', units: 1, treeId } });
       }
       if (stepIdx % 7 === 0) actions.push({ type: 'apply-water', payload: { litres: 20, treeId } });
@@ -92,11 +94,15 @@ const scenarios: Scenario[] = [
   {
     name: 'balanced',
     description:
-      'Harvest 40 leaves every 28d + water 15L every 5d + compost every 21d. More harvesting than sustainable, more care than extractive.',
+      'Harvest 40% of current foliage every 28d (below the 50% severe threshold, more aggressive than sustainable) + water 15L every 5d + compost every 21d. More harvesting than sustainable, more care than extractive.',
     step: (state, stepIdx) => {
       const treeId = state.originalTree.id;
       const actions: any[] = [];
-      if (stepIdx % 28 === 0) actions.push({ type: 'harvest-leaves', payload: { treeId, requestedLeaves: 40 } });
+      if (stepIdx % 28 === 0) {
+        const leaves = state.originalTree.foliage.currentLeaves;
+        const harvest = Math.max(1, Math.floor(leaves * 0.40));
+        actions.push({ type: 'harvest-leaves', payload: { treeId, requestedLeaves: harvest } });
+      }
       if (stepIdx % 5 === 0) actions.push({ type: 'apply-water', payload: { litres: 15, treeId } });
       if (stepIdx % 21 === 0) actions.push({ type: 'apply-fertilizer', payload: { fertilizerId: 'fertilizer:compost', units: 1, treeId } });
       return actions;

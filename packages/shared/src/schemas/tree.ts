@@ -101,14 +101,18 @@ export const treeStateSchema = z.object({
   health: z.number().min(0).max(1),
   stress: z.number().min(0).max(1),
   damage: z.array(treeDamageStateSchema),
-  // P12-C redesign: cumulative "wear" — a monotonic accumulation of damage
-  // severity (severity × WEAR_PER_DAMAGE per damage event, never pruned,
-  // never recovers). Drives a dedicated mortality path (death.ts) that fires
-  // when wear crosses WEAR_DEATH_THRESHOLD, giving a reliable ~6-12mo neglect
-  // death regardless of the activeDamage prune-window fluctuation + Poisson
-  // variance that makes the stress-based neglect death fragile near the
-  // recovery threshold. The stress-based paths remain for acute crises
-  // (crippling, reserves-exhaustion); wear handles chronic neglect.
+  // P12-C redesign + W59 wear recovery: cumulative "wear" — an accumulation of
+  // damage severity (severity × WEAR_PER_DAMAGE per damage event). Drives a
+  // dedicated mortality path (death.ts) that fires when wear crosses
+  // WEAR_DEATH_THRESHOLD, giving a reliable ~6-12mo neglect death regardless of
+  // the activeDamage prune-window fluctuation + Poisson variance that makes the
+  // stress-based neglect death fragile near the recovery threshold. The stress-
+  // based paths remain for acute crises (crippling, reserves-exhaustion); wear
+  // handles chronic neglect. W59 added a recovery path (recoverWear in
+  // biology/wear.ts) so a cared-for tree (favourable conditions + no recent
+  // severe-defoliation) decays wear faster than ambient infestations add it —
+  // pre-W59 wear was strictly monotonic, which made sustainable play impossible
+  // (the W58 bot found the tree dies day 85 under 30 leaves/28d + care).
   wear: z.number().min(0).default(0),
   // GAP-19 / GDD §11.2: reproduction accumulator. Fills from `alloc.reproduction`
   // (eu) each biology tick; when it reaches 1.0 AND the tree is past its fruiting

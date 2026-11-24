@@ -64,12 +64,40 @@ environmental recovery) are tuned against these targets.
 
 **W58 verification (5yr bot, 2026-11-24).** The design-promise bot
 (`packages/simulation/test/dr1-long-run.test.ts`) runs 4 scenarios at 5yr
-(600d, 1-day steps, seed 7) + verifies the DR-1 targets. Results:
-- ✅ **Financial independence ≤60d:** PASS — cash grew by day 60 in all 4 scenarios.
+(600d, 1-day steps, seed 7) + verifies the DR-1 targets. Initial results:
 - ✅ **Collapse ≥2yr:** PASS — the extractive env did not collapse within 5yr.
-- ⚠️ **Recovery ≥1yr:** INCONCLUSIVE — the env did not recover within 5yr after exploitation stopped (the starting forestCoverage=0.300 is below the 0.5 recovery threshold, so the env was never "healthy"; needs the 25yr run + a higher starting forestCoverage to settle).
-- **Balance issue surfaced:** the tree dies by day 44 (extractive) / day 85 (sustainable/balanced) — the "sustainable" harvest amounts (30-40 leaves/28d) are too aggressive against the tree's wear/health mechanics. The sustainable scenario should keep the tree alive long-term; tuning needed.
-- 25yr/100yr need a detached runner (~11min/~23min per scenario at ~114ms/day). Report at `download/dr1-long-run-report.md`.
+- ⚠️ **Recovery ≥1yr:** INCONCLUSIVE — the env did not recover within 5yr (starting forestCoverage=0.300 is below the 0.5 recovery threshold).
+- **Balance issue surfaced:** the tree dies by day 44 (extractive) / day 85 (sustainable/balanced) — `tree.wear` was strictly monotonic (never decayed), so ambient pest/disease infestations (~0.026 wear/day) killed even a cared-for tree at ~3-6mo.
+
+**W59 wear-recovery fix (2026-11-24).** Root cause: `tree.wear` was a strictly
+monotonic counter that NEVER decayed. Ambient pest/disease infestations added
+~0.026 wear/day regardless of player care, so even a perfectly-cared-for tree
+crossed the mortality onset (3.0) at ~3-6mo + died. No care action (water,
+fertilizer) reduced wear. Fix: added `recoverWear`
+(`packages/simulation/src/biology/wear.ts`) — a recovery path mirroring
+`updateStress`. When conditions are favourable (water/nutrient/reserves OK) +
+no recent severe-defoliation (7d), wear decays at 0.04/day (exceeds the
+~0.026/day ambient infestation rate, so a cared-for tree nets out ~0.014/day
+wear recovery). The bot's sustainable/balanced scenarios were also corrected
+to use fraction-based harvests (25%/40% of foliage, below the 50% severe-
+defoliation threshold — a fixed 30-leaf harvest on a 50-leaf tree was 60% =
+severe). Re-run results:
+- ✅ **Sustainable tree now SURVIVES to 5yr** (was day 85 death).
+- ✅ **Balanced tree survives to 5yr** (was day 85 death).
+- ✅ **Financial independence ≤60d (extractive/recovery):** PASS.
+- ❌ **Financial independence ≤60d (sustainable/balanced):** FAIL — the
+  conservative harvest yields too little income (cash drops 50000→33000 by day
+  60). The harvest-to-income ratio needs tuning so a conservative harvest
+  covers living expenses. Follow-up.
+- ❌ **Env collapses under sustainable/balanced** (forestCoverage 0.300→0.110
+  by day 95) — the player's harvesting has cumulative env impact even under
+  conservative play. The env impact per harvest + the env recovery rate need
+  tuning. Follow-up.
+- The wear-recovery is the foundation fix (without it, no tuning makes
+  sustainable play viable — the tree always dies from chronic wear). The
+  financial-independence + env-collapse are the next tuning pass.
+- 25yr/100yr need a detached runner (~11min/~23min per scenario). Report at
+  `download/dr1-long-run-report.md`.
 
 **Status:** Adopted — targets provisional; balance audit complete. Replaces the
 GDD §17 "Environmental recovery timescales" + "Detailed photosynthesis and

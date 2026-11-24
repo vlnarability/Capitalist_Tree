@@ -63,6 +63,7 @@ import {
   advanceSeasonalCondition,
   maxSupportedLeaves,
   updateStress,
+  recoverWear,
   checkMortality,
   recentSevereDefoliations,
   rollInfestation,
@@ -284,12 +285,20 @@ export const biologySystem: System = {
     // Stress update needs to happen before reserves so we know recovery cost.
     const stressUpdate = updateStress(tree, bioCtx);
     tree.stress = stressUpdate.stress;
+    // W59: wear recovery (mirrors stress recovery — decays wear when conditions
+    // are favourable + no recent severe-defoliation). Pre-W59 wear was strictly
+    // monotonic, so even sustainable play killed the tree (the W58 design-promise
+    // bot found the tree dies day 85 under 30 leaves/28d + watering + compost).
+    // The recovery cost is combined with the stress-recovery cost so both are
+    // deducted from reserves in a single applyReserveDelta call.
+    const wearUpdate = recoverWear(tree, bioCtx);
+    tree.wear = wearUpdate.wear;
     tree.energy.reserves = applyReserveDelta(
       tree,
       capacity,
       alloc.reserveStorage,
       alloc.reserveDraw,
-      stressUpdate.recoveryCost,
+      stressUpdate.recoveryCost + wearUpdate.recoveryCost,
     );
 
     // 12. Prune decayed damage records (older than the mortality window).

@@ -376,14 +376,14 @@ export const PROVISIONAL_BIOLOGY_STRESS_DAMAGE_PER_DAY = 0.05;
 
 // PROVISIONAL (GDD §5.6 / P12-C redesign — chronic-neglect mortality).
 //
-// Cumulative "wear" — a monotonic accumulation of NON-WEATHER damage severity
-// (pest, disease, severe-defoliation). Each damage event adds `severity ×
-// WEAR_PER_DAMAGE` to tree.wear; wear never decays + is never pruned (unlike
-// tree.damage, which is prune-windowed to 60 days). This makes the chronic-
-// neglect death reliable: the wear crosses the mortality thresholds at a
-// predictable time regardless of the activeDamage prune-window fluctuation +
-// Poisson variance that makes the stress-based neglect death fragile near the
-// recovery threshold (see P12-C commit 739d4df for the analysis).
+// Cumulative "wear" — an accumulation of NON-WEATHER damage severity (pest,
+// disease, severe-defoliation). Each damage event adds `severity ×
+// WEAR_PER_DAMAGE` to tree.wear. Pre-W59, wear was strictly monotonic (never
+// decayed, never pruned); W59 added a recovery path (see
+// PROVISIONAL_BIOLOGY_WEAR_RECOVERY_RATE_PER_DAY below) so a cared-for tree
+// can net out the ambient infestation wear. `tree.damage` (the active-damage
+// list) is still prune-windowed to 60 days; wear is the chronic counter that
+// survives the prune-window fluctuation + Poisson variance.
 //
 // Weather damage is EXCLUDED from the wear (it's ambient — happens regardless
 // of player care; its mechanical impact is defoliation, applied in the
@@ -400,6 +400,29 @@ export const PROVISIONAL_BIOLOGY_STRESS_DAMAGE_PER_DAY = 0.05;
 export const PROVISIONAL_BIOLOGY_WEAR_PER_DAMAGE = 1.0;
 export const PROVISIONAL_BIOLOGY_WEAR_MORTALITY_ONSET = 3.0;
 export const PROVISIONAL_BIOLOGY_WEAR_DEATH_THRESHOLD = 6.0;
+
+// PROVISIONAL (W59 / GDD §5.6 — wear recovery).
+//
+// Pre-W59, `tree.wear` was strictly monotonic — it NEVER decayed. Ambient
+// pest/disease infestations added ~0.026 wear/day regardless of player care,
+// so even a perfectly-cared-for tree crossed the mortality onset (3.0) at
+// ~3-6mo + died. This made the "sustainable" playstyle impossible: the W58
+// design-promise bot found the tree dies at day 85 under sustainable harvesting
+// (30 leaves/28d + watering + compost). The care actions (water, fertilizer)
+// only affect stress/reserves, NOT wear — so no amount of care could save the
+// tree from the chronic wear timer.
+//
+// W59 adds a wear-recovery path (mirroring PROVISIONAL_BIOLOGY_STRESS_RECOVERY_*).
+// When conditions are favourable (water/nutrient/reserves all OK) AND there's
+// been no severe-defoliation in the last 7 days, wear decays at this rate. The
+// rate (0.04/day) exceeds the ambient infestation rate (~0.026/day), so a
+// cared-for tree nets out ~0.014/day wear recovery — it can sustain indefinite
+// sustainable harvesting. A neglected tree (water/nutrient deficient) does NOT
+// recover wear, so chronic neglect still kills the tree in the 6-12mo window
+// (the DR-1 neglect-death target holds). Recovery costs energy (3 eu/unit),
+// deducted from reserves alongside the stress-recovery cost.
+export const PROVISIONAL_BIOLOGY_WEAR_RECOVERY_RATE_PER_DAY = 0.04;
+export const PROVISIONAL_BIOLOGY_WEAR_RECOVERY_ENERGY_COST = 3;
 
 // ---------------------------------------------------------------------------
 // P12-B (GAP-18): pest + disease infestations.
