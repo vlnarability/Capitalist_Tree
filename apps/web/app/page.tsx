@@ -94,6 +94,7 @@ import { BiologyPanel, EnvironmentPanel } from '../components/environment';
 import {
   TransactionsPanel,
   HarvestControls,
+  LaborControls,
   SeedControls,
   PurchaseControls,
   TradePanel,
@@ -456,6 +457,9 @@ export default function HomePage(): ReactElement {
           </Panel>
           <Panel title="Harvest" icon="🍃" tone="emerald" hint="GDD §5.4">
             <HarvestControls />
+          </Panel>
+          <Panel title="Labor" icon="🛠" tone="amber" hint="P12-D · second income">
+            <LaborControls />
           </Panel>
           <Panel title="Genetic Legacy" icon="🌰" tone="amber" hint="GDD §11.2">
             <SeedControls />

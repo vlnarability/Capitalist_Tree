@@ -19,6 +19,7 @@ export {
   type TransactionsPanelProps,
 } from './TransactionsPanel';
 export { HarvestControls, type HarvestControlsProps } from './HarvestControls';
+export { LaborControls, type LaborControlsProps } from './LaborControls';
 export { SeedControls, type SeedControlsProps } from './SeedControls';
 export { PurchaseControls, type PurchaseControlsProps } from './PurchaseControls';
 export { TradePanel, type TradePanelProps } from './TradePanel';

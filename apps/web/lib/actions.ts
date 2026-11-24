@@ -51,6 +51,7 @@ import type {
   LivingExpenseCategory,
   OperateBusinessAction,
   PayExpenseAction,
+  PerformLaborAction,
   PrestigeResetAction,
   ExportCommodityAction,
   ImportCommodityAction,
@@ -72,6 +73,7 @@ import type {
   UnlockResearchAction,
 } from '@capitalist-tree/shared';
 import {
+  PROVISIONAL_LABOR_MAX_HOURS_PER_SHIFT,
   PROVISIONAL_SPEED_MULTIPLIERS,
   PROVISIONAL_SPEED_PAUSED,
   type GovernmentPolicy,
@@ -312,6 +314,31 @@ export function payExpense(
     );
   }
   return { type: 'pay-expense', payload: { category, amount } };
+}
+
+/**
+ * Build a `perform-labor` action (P3c / P12-D — GDD §7.3 second income path).
+ * The player works `hours` (1..`PROVISIONAL_LABOR_MAX_HOURS_PER_SHIFT` = 12)
+ * for a wage of `PROVISIONAL_LABOR_WAGE_MINOR_PER_HOUR` (`'500'` = $5) per
+ * hour, credited from the authority (issuance) to `player:personal`. Each
+ * hour accrues `PROVISIONAL_LABOR_EXHAUSTION_PER_HOUR` (0.05) exhaustion;
+ * when exhaustion would exceed `PROVISIONAL_LABOR_EXHAUSTION_MAX` (1.0) the
+ * handler rejects gracefully (a `notification` event, no throw). Health must
+ * be ≥ `PROVISIONAL_LABOR_MIN_HEALTH_TO_WORK` (0.15). The PersonalSystem
+ * decays exhaustion each tick (rest/recovery). This is the income alternative
+ * to harvesting leaves — it costs health/exhaustion instead of foliage.
+ */
+export function performLabor(hours: number): PerformLaborAction {
+  if (
+    !Number.isInteger(hours) ||
+    hours < 1 ||
+    hours > PROVISIONAL_LABOR_MAX_HOURS_PER_SHIFT
+  ) {
+    throw new Error(
+      `performLabor: hours must be an integer in [1, ${PROVISIONAL_LABOR_MAX_HOURS_PER_SHIFT}] (got ${hours}).`,
+    );
+  }
+  return { type: 'perform-labor', payload: { hours } };
 }
 
 // ----------------------------------------------------------------------------
