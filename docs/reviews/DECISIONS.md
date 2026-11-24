@@ -144,6 +144,72 @@ Re-run results (5yr bot):
   independent + env doesn't collapse. The DR-1 design promise holds for the
   sustainable/balanced/extractive scenarios.
 
+**W64-W68 — recovery ≥1yr + regional env stability (2026-11-24).** The W61/W62
+pass left the recovery ≥1yr target INCONCLUSIVE (the env didn't recover within
+5yr). A deep investigation (W64) root-caused this to THREE structural issues,
+all fixed:
+
+- **W65 — biodiversity irreversibility.** Below the 0.2 extinction threshold,
+  biodiversity could ONLY degrade (the `else` branch in `evolveRegions` subtracted
+  pollutionStress but never added recovery). Any brief dip below 0.2 permanently
+  floored the region's biodiversity. Fix: below 0.2, recovery now runs at 1/6 the
+  normal rate (0.005/day) — slow enough that recovering from near-0 to >0.5 takes
+  ~150d (~1.25yr), preserving the "collapse is very hard to reverse" intent while
+  making recovery possible. The speciesExtinctionRate ratchet still fires below 0.2.
+- **W66 — recovery scenario tracking.** The bot measured recovery from
+  RECOVERY_EXPLOIT_DAYS (240d), but the tree dies at day 44 — so recovery actually
+  starts at day 44 + the bot miscounted. Fix: measure from the actual
+  exploitation-stop day (tree death or day 240, whichever first). Also changed the
+  recovery gate from `wasCollapsed` (<0.2) to `wasDegraded` (<0.5) since the
+  regional aggregates degrade but don't always collapse below 0.2.
+- **W67 — bot reads regional aggregates.** The bot read `env.forestCoverage`
+  (tree-derived, floored at 0.3 for a dead tree) + `env.soil.health` (the P7
+  single-global model at 0.0005/day, 60× slower than the regional 0.03/day rate).
+  The regional model WAS recovering — the bot just didn't see it. Fix: read
+  `aggregatedIndicators.{avgForestCoverage, avgSoilHealth, avgBiodiversity,
+  ecosystemResilience}` instead. This revealed that the W62 "env stable at 0.300"
+  was an artifact of the tree-derived forestCoverage — the REGIONAL env was
+  actually crashing.
+- **W68 — diagnosed + fixed the regional env crash.** The W67 fix revealed the
+  regional env crashed to ~0.24 at day 65 in ALL scenarios. Root cause: a FLOOD
+  stochastic event firing at the day-60 spring roll, targeting the home region
+  (which had `flood-risk` vulnerability + precip above average). The flood's
+  `pollution.water: +30` was a 50× spike over baseline (~0.6) — relative to the
+  pollutionStress scale (200), it added 0.15/day stress for ~60 days,
+  catastrophically crashing soilHealth/forest/biodiversity. The WILDFIRE event had
+  the same issue (`pollution.air: +50`). Fixes:
+  (a) W68b: reduced FLOOD pollution.water 30→5, pollution.soil 15→3, soilHealth
+  -0.2→-0.08 + WILDFIRE pollution.air 50→10 (the catastrophic spikes → impactful
+  but recoverable).
+  (b) W68c: removed `flood-risk` from the home region (temperate-lowlands, 50% of
+  the population-weighted average). The home region was flood-targeted every 60-day
+  spring roll, re-spiking pollution + preventing recovery. The tropical region
+  (25% weight, high biodiversity) retains flood-risk + can absorb floods.
+- **W69 — raised IA decay 2%→5%/day.** The W62 2%/day decay was too slow: the
+  sustainable equilibrium IA (~0.021) generated pollutionStress that exceeded the
+  biodiversity recovery. At 5%/day, the equilibrium IA drops to ~0.0086 → the
+  biodiversity recovers under conservative harvesting.
+
+Re-run results (5yr bot):
+- ✅ **Recovery ≥1yr:** PASS — env recovered 241d (2.01yr) after exploitation
+  stopped (day 44). Trajectory: degraded day 120, recovering day 240, recovered
+  day 285, healthy day 600 (biodiv=0.750).
+- ✅ **Sustainable + balanced env STABLE:** never collapsed; healthy throughout 5yr
+  (forestCov~0.73, biodiv~0.73, soilHealth~0.85 at day 600). The W62 "env stable"
+  is now REAL (regional aggregates), not an artifact.
+- ✅ **Financial independence ≤60d:** PASS all 4 scenarios (unchanged).
+- ✅ **Sustainable + balanced trees survive to 5yr** (W59 holds).
+- ❌ **Collapse ≥2yr (extractive):** FAIL (env collapsed day 69). This is a
+  scenario design limitation, not a balance bug — the extractive tree dies at day
+  44, so exploitation isn't "sustained for 2yr." The collapse at day 69 is correct
+  behavior for 44 days of max harvesting. A proper "sustained exploitation ≥2yr"
+  test would need a survivable-but-aggressive rate (the tree can't survive 2yr of
+  max harvesting). Follow-up.
+- **The DR-1 design promise now holds for sustainable/balanced/recovery:** tree
+  survives, player thrives, env stays stable, + recovers after exploitation. The
+  only open item is the extractive "collapse ≥2yr" target, which needs a scenario
+  redesign (not balance tuning).
+
 **Status:** Adopted — targets provisional; balance audit complete. Replaces the
 GDD §17 "Environmental recovery timescales" + "Detailed photosynthesis and
 energy allocation equations" open items with concrete measured goals.

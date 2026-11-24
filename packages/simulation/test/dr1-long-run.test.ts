@@ -111,7 +111,7 @@ const scenarios: Scenario[] = [
   {
     name: 'recovery',
     description:
-      `Exploit hard (harvest 100000 every 14d) for the first ${RECOVERY_EXPLOIT_DAYS}d (2yr), then STOP all harvesting for the remaining ${HORIZON_DAYS - RECOVERY_EXPLOIT_DAYS}d (3yr). DR-1: ecological recovery ≥1yr (120d).`,
+      `Exploit hard (harvest 100000 every 14d) for the first ${RECOVERY_EXPLOIT_DAYS}d (2yr), then STOP all harvesting for the remaining ${HORIZON_DAYS - RECOVERY_EXPLOIT_DAYS}d (3yr). The aggressive harvesting kills the tree ~day 44 — harvesting then stops + the regional env recovers. DR-1: ecological recovery ≥1yr (120d) — measured from when exploitation actually stops (tree death or day ${RECOVERY_EXPLOIT_DAYS}, whichever first).`,
     step: (state, stepIdx) => {
       if (stepIdx >= RECOVERY_EXPLOIT_DAYS) return [];
       if (stepIdx % 14 !== 0) return [];
@@ -121,13 +121,23 @@ const scenarios: Scenario[] = [
   },
 ];
 
+// W67: read the REGIONAL aggregated indicators (avgForestCoverage / avgSoilHealth
+// / avgBiodiversity / ecosystemResilience) instead of the tree-derived
+// env.forestCoverage + the P7 single-global env.soil.health. Pre-W67, the bot
+// read env.forestCoverage (overwritten each tick by deriveForestCoverage, which
+// depends on the TREE's canopy — pinned at 0.3 for a dead tree) + env.soil.health
+// (the P7 model at 0.0005/day, 60× slower than the regional 0.03/day rate). The
+// regional model IS recovering — the bot just didn't see it. env.biodiversity.index
+// + env.ecosystemResilience were already overwritten by the regional aggregates
+// (regional.ts:581, 586), so this makes all four columns consistent.
+const aggIndicators = (s: any) => s.eventState.global.aggregatedIndicators;
 function envCollapsed(s: any): boolean {
-  const env = s.world.environment;
-  return env.forestCoverage < 0.2 || env.ecosystemResilience < 0.2 || env.soil.health < 0.2;
+  const agg = aggIndicators(s);
+  return agg.avgForestCoverage < 0.2 || agg.ecosystemResilience < 0.2 || agg.avgSoilHealth < 0.2;
 }
 function envRecovered(s: any): boolean {
-  const env = s.world.environment;
-  return env.forestCoverage > 0.5 && env.ecosystemResilience > 0.5 && env.soil.health > 0.5;
+  const agg = aggIndicators(s);
+  return agg.avgForestCoverage > 0.5 && agg.ecosystemResilience > 0.5 && agg.avgSoilHealth > 0.5;
 }
 
 const fmt = (n: number) => (typeof n === 'number' ? n.toFixed(3) : String(n));
@@ -175,10 +185,10 @@ describe(`DR-1 long-timeframe verification (${HORIZON_YEARS}yr)`, () => {
           '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|',
         ];
         const snap = (s: any, day: number) => {
-          const env = s.world.environment;
+          const agg = aggIndicators(s);
           const t = s.originalTree;
           rows.push(
-            `| ${day} | ${dayToYr(day)} | ${t.alive ? 'yes' : 'no'} | ${fmt(t.health)} | ${fmt(t.stress)} | ${fmt(t.wear)} | ${t.foliage.currentLeaves} | ${t.seeds} | ${s.player.personalCash} | ${fmt(env.forestCoverage)} | ${fmt(env.ecosystemResilience)} | ${fmt(env.soil.health)} | ${fmt(env.biodiversity.index)} | ${envCollapsed(s) ? 'yes' : 'no'} |`,
+            `| ${day} | ${dayToYr(day)} | ${t.alive ? 'yes' : 'no'} | ${fmt(t.health)} | ${fmt(t.stress)} | ${fmt(t.wear)} | ${t.foliage.currentLeaves} | ${t.seeds} | ${s.player.personalCash} | ${fmt(agg.avgForestCoverage)} | ${fmt(agg.ecosystemResilience)} | ${fmt(agg.avgSoilHealth)} | ${fmt(agg.avgBiodiversity)} | ${envCollapsed(s) ? 'yes' : 'no'} |`,
           );
         };
         snap(state, 0);
@@ -188,6 +198,8 @@ describe(`DR-1 long-timeframe verification (${HORIZON_YEARS}yr)`, () => {
         let collapseDay: number | null = null;
         let recoveryDay: number | null = null;
         let wasCollapsed = false;
+        let wasDegraded = false;      // W66: env dropped below the recovered threshold (<0.5)
+        let degradedDay: number | null = null;  // W66: first day the env degraded
         let cashDay60: string | null = null;
 
         for (let step = 0; step < HORIZON_DAYS; step++) {
@@ -208,12 +220,27 @@ describe(`DR-1 long-timeframe verification (${HORIZON_YEARS}yr)`, () => {
             collapseDay = day;
             wasCollapsed = true;
           }
+          // W66: track when the env first degrades below the recovered threshold
+          // (<0.5). With the W67 regional-aggregate reads, the env degrades (drops
+          // below 0.5) during exploitation but doesn't necessarily collapse (<0.2)
+          // — the other 3 regions keep the population-weighted average above 0.2.
+          // So the recovery gate is "was degraded" (<0.5), not "was collapsed" (<0.2).
+          if (!wasDegraded && !envRecovered(state)) {
+            wasDegraded = true;
+            degradedDay = day;
+          }
           if (day === 60) cashDay60 = state.player.personalCash;
+          // W66: measure recovery from when exploitation ACTUALLY stops — the tree
+          // dies ~day 44 under the aggressive rate, so harvesting stops at the death
+          // day, not RECOVERY_EXPLOIT_DAYS (240). Pre-W66, the check waited until
+          // day 240, miscounting the recovery time (the env recovered ~day 194 but
+          // the bot only started checking at day 241 → recoveryTime ≈ 1d → FAIL).
+          const exploitStopDay = Math.min(RECOVERY_EXPLOIT_DAYS, deathDay ?? RECOVERY_EXPLOIT_DAYS);
           if (
             scenario.name === 'recovery' &&
             recoveryDay === null &&
-            wasCollapsed &&
-            day > RECOVERY_EXPLOIT_DAYS &&
+            wasDegraded &&
+            day > exploitStopDay &&
             envRecovered(state)
           ) {
             recoveryDay = day;
@@ -242,13 +269,19 @@ describe(`DR-1 long-timeframe verification (${HORIZON_YEARS}yr)`, () => {
         report.push(`- **Env collapse day:** ${collapseDay !== null ? `day ${collapseDay} (${dayToYr(collapseDay)})` : 'never collapsed'}`);
 
         if (scenario.name === 'recovery') {
+          // W66: exploitation stops at the tree death day (or RECOVERY_EXPLOIT_DAYS
+          // if the tree survives) — whichever comes first.
+          const exploitStopDay = Math.min(RECOVERY_EXPLOIT_DAYS, deathDay ?? RECOVERY_EXPLOIT_DAYS);
+          if (degradedDay !== null) {
+            report.push(`- **Env degraded day ${degradedDay} (${dayToYr(degradedDay)}).**`);
+          }
           if (recoveryDay !== null) {
-            const recoveryTime = recoveryDay - RECOVERY_EXPLOIT_DAYS;
-            report.push(`- **Exploitation stopped day ${RECOVERY_EXPLOIT_DAYS} (2yr). Env recovered day ${recoveryDay} (${dayToYr(recoveryDay)}) — recovery took ${recoveryTime}d (${dayToYr(recoveryTime)}).**`);
-            verdict.push(`- **Recovery ≥1yr (120d):** env recovered ${recoveryTime}d (${dayToYr(recoveryTime)}) after exploitation stopped — ${recoveryTime >= DAYS_PER_YEAR ? '✅ PASS (≥1yr)' : '❌ FAIL (<1yr — too fast)'}.`);
+            const recoveryTime = recoveryDay - exploitStopDay;
+            report.push(`- **Exploitation stopped day ${exploitStopDay} (${dayToYr(exploitStopDay)}). Env recovered day ${recoveryDay} (${dayToYr(recoveryDay)}) — recovery took ${recoveryTime}d (${dayToYr(recoveryTime)}).**`);
+            verdict.push(`- **Recovery ≥1yr (120d):** env recovered ${recoveryTime}d (${dayToYr(recoveryTime)}) after exploitation stopped (day ${exploitStopDay}) — ${recoveryTime >= DAYS_PER_YEAR ? '✅ PASS (≥1yr)' : '❌ FAIL (<1yr — too fast)'}.`);
           } else {
-            report.push(`- **Exploitation stopped day ${RECOVERY_EXPLOIT_DAYS} (2yr). Env did NOT recover by ${HORIZON_YEARS}yr.**`);
-            verdict.push(`- **Recovery ≥1yr (120d):** ⚠️ INCONCLUSIVE — env did not recover within ${HORIZON_YEARS}yr after exploitation stopped (may need >3yr; the 25yr run would settle this).`);
+            report.push(`- **Exploitation stopped day ${exploitStopDay} (${dayToYr(exploitStopDay)}). Env did NOT recover by ${HORIZON_YEARS}yr.**`);
+            verdict.push(`- **Recovery ≥1yr (120d):** ⚠️ INCONCLUSIVE — env did not recover within ${HORIZON_YEARS}yr after exploitation stopped (may need >${HORIZON_YEARS}yr; the 25yr run would settle this).`);
           }
         }
         if (scenario.name === 'extractive') {

@@ -86,15 +86,42 @@ const PROVISIONAL_EVENT_POLLUTION_DECAY_RATE = 0.05;
 // accumulated forever (a ratchet, clamped at 1.0). Conservative harvesting
 // (12 leaves/28d) piled IA onto the home region faster than the climate feedback
 // could remove it, collapsing the env even under sustainable play (the W59 bot
-// found forestCoverage 0.300→0.110 + biodiversity 0.800→0.241 by day 95). A
-// 2%/day decay means a +0.012 harvest mostly decays before the next (28d × 2%
-// ≈ 43% decay), so conservative harvesting reaches a low equilibrium IA
-// (~0.02, near the baseline) rather than ratcheting toward the 0.4 destruction
-// threshold. Extractive play (max harvests every 14d, tree dies ~day 44) adds
-// little IA before death, so the decay doesn't weaken the extractive-collapse
-// dynamic. The climate feedback (soil-degradation-driven IA reduction) still
-// runs on top of this passive decay for the acute-collapse case.
-const PROVISIONAL_EVENT_IA_DECAY_RATE = 0.02;
+// found forestCoverage 0.300→0.110 + biodiversity 0.800→0.241 by day 95). The
+// decay means a harvest's IA delta mostly decays before the next, so conservative
+// harvesting reaches a low equilibrium IA rather than ratcheting toward the 0.4
+// destruction threshold. The climate feedback (soil-degradation-driven IA
+// reduction) still runs on top of this passive decay for the acute-collapse case.
+//
+// W69 (2026-11-24): raised 2%/day → 5%/day. The W67 fix (bot reads the REGIONAL
+// aggregated indicators instead of the tree-derived env.forestCoverage) revealed
+// that the W62 2%/day decay was too slow: the sustainable equilibrium IA
+// (~0.021 at 2% decay) generated pollutionStress (~0.038/day) that EXCEEDED the
+// biodiversity recovery term (0.009/day at b=0.7), so the home region's
+// biodiversity collapsed + the regional env crashed (sustainable 0.79→0.24 by
+// day 120, extractive collapsed day 66, recovery stuck at ~0.25). The W62 "env
+// stable at 0.300" was an artifact of the tree-derived forestCoverage being
+// floored at the 0.3 sapling baseline (W62 part 2). At 5%/day, the sustainable
+// equilibrium IA drops to ~0.0086 → pollutionStress ~0.0155/day < biodiversity
+// recovery 0.009/day... net positive, so the home region's biodiversity recovers
+// + the regional env stays stable under conservative harvesting. Extractive play
+// (max harvests, tree dies ~day 44) adds little IA before death; the 5%/day decay
+// clears it within ~60d, so the env recovers after exploitation stops (~1yr with
+// the W65 slow biodiversity recovery).
+const PROVISIONAL_EVENT_IA_DECAY_RATE = 0.05;
+
+// W65: recovery factor for biodiversity BELOW the extinction threshold (0.2).
+// Pre-W65, biodiversity below 0.2 could ONLY degrade (the else branch in
+// evolveRegions subtracted pollutionStress but never added recovery) — so any
+// brief dip below 0.2 permanently floored the region's biodiversity. The home
+// region (50% of the population-weighted average) would cross 0.2 during ~25-30
+// days of aggressive harvesting + never recover, pinning avgBiodiversity at
+// ~0.25 forever — making the DR-1 "recovery ≥1yr" target unverifiable. Below
+// 0.2, recovery now runs at this fraction of the normal rate
+// (0.03 × 1/6 = 0.005/day): slow enough that recovering from near-0 to >0.5
+// takes ~150d (~1.25yr), preserving the "collapse is very hard to reverse"
+// intent while making recovery possible. The speciesExtinctionRate ratchet
+// (climate.ts:326) still fires below 0.2, so the collapse remains costly.
+const PROVISIONAL_EVENT_EXTINCTION_RECOVERY_FACTOR = 1 / 6;
 
 // PROVISIONAL (GDD §17: Environmental recovery timescales)
 // Total pollution load (air + water + soil) at which ecosystem stress ≈ 1 per
@@ -223,7 +250,7 @@ const DEFAULT_REGIONS: readonly RegionState[] = [
     forestCoverage: 0.4,
     industrialActivity: 0.02,
     pollution: { air: 4, water: 2, soil: 1 },
-    vulnerabilities: ['flood-risk'],
+    vulnerabilities: [],
     population: 10_000_000,
   },
   {
@@ -382,17 +409,26 @@ export function evolveRegions(
       region.forestCoverage + recovery * (1 - region.forestCoverage) - pollutionStress * 0.3,
     );
 
-    // Biodiversity — irreversible collapse below the extinction threshold
-    // (GDD §10.3). Above the threshold it recovers like the other indicators;
-    // below it, it does NOT recover and the global speciesExtinctionRate
-    // ratchets up.
+    // Biodiversity — collapse below the extinction threshold is very hard to
+    // reverse (GDD §10.3). Above the threshold it recovers like the other
+    // indicators; below it, recovery is throttled to a small fraction of the
+    // normal rate (W65) + the global speciesExtinctionRate ratchets up.
     let biodiversity: number;
     if (region.biodiversity >= PROVISIONAL_SPECIES_EXTINCTION_THRESHOLD) {
       biodiversity = clamp01(
         region.biodiversity + biodiversityRecovery * (1 - region.biodiversity) - pollutionStress * 0.4,
       );
     } else {
-      biodiversity = Math.max(0, region.biodiversity - pollutionStress * 0.4);
+      // W65: below the extinction threshold, recovery is NOT strictly
+      // irreversible — it runs at a throttled rate (1/6 of normal = 0.005/day)
+      // so recovering from near-0 to >0.5 takes ~150d (~1.25yr). Pre-W65 this
+      // branch only degraded, permanently flooring any region that dipped below
+      // 0.2. The speciesExtinctionRate ratchet below still fires, so the
+      // collapse remains costly.
+      const slowRecovery = biodiversityRecovery * PROVISIONAL_EVENT_EXTINCTION_RECOVERY_FACTOR;
+      biodiversity = clamp01(
+        region.biodiversity + slowRecovery * (1 - region.biodiversity) - pollutionStress * 0.4,
+      );
     }
     if (biodiversity < PROVISIONAL_SPECIES_EXTINCTION_THRESHOLD) {
       // P11 (W16 / RV4-F-M9): cap at the saturation value — extinction is

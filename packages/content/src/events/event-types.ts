@@ -127,6 +127,13 @@ export const PEST_OUTBREAK: EventDefinition = {
  * Wildfire — forest coverage is destroyed and carbon is emitted (GDD §10.3:
  * deforestation increases erosion and reduces habitat; GDD §10.1 atmospheric
  * carbon). Triggers under drought + heat + low forest-coverage resilience.
+ *
+ * W68 (2026-11-24): reduced pollution.air 50→10. Pre-W68, the +50 air-pollution
+ * spike was ~50× the baseline (~1) — relative to the pollutionStress scale
+ * (200), it added 0.25/day stress for ~60 days, catastrophically crashing the
+ * env (same root cause as the flood fix). The reduced magnitude (~10× baseline)
+ * still makes wildfires impactful (forestCoverage -0.4 + a temporary pollution
+ * spike) but recoverable.
  */
 export const WILDFIRE: EventDefinition = {
   id: 'event:wildfire',
@@ -140,7 +147,7 @@ export const WILDFIRE: EventDefinition = {
   durationRange: [5, 30],
   effects: {
     forestCoverage: -0.4,
-    'pollution.air': 50,
+    'pollution.air': 10,
     biodiversity: -0.2,
     soilHealth: -0.15,
   },
@@ -157,6 +164,18 @@ export const WILDFIRE: EventDefinition = {
  * Flood — infrastructure damaged + soil eroded (GDD §10.3: soil degradation
  * reduces productivity; GDD §10.1 nutrient runoff, land degradation).
  * Triggers after sustained heavy precipitation or in flood-prone regions.
+ *
+ * W68 (2026-11-24): reduced pollution.water 30→5 + pollution.soil 15→3 +
+ * soilHealth -0.2→-0.08. Pre-W68, the +30 water-pollution spike was ~50× the
+ * baseline (~0.6) — relative to the pollutionStress scale (200), it added
+ * 0.15/day stress for ~60 days (5%/day decay), which catastrophically crashed
+ * soilHealth/forest/biodiversity for months whenever a flood fired. The W67 bot
+ * fix (reading regional aggregates) revealed that floods firing at the day-60
+ * spring roll crashed the env to ~0.24 in ALL scenarios (the W62 "env stable"
+ * was an artifact of the tree-derived forestCoverage). The reduced magnitudes
+ * (~8× baseline) still make floods impactful (a temporary degradation) but
+ * recoverable within ~30 days, so the regional env stays stable under
+ * sustainable play + recovers after exploitation stops.
  */
 export const FLOOD: EventDefinition = {
   id: 'event:flood',
@@ -169,9 +188,9 @@ export const FLOOD: EventDefinition = {
   severityRange: ['minor', 'severe'],
   durationRange: [5, 20],
   effects: {
-    soilHealth: -0.2,
-    'pollution.water': 30,
-    'pollution.soil': 15,
+    soilHealth: -0.08,
+    'pollution.water': 5,
+    'pollution.soil': 3,
     industrialActivity: -0.1,
   },
   triggerConditions: [
