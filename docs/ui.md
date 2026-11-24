@@ -385,10 +385,11 @@ The panel filters `ui.notifications` to this set. Codes NOT in the set
 `'tree-sale-not-implemented'`, `'unknown-market'`, `'save-corrupt'`) are
 still pushed by the dispatch-wrapper for the dev console / future audit
 log, but they're NOT shown to the player. The actionable list is
-defensive: when the event-bridge that converts SimulationEvents
-(`expense-due`, `tree-died`, `weather-damage` with `damageType='storm'`,
-etc.) into `pushNotification` calls lands in a future phase, only the
-right codes will surface — the panel's filter is already in place.
+defensive: the event-bridge (`simulationEventToNotifications`, shipped
+W25/W31) that converts SimulationEvents (`expense-due`, `tree-died`,
+`weather-damage` with any damageType, etc.) into `pushNotification`
+calls emits only codes in this set — non-actionable events return `[]`
+so they don't evict actionable alerts from the bounded buffer.
 
 **FIFO cap** — `PROVISIONAL_UI_MAX_NOTIFICATIONS` (default 20). The
 store's `pushNotification` enforces it via `appendBounded`; the panel
@@ -675,8 +676,9 @@ non-text contrast threshold.
   wired in P5d. Actionable notifications stay on screen until the
   player dismisses them — which is intentional for the actionable
   bucket (the player should act, not have the message vanish). Info /
-  non-actionable notifications could auto-dismiss after e.g. 8 s when
-  the future event-bridge lands; the hook is ready.
+  non-actionable notifications could auto-dismiss after e.g. 8 s; the
+  event-bridge (W25/W31) now ships but deliberately drops non-actionable
+  sim events, so this remains a Low-severity polish item. The hook is ready.
 
 ---
 
@@ -773,14 +775,25 @@ yet) — tracked as **R-P5d-5**.
 | R-P5d-3 | NotificationsPanel list is not a roving-tabindex widget — acceptable at ≤ 20 items | Low |
 | R-P5d-4 | Auto-dismiss timer not wired (info / non-actionable notifications stay until dismissed) | Low |
 | R-P5d-5 | Playwright browser binary download is opt-in (CI doesn't provision it) | Low |
-| R-P5d-6 | Event-bridge from `SimulationEvent` (`expense-due`, `tree-died`, `weather-damage`, …) → `pushNotification` not yet shipped — the panel's actionable filter is in place, the producer isn't | Medium |
+| R-P5d-6 | ~~Event-bridge from `SimulationEvent` (`expense-due`, `tree-died`, `weather-damage`, …) → `pushNotification` not yet shipped~~ — **RESOLVED (W25/W31):** `simulationEventToNotifications` bridges all 6 actionable codes (`expense-due`, `tree-died`, `storm-damage`, `severe-weather`, `issuance-rejected` + `notification` pass-through) into `pushNotification`; wired into `dispatch` + `commitSimState` | ~~Medium~~ → Done |
 
-R-P5d-6 is the most consequential: the dispatch-wrapper converts typed
-errors to notifications today (canonical case: insufficient funds on
-purchase). The actionable event codes for expenses / tree death / storm
-damage will fire from the engine's `SimulationEvent` stream once a
-future phase adds the bridge; the panel + filter + FIFO cap + ARIA are
-all ready for them.
+R-P5d-6 **shipped as W25 (commit `69a1f1b`) + hardened as W31 (commit
+`68a3211`):** `simulationEventToNotifications` (in
+`apps/web/lib/format/event-to-notification.ts`) maps the significant
+non-`notification` SimulationEvents into `pushNotification` payloads.
+The bridge covers all 6 originally-missing actionable codes —
+`expense-due` (unpaid only), `tree-died`, `storm-damage` (via
+`weather-damage`), `severe-weather` (via severe `weather-changed` /
+`scheduled-event`), `issuance-rejected`, plus `notification` pass-
+through. It is wired into both store mutators: `dispatch` (UI action
+path, `game-store.ts:467`) + `commitSimState` (rAF loop path,
+`game-store.ts:500`). Non-actionable events (`season-changed` info,
+`system` info/warnings, `tick`) return `[]` so they don't evict
+actionable alerts from the bounded buffer. The `low-funds` actionable
+code is produced by a separate path — `error-to-notification.ts` maps
+`InsufficientFundsError` / `UnknownAccountError` from the `dispatch`
+catch arm. 13 tests in `event-to-notification.test.ts` pin the mapping
++ the W31 invariant (every emitted code is in the whitelist).
 
 ---
 
@@ -796,7 +809,7 @@ all ready for them.
 | 6 | Energy reserves compensate for reduced foliage. | ✅ | `BiologySystem` reserves |
 | 7 | Repeated harvesting can cause irreversible damage or death. | ✅ | Mature tree survives one 50% harvest; repeated severe defoliation kills |
 | 8 | The tree responds to seasons and weather. | ✅ | `TimeSystem` + `WeatherSystem` + `ResourceSystem` |
-| 9 | Personal expenses create a meaningful financial requirement. | ✅ | `ExpensesSummary` + `pay-expense` action + `expense-due` notification code (filter ready, bridge pending — R-P5d-6) |
+| 9 | Personal expenses create a meaningful financial requirement. | ✅ | `ExpensesSummary` + `pay-expense` action + `expense-due` notification code (bridge shipped W25/W31 — R-P5d-6 resolved) |
 | 12 | The original tree cannot be sold or transferred. | ✅ | `OriginalTreeNotTransferableError` → `'original-tree-protected'` notification via `dispatch-wrapper` |
 | 13 | The tree's visual appearance reflects its actual simulation state. | ✅ | `buildTreeRenderData` + `CanvasTreeRenderer` + `TreeView` |
 
@@ -808,7 +821,11 @@ P5d's contribution to §21:
 
 - **#9** — `expense-due` is in the actionable codes list. The
   notification fires from the engine's `expense-due` SimulationEvent
-  once the event-bridge (R-P5d-6) ships; the panel surface is ready.
+  via the W25/W31 event-bridge (`simulationEventToNotifications`); the
+  panel surface renders it. (The bridge is wired; whether an
+  `expense-due` event actually fires in live play depends on
+  `livingExpenses` being non-zero — fixed by W45, which seeds real
+  defaults + first bill at day 1.)
 - **#12** — `OriginalTreeNotTransferableError` is now caught by
   `safeDispatch` and surfaced as a `'original-tree-protected'`
   notification. The engine guard (P3c) was already in place; P5d adds

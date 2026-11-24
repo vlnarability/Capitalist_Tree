@@ -79,7 +79,7 @@ Severity counts in this corpus: **BLOCKER 0, HIGH 12, MEDIUM 18, LOW 21, INFO/UN
 | RV5-F3 | Persistence | MEDIUM | high | N/A | IndexedDbStorage.save(), useSimulationLoop.save() | `QuotaExceededError` not caught; state committed to store before save awaits. **Fix:** await save before commit; catch quota error. |
 | RV5-F4 | Persistence | MEDIUM | high | N/A | useSimulationLoop | No concurrent-tab protection. **Fix:** `navigator.locks` or `BroadcastChannel`. |
 | RV5-F5 | Persistence | MEDIUM | high | N/A | IndexedDbStorage.save() | Two `db.put`s not in one transaction; crash leaves orphan. **Fix:** single IDB transaction. |
-| RV6-2 | UI | MEDIUM | high | N/A | NotificationsPanel.tsx, GDD §13.5 | 5 of 6 actionable notification codes never produced. **Fix:** bridge SimulationEvents to notifications. |
+| RV6-2 | UI | MEDIUM | high | N/A | NotificationsPanel.tsx, GDD §13.5 | ~~5 of 6 actionable notification codes never produced.~~ **RESOLVED (W25/W31):** `simulationEventToNotifications` bridges all 6 actionable codes (`expense-due`, `tree-died`, `storm-damage`, `severe-weather`, `issuance-rejected`, `notification` pass-through) into `pushNotification`; wired into `dispatch` + `commitSimState`. `low-funds` produced via `error-to-notification` (dispatch catch arm). 13 tests pin the mapping. |
 | RV6-3 | UI | MEDIUM | high | N/A | OfflineModal.tsx | Modal has `role="dialog"` but no Escape handler, focus trap, or autofocus. **Fix:** add focus management. |
 | RV6-4 | Security | MEDIUM | high | N/A | package.json (zod dep) | Zod 3.25.76 vulnerable to GHSA-mrhx-c7xc-m3w5 (memory exhaustion on save validation). **Fix:** upgrade to zod 4.6.6+ or pre-validate size. |
 | RV1-1 | Architecture | LOW | high | N/A | systems/economy.ts:24-26, personal.ts:34-37 | Stale doc comments about engine wrapping deepCopy. **Fix:** update comments. |
@@ -239,7 +239,7 @@ The repo is at P10 (`7d8ea77`). The remediation plan is a single track: fix the 
 | W22 | Single IDB transaction for save (RV5-F5) | Wrap both `db.put`s in one transaction. | S |
 | W23 | OfflineModal accessibility (RV6-3) | Escape handler, focus trap, autofocus. | S |
 | W24 | Zod 4 upgrade or pre-validation size cap (RV6-4) | Close GHSA-mrhx-c7xc-m3w5. | M |
-| W25 | Bridge SimulationEvents→notifications (RV6-2) | Map tree stress, weather, objectives, business flags, harvest. | M |
+| W25 | ~~Bridge SimulationEvents→notifications (RV6-2)~~ — **DONE (W25 `69a1f1b` + W31 `68a3211`):** `simulationEventToNotifications` maps tree-died, expense-due, weather-damage→storm-damage, severe weather-changed/scheduled-event→severe-weather, issuance-rejected + notification pass-through. Wired into `dispatch` + `commitSimState`. Non-actionable events return `[]`. | ~~M~~ → Done |
 | W26 | Guard `estimateSustainableHarvest` against `stepDays=0` (RV2-4) | Return 0 or default to 1. | S |
 | W27 | Add `heightGrowth` bucket or document coupling (RV2-3) | Decide and implement. | S |
 | W28 | Correct STATUS.md "8 systems" → 7 (RV1-8) + stale comments (RV1-1) | Doc-only. | S |
