@@ -6,20 +6,26 @@
  * A small, SSR-safe audio manager. Loads the ambient music track from the
  * credits-managed assets (`/assets/audio/music-ambient.mp3`) into a looping
  * `<audio>` element kept in a ref, and exposes `playSfx(name)` to fire one-shot
- * sound effects (click / purchase / notification). A persisted mute toggle
- * (localStorage) gates both — browsers block autoplay until a user gesture, so
- * music starts muted-by-default and begins on the first `setMuted(false)` call
- * (which is a user gesture when wired to a button click).
+ * sound effects (click / purchase / notification).
  *
- * Rule 6 (rendering / UI reads state, never writes): the hook reads no store
- * state; it owns its own local mute flag + audio elements. It never touches
+ * W55 (Settings panel): the mute flag now lives in the Zustand store
+ * (`ui.muted`) instead of this hook's local state, so the Settings panel + any
+ * future audio consumer agree. The store owns the localStorage persistence
+ * (`ct-audio-muted`); this hook only reads `ui.muted` + writes back via
+ * `setMuted`. Browsers block autoplay until a user gesture, so music starts
+ * muted-by-default and begins on the first `setMuted(false)` call (which is a
+ * user gesture when wired to a button click).
+ *
+ * Rule 6 (rendering / UI reads state, never writes): the hook reads `ui.muted`
+ * from the store; it owns only the `<audio>` element refs. It never touches
  * `simState`. SFX are triggered by UI event handlers (button clicks), not by
  * simulation events directly — keeping audio on the UI side of the boundary.
  *
  * Asset provenance: every file referenced here is listed in
  * `packages/content/src/credits` + `docs/credits.md` (CC0 / CC-BY).
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
+import { useGameStore } from '../stores/game-store';
 
 /** The one-shot SFX slots, keyed by the asset file path. */
 const SFX_FILES = {
@@ -31,23 +37,14 @@ const SFX_FILES = {
 export type SfxName = keyof typeof SFX_FILES;
 
 const MUSIC_FILE = '/assets/audio/music-ambient.mp3';
-const MUTE_KEY = 'ct-audio-muted';
-
-/** Read the persisted mute flag (defaults to true — muted until user opts in). */
-function readMutedPref(): boolean {
-  if (typeof window === 'undefined') return true;
-  try {
-    return window.localStorage.getItem(MUTE_KEY) !== '0';
-  } catch {
-    return true;
-  }
-}
 
 /**
  * Audio manager hook. Returns `[muted, setMuted, playSfx]`.
  *
  * - `muted` — whether audio is currently off (music paused, SFX silenced).
- * - `setMuted(next)` — toggle audio on/off. Calling `setMuted(false)` from a
+ *   Read from the store (`ui.muted`) so the Settings panel + this hook agree.
+ * - `setMuted(next)` — toggle audio on/off via the store's `setMuted` mutator
+ *   (which persists to localStorage). Calling `setMuted(false)` from a
  *   user-gesture handler (e.g. an onClick) satisfies the browser autoplay
  *   policy + starts the music.
  * - `playSfx(name)` — fire a one-shot SFX (no-op while muted or on SSR).
@@ -57,7 +54,8 @@ export function useAudio(): readonly [
   setMuted: (next: boolean) => void,
   playSfx: (name: SfxName) => void,
 ] {
-  const [muted, setMutedState] = useState<boolean>(readMutedPref);
+  const muted = useGameStore((s) => s.ui.muted);
+  const setMutedStore = useGameStore((s) => s.setMuted);
   const musicRef = useRef<HTMLAudioElement | null>(null);
 
   // Lazily create the ambient <audio> element on the client.
@@ -84,17 +82,10 @@ export function useAudio(): readonly [
     }
   }, [muted]);
 
-  // Persist the mute flag.
-  const setMuted = useCallback((next: boolean) => {
-    setMutedState(next);
-    try {
-      if (typeof window !== 'undefined') {
-        window.localStorage.setItem(MUTE_KEY, next ? '1' : '0');
-      }
-    } catch {
-      // localStorage unavailable — in-memory state still works.
-    }
-  }, []);
+  const setMuted = useCallback(
+    (next: boolean) => setMutedStore(next),
+    [setMutedStore],
+  );
 
   const playSfx = useCallback(
     (name: SfxName) => {

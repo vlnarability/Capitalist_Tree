@@ -13,3 +13,4 @@ export { Stat, type StatProps } from './Stat';
 export { ProgressBar, type ProgressBarProps } from './ProgressBar';
 export { ErrorBoundary } from './ErrorBoundary';
 export { ClimatePicker, type ClimatePickerProps, type ClimatePickerSelection } from './ClimatePicker';
+export { SettingsModal, type SettingsModalProps } from './SettingsModal';

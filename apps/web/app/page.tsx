@@ -55,7 +55,7 @@
  *     `simState` reference is untouched, rule 6). The page re-renders to
  *     mount / unmount the advanced Panels.
  */
-import { useCallback, useMemo, useState, type ReactElement } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactElement } from 'react';
 import {
   DEFAULT_GAME_CONFIG,
   estimateSustainableHarvest,
@@ -72,13 +72,13 @@ import { findSpeciesById } from '@capitalist-tree/content';
 import type { GameConfig } from '@capitalist-tree/shared';
 import { useSimulationLoop } from '../hooks/useSimulationLoop';
 import { useAestheticTheme } from '../hooks/useAestheticTheme';
-import { useGameStore, selectSustainabilityScore } from '../stores/game-store';
+import { useGameStore, selectSustainabilityScore, rehydrateUiPrefs } from '../stores/game-store';
 import { canopyDensityScale } from '../lib/aesthetic/geometry';
 import { createBrowserStorage } from '../lib/persistence';
 import { harvest } from '../lib/actions';
 import { TreeView } from '../components/tree';
 import { AestheticMeter } from '../components/dashboard/AestheticMeter';
-import { Panel, Button, ClimatePicker, type ClimatePickerSelection } from '../components/common';
+import { Panel, Button, ClimatePicker, SettingsModal, type ClimatePickerSelection } from '../components/common';
 import {
   MoneyDisplay,
   TreeConditionSummary,
@@ -261,6 +261,13 @@ export default function HomePage(): ReactElement {
   // GAP-31 Phase 3: the analytics observability panel toggle. Dev-only — the
   // toggle button + panel are not rendered in production builds.
   const [analyticsOpen, setAnalyticsOpen] = useState(false);
+  // W55 — Settings panel: rehydrate persisted UI prefs (mute / locale /
+  // reduced-motion / theme) from localStorage once on mount, + gate the
+  // SettingsModal open state.
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  useEffect(() => {
+    rehydrateUiPrefs();
+  }, []);
 
   const onNewGame = useCallback(() => {
     setPickerOpen(true);
@@ -287,7 +294,7 @@ export default function HomePage(): ReactElement {
   if (!loop.ready || !treeRenderData || !environmentRenderData) {
     return (
       <main className="mx-auto max-w-7xl p-6">
-        <Header />
+        <Header onOpenSettings={() => setSettingsOpen(true)} />
         <p className="mt-12 text-center text-sm text-slate-500" data-testid="booting">
           Booting engine…
         </p>
@@ -297,7 +304,7 @@ export default function HomePage(): ReactElement {
 
   return (
     <main className="mx-auto max-w-7xl p-4 sm:p-6" data-testid="game-screen">
-      <Header />
+      <Header onOpenSettings={() => setSettingsOpen(true)} />
 
       {/* P5d — GDD §13.5 Notifications. Floating top-right toast panel.
           The panel returns `null` when there are no actionable
@@ -342,6 +349,13 @@ export default function HomePage(): ReactElement {
       {/* GAP-33 (first-time tutorial): one-time "Getting Started" orientation,
           dismissed persists to localStorage. Renders null once dismissed. */}
       <WelcomePanel />
+      {/* W55 (Settings panel) — centralized UI prefs (mute / locale /
+          reduced-motion / theme). Controlled modal opened from the Header
+          gear button. Returns null when `settingsOpen` is false. */}
+      <SettingsModal
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+      />
       {/* P11 (W11): progress bar for the Web Worker offline catch-up. Renders
           null when no catch-up is running, so this mount is a no-op most of
           the time. Shows while the worker runs chunks, then the OfflineModal
@@ -549,7 +563,7 @@ export default function HomePage(): ReactElement {
 // Header (small, presentational — extracted for clarity).
 // ----------------------------------------------------------------------------
 
-function Header(): ReactElement {
+function Header({ onOpenSettings }: { readonly onOpenSettings: () => void }): ReactElement {
   return (
     <header className="mb-6 flex flex-wrap items-baseline justify-between gap-2 border-b-2 border-double border-ink/40 pb-3">
       <div>
@@ -560,7 +574,18 @@ function Header(): ReactElement {
           a field journal of speculative botany
         </p>
       </div>
-      <AestheticMeter />
+      <div className="flex items-center gap-2">
+        <AestheticMeter />
+        <button
+          type="button"
+          onClick={onOpenSettings}
+          aria-label="Open settings"
+          data-testid="settings-button"
+          className="rounded border border-ink/25 bg-parchment px-2 py-1 text-sm text-ink transition-colors hover:bg-parchment-2 focus:border-brass focus:outline-none focus-visible:ring-2 focus-visible:ring-brass/50"
+        >
+          ⚙
+        </button>
+      </div>
     </header>
   );
 }

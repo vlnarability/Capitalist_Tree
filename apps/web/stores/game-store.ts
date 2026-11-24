@@ -160,6 +160,47 @@ export interface UiNotification {
  *     branch-sway + particles unconditionally). Documented as a gap in
  *     docs/ui.md §"Accessibility decisions" + R-P5d-2.
  */
+// ----------------------------------------------------------------------------
+// W55 — Settings panel: UI preference types + localStorage persistence.
+// ----------------------------------------------------------------------------
+
+/**
+ * W55 — the player's theme override. `'auto'` (default) follows the
+ * sustainability-score-driven dynamic aesthetic (W51); `'brutalist'` /
+ * `'neutral'` / `'floral'` force a specific tier (mapped to score 0 / 5 / 10
+ * respectively in `useAestheticTheme`). UI-only — NOT part of the saved
+ * GameState.
+ */
+export type ThemeOverride = 'auto' | 'brutalist' | 'neutral' | 'floral';
+
+/** localStorage keys for the persisted UI prefs (W55). */
+const UI_PREF_KEYS = {
+  muted: 'ct-audio-muted',
+  locale: 'ct-locale',
+  reducedMotion: 'ct-reduced-motion',
+  theme: 'ct-theme',
+} as const;
+
+/** SSR-safe localStorage read helper. Returns `null` if unavailable / missing. */
+function readPref(key: string): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+/** SSR-safe localStorage write helper. No-op if unavailable. */
+function writePref(key: string, value: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // localStorage unavailable — in-memory state still works.
+  }
+}
+
 export interface GameUiState {
   /** GDD §13.3: advanced interface toggle. False = simplified view. */
   readonly advancedView: boolean;
@@ -226,6 +267,21 @@ export interface GameUiState {
    * clearing it never touches `simState`'s reference.
    */
   readonly pendingEnding: ObjectiveId | null;
+  /**
+   * W55 (Settings panel) — audio mute. `true` (default) = audio off. The
+   * `useAudio` hook reads this (instead of its own local state) so the
+   * Settings panel + any future audio consumer agree. Persisted to
+   * localStorage (`ct-audio-muted`). UI-only — NOT part of the saved GameState.
+   */
+  readonly muted: boolean;
+  /**
+   * W55 (Settings panel) — the player's theme override. `'auto'` (default)
+   * follows the sustainability-score-driven dynamic aesthetic (W51);
+   * `'brutalist'` / `'neutral'` / `'floral'` force a specific tier. The
+   * `useAestheticTheme` hook honors this when not `'auto'`. Persisted to
+   * localStorage (`ct-theme`). UI-only — NOT part of the saved GameState.
+   */
+  readonly themeOverride: ThemeOverride;
 }
 
 /**
@@ -260,6 +316,10 @@ export interface GameStoreState {
    * `prefers-reduced-motion` setting; `'on'` / `'off'` force the value.
    */
   setReducedMotionOverride: (mode: 'auto' | 'on' | 'off') => void;
+  /** W55 (Settings) — set the audio mute flag. UI mutator only (rule 6). */
+  setMuted: (muted: boolean) => void;
+  /** W55 (Settings) — set the theme override. UI mutator only (rule 6). */
+  setTheme: (mode: ThemeOverride) => void;
   pushNotification: (n: Omit<UiNotification, 'id' | 'createdAtMs'>) => UiNotification;
   dismissNotification: (id: string) => void;
   clearNotifications: () => void;
@@ -411,6 +471,8 @@ export function initialGameUiState(): GameUiState {
     pendingOfflineSummary: null,
     pendingEnding: null,
     catchUpProgress: null,
+    muted: true,
+    themeOverride: 'auto',
   };
 }
 
@@ -558,9 +620,12 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
   setCurrencyCosmetic: (currencyId) =>
     set((s) => ({ ui: { ...s.ui, selectedCurrencyId: currencyId } })),
 
-  /** P13-C — set the UI locale. UI mutator only; `simState` unchanged (rule 6). */
-  setLocale: (locale) =>
-    set((s) => ({ ui: { ...s.ui, locale } })),
+  /** P13-C — set the UI locale. UI mutator only; `simState` unchanged (rule 6).
+   *  W55: persisted to localStorage (`ct-locale`) so the pref survives reload. */
+  setLocale: (locale) => {
+    writePref(UI_PREF_KEYS.locale, locale);
+    set((s) => ({ ui: { ...s.ui, locale } }));
+  },
 
   /**
    * P5d — set the in-game reduced-motion override. `'auto'` follows the OS
@@ -568,9 +633,24 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
    * force the value. The `useReducedMotion()` hook reads this together with
    * the OS media query to compute the final boolean. UI mutator only —
    * `simState` is referentially unchanged (rule 6).
+   * W55: persisted to localStorage (`ct-reduced-motion`) so the pref survives reload.
    */
-  setReducedMotionOverride: (mode) =>
-    set((s) => ({ ui: { ...s.ui, reducedMotionOverride: mode } })),
+  setReducedMotionOverride: (mode) => {
+    writePref(UI_PREF_KEYS.reducedMotion, mode);
+    set((s) => ({ ui: { ...s.ui, reducedMotionOverride: mode } }));
+  },
+
+  /** W55 (Settings) — set the audio mute flag + persist to localStorage. */
+  setMuted: (muted) => {
+    writePref(UI_PREF_KEYS.muted, muted ? '1' : '0');
+    set((s) => ({ ui: { ...s.ui, muted } }));
+  },
+
+  /** W55 (Settings) — set the theme override + persist to localStorage. */
+  setTheme: (mode) => {
+    writePref(UI_PREF_KEYS.theme, mode);
+    set((s) => ({ ui: { ...s.ui, themeOverride: mode } }));
+  },
 
   pushNotification: (n) => {
     const notif: UiNotification = {
@@ -641,6 +721,48 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
 // Re-export the SetCurrencyCosmeticAction type so consumers can `import
 // { setCurrencyCosmetic, type SetCurrencyCosmeticAction }` from one place.
 export type { SetCurrencyCosmeticAction } from '../lib/actions';
+
+// ----------------------------------------------------------------------------
+// W55 — rehydrate persisted UI prefs (mute / locale / reduced-motion / theme)
+// from localStorage into the store at boot. SSR-safe (no-op on server + when
+// localStorage is empty / unavailable). Called once from the page root effect.
+// ----------------------------------------------------------------------------
+
+/**
+ * Read the persisted UI prefs from localStorage + write them into the store.
+ * No-op on SSR or when localStorage is unavailable / empty (the store's
+ * `initialGameUiState` defaults stand). Safe to call multiple times — only
+ * writes when a stored value is present + valid.
+ */
+export function rehydrateUiPrefs(): void {
+  if (typeof window === 'undefined') return;
+  const store = useGameStore.getState();
+  // Mute: '0' = unmuted, anything else (including null) = muted (default true).
+  const mutedPref = readPref(UI_PREF_KEYS.muted);
+  if (mutedPref !== null) {
+    store.setMuted(mutedPref !== '0');
+  }
+  // Locale: only accept a known supported locale.
+  const localePref = readPref(UI_PREF_KEYS.locale);
+  if (localePref === 'en' || localePref === 'zh-CN' || localePref === 'es') {
+    store.setLocale(localePref);
+  }
+  // Reduced motion: only accept a known mode.
+  const motionPref = readPref(UI_PREF_KEYS.reducedMotion);
+  if (motionPref === 'auto' || motionPref === 'on' || motionPref === 'off') {
+    store.setReducedMotionOverride(motionPref);
+  }
+  // Theme: only accept a known override.
+  const themePref = readPref(UI_PREF_KEYS.theme);
+  if (
+    themePref === 'auto' ||
+    themePref === 'brutalist' ||
+    themePref === 'neutral' ||
+    themePref === 'floral'
+  ) {
+    store.setTheme(themePref);
+  }
+}
 
 /**
  * Test-only helper: reset the store to its initial state (null simState,
