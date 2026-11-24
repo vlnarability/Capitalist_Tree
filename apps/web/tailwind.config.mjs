@@ -60,6 +60,24 @@ export default {
         serif: ['var(--ct-font-body)'],
         journal: ['"Courier New"', 'Courier', 'monospace'],
       },
+      // W52 — corner radius re-derived from `--ct-radius` (written by
+      // useAestheticTheme from the sustainability score, default 0.125rem in
+      // globals.css = score-5 midpoint). Each token is a multiple of the var,
+      // matching Tailwind's native DEFAULT-relative scale (sm=0.5×, md=1.5×,
+      // lg=2×, xl=3×, 2xl=4×, 3xl=6×). At score 10 `--ct-radius`=0.25rem so
+      // EVERY token resolves to its original Tailwind value (no regression at
+      // full sustainability); at score 0 `--ct-radius`=0 so all corners go
+      // sharp (brutalist industrial). `full` + `none` stay literal (pips,
+      // progress bars, avatars must stay circular; `rounded-none` stays 0).
+      borderRadius: {
+        sm: 'calc(var(--ct-radius) * 0.5)',
+        DEFAULT: 'var(--ct-radius)',
+        md: 'calc(var(--ct-radius) * 1.5)',
+        lg: 'calc(var(--ct-radius) * 2)',
+        xl: 'calc(var(--ct-radius) * 3)',
+        '2xl': 'calc(var(--ct-radius) * 4)',
+        '3xl': 'calc(var(--ct-radius) * 6)',
+      },
     },
   },
   plugins: [],

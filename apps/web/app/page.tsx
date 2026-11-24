@@ -72,7 +72,8 @@ import { findSpeciesById } from '@capitalist-tree/content';
 import type { GameConfig } from '@capitalist-tree/shared';
 import { useSimulationLoop } from '../hooks/useSimulationLoop';
 import { useAestheticTheme } from '../hooks/useAestheticTheme';
-import { useGameStore } from '../stores/game-store';
+import { useGameStore, selectSustainabilityScore } from '../stores/game-store';
+import { canopyDensityScale } from '../lib/aesthetic/geometry';
 import { createBrowserStorage } from '../lib/persistence';
 import { harvest } from '../lib/actions';
 import { TreeView } from '../components/tree';
@@ -147,6 +148,10 @@ export default function HomePage(): ReactElement {
   const treeState = useGameStore((s) => s.simState?.originalTree ?? null);
   const worldState = useGameStore((s) => s.simState?.world ?? null);
   const clockState = useGameStore((s) => s.simState?.clock ?? null);
+  // W52 — the sustainability score drives the canopy density scale applied to
+  // `treeRenderData` below (sparse at exploitation, full at sustainability).
+  // Primitive int (null pre-boot) → re-renders only when the score changes.
+  const aestheticScore = useGameStore(selectSustainabilityScore);
 
   // TreeView tint: derived from the tree's condition tier (Healthy/Stressed/
   // Critical/Dead). Reads `originalTree.alive` + `originalTree.stress` only.
@@ -168,10 +173,21 @@ export default function HomePage(): ReactElement {
   // The mappers are pure (rule 2 + rule 6); `useMemo` re-runs only when the
   // input slices change reference (which the engine guarantees via deep-copy
   // + replace on every advance).
+  //
+  // W52 — the tree render data's `foliageDensity` is post-multiplied by
+  // `canopyDensityScale(score)` so the drawn canopy lushness tracks the
+  // stewardship score (sparse at exploitation, full at sustainability). The
+  // scale never exceeds 1.0, so the canopy is never drawn fuller than the real
+  // leaf-count density — it can only be thinned for mood. Pre-boot (score null)
+  // defaults to no scaling. `buildTreeRenderData` returns a fresh object each
+  // call, so the spread override does not mutate any cached snapshot.
   const treeRenderData = useMemo(() => {
     if (!treeState || !clockState) return null;
-    return buildTreeRenderData(treeState, { season: clockState.season });
-  }, [treeState, clockState]);
+    const base = buildTreeRenderData(treeState, { season: clockState.season });
+    const scale = aestheticScore == null ? 1 : canopyDensityScale(aestheticScore);
+    const foliageDensity = Math.min(1, Math.max(0, base.foliageDensity * scale));
+    return { ...base, foliageDensity };
+  }, [treeState, clockState, aestheticScore]);
 
   const environmentRenderData = useMemo(() => {
     if (!worldState || !clockState) return null;
