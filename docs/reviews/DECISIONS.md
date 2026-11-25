@@ -397,6 +397,57 @@ at ~2.35 eu/day (previously rose to 3.45+).
 5yr design promise remains fully verified. The 25yr test is kept as a regression
 guard.
 
+---
+
+## Hotfixes (H-series, bugs outside the W-sequence, fixed on main)
+
+Three DR-1-assumption-breaking bugs were filed from the post-W81 audit. On
+investigation, one was already fixed + two needed hotfixes.
+
+### H1 — market-price-changed event flood in `clearMarkets` (Finding 3)
+
+**Symptom:** 41.5M `market-price-changed` events in a long sim. **Root cause:**
+W45 (commit prior) suppressed the flood in `EconomySystem.updateMarkets` by
+adding `priceMoveIsSignificant` (a ≥0.5% relative-move guard) — the W45 comment
+documents the exact flood (high-basePrice markets like land at 100000 drifting
+~1 minor unit/tick = 0.001% relative, bare `!==` guard emitting every tick).
+But `BusinessSystem.clearMarkets` (added later in P8c) inherited the SAME bare
+`!==` guard + processes all 8 markets per tick → the flood returned through that
+path. **Fix:** exported `priceMoveIsSignificant` from `economy/markets.ts` +
+applied it in `business/market.ts:clearMarkets` (price STATE always updates; the
+event fires only on a ≥0.5% move). Mirrors `updateMarkets` exactly. Existing
+`business-market.test.ts` cases (8% move → emit; equilibrium → no emit) still
+pass. 1232 sim tests green.
+
+### H2 — zero-amount issuance when harvesting a bare live tree (Finding 5 / BigInt "0")
+
+**Symptom:** `Issuance amount "0" is not a valid positive bigint string`
+rejection events. **Root cause:** W47 (commit prior) fixed the last-leaf case
+(foliage === 1, `floor(1 × maximumHarvestFraction)` rounded to 0 → `Math.max(1,
+…)`) but the `harvest-leaves` handler did NOT guard a LIVE tree with 0 foliage
+(fully harvested, or deciduous after winter leaf-drop). It fell through to
+`harvestLeaves`, which computed `leavesHarvested = 0` + queued a
+`CurrencyIssuanceRequest` with `amount: '0'`; `drainPendingIssuances` then
+rejected it (`validateAmount` requires > 0) + emitted a noisy `issuance-rejected`
+event each harvest. (Not a crash — `requestIssuance` catches + emits a rejection
+— but noisy + wrong.) **Fix:** added a `tree.foliage.currentLeaves <= 0` guard in
+the `harvest-leaves` handler (handlers.ts), returning a `'harvest-no-foliage'`
+`biology-notification` (severity `info`) — matching the existing dead-tree guard
+pattern. Together the dead-tree + no-foliage guards ensure `harvestLeaves` is
+only reached with foliage ≥ 1, so no zero-amount issuance is ever queued. 1232
+sim tests green.
+
+### Finding 4 — personal expenses inert: ALREADY FIXED by W46 (no hotfix needed)
+
+The audit described "`livingExpenses` defaults to 0 + first bill not until day
+30" — the PRE-W46 state. W46 (commit c419eb1) already fixed both: `initial-state`
+seeds all 5 `livingExpenses` categories with real default amounts (not `'0'`),
++ `PROVISIONAL_PERSONAL_FIRST_BILL_DELAY_SECONDS = 86_400` (1 day, not 30) +
+`ensureNextBillScheduled` uses it for the first bill (detected via
+`lastBillAt === 0`). `getExpenseAmount`'s `'0'`-fallback remains as a safety net
+for pre-W46 migrated saves. Verified by `personal.test.ts` (passes in the 1232
+suite). No code change.
+
 **Status:** Adopted — targets provisional; balance audit complete. Replaces the
 GDD §17 "Environmental recovery timescales" + "Detailed photosynthesis and
 energy allocation equations" open items with concrete measured goals.

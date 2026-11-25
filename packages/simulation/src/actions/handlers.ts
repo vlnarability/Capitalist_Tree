@@ -178,6 +178,33 @@ const harvestLeavesHandler: ActionListener<HarvestLeavesAction> = (state, action
       ],
     };
   }
+  // H2 (zero-issuance fix): a LIVE tree with no foliage (fully harvested, or a
+  // deciduous tree in winter after leaf drop) has nothing to harvest. Pre-H2
+  // the handler fell through to `harvestLeaves`, which computed leavesHarvested
+  // = 0 + queued a `CurrencyIssuanceRequest` with amount '0'; P3's
+  // `drainPendingIssuances` then rejected it (validateAmount requires > 0) +
+  // emitted a noisy `issuance-rejected` event every time the player (or a bot)
+  // harvested a bare tree. W47 fixed the last-leaf case (foliage === 1, fraction
+  // rounds to 0); this guard closes the foliage === 0 case at the source so no
+  // zero-amount issuance is ever queued. The dead-tree guard above + this one
+  // together ensure `harvestLeaves` is only reached with foliage >= 1.
+  if (tree.foliage.currentLeaves <= 0) {
+    return {
+      state: next,
+      events: [
+        {
+          type: 'biology-notification',
+          at: state.clock.elapsedSeconds,
+          payload: {
+            treeId: tree.id,
+            severity: 'info',
+            code: 'harvest-no-foliage',
+            message: 'This tree has no leaves to harvest right now.',
+          },
+        },
+      ],
+    };
+  }
 
   const species = getSpeciesOrFail(tree.speciesId);
   // Actions execute between steps — stepSeconds/stepDays = 0.
