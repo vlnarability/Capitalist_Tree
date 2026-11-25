@@ -199,6 +199,23 @@ export const PROVISIONAL_BIOLOGY_MATURITY_GROWTH_CURVE_EXPONENT = 2.0;
 // growth. 0.05 = 5% of sapling growth rate.
 export const PROVISIONAL_BIOLOGY_MATURE_GROWTH_FRACTION = 0.05;
 
+// W81 (2026-11-25): gameplay structural-growth plateau age (SIM days). The
+// species' `matureAgeDays` (e.g. White Oak = 200yr = 24000d) is the botanical
+// full-maturity horizon — used for fruiting/reproduction age. But structural
+// GROWTH allocation (height/trunk/branch, which drives `biomassScore` →
+// maintenance) is decoupled + uses THIS shorter horizon, so the tree's
+// structural growth slows to `MATURE_GROWTH_FRACTION` within the gameplay
+// horizon (a play session is ~5-25yr). Without this, the tree grows at ~88% of
+// the sapling rate for the entire 25yr test (only 12.5% of the way to the 200yr
+// maturity), so maintenance keeps rising while harvesting caps production →
+// reserves deplete → reserves-exhaustion death at 9-17yr (the W80 root cause).
+// 600d = 5yr: the tree's structural growth plateaus by year 5, freezing
+// maintenance at a level the cared-for canopy can sustain (production > main-
+// tenance). Fruiting/capacity (which use species.matureAgeDays directly) are
+// unaffected. The neglected tree still dies via the wear path (independent of
+// growth) so the 6-12mo neglect-death target holds.
+export const PROVISIONAL_BIOLOGY_GROWTH_MATURITY_AGE_DAYS = 600;
+
 // PROVISIONAL (GDD §5.2: photosynthesis — leaf health contribution)
 //
 // Weight of `leafHealth` vs `seasonalCondition` in computing the effective

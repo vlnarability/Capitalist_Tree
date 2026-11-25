@@ -25,6 +25,7 @@ import {
   PROVISIONAL_BIOLOGY_DORMANCY_MAINTENANCE_FRACTION,
   PROVISIONAL_BIOLOGY_MAINTENANCE_FRACTION,
   PROVISIONAL_BIOLOGY_MATURE_GROWTH_FRACTION,
+  PROVISIONAL_BIOLOGY_GROWTH_MATURITY_AGE_DAYS,
   PROVISIONAL_BIOLOGY_RESPIRATION_TEMP_FLOOR,
   PROVISIONAL_BIOLOGY_STRESS_MAINTENANCE_MULTIPLIER,
 } from '@capitalist-tree/shared';
@@ -198,7 +199,14 @@ export function allocateEnergy(
     reserveDraw = maintenance - production;
   }
 
-  const matureMult = maturityMultiplier(tree.ageDays, ctx.species.matureAgeDays);
+  // W81: structural growth uses the gameplay plateau horizon
+  // (PROVISIONAL_BIOLOGY_GROWTH_MATURITY_AGE_DAYS), NOT species.matureAgeDays —
+  // see the constant's comment. This caps biomass/maintenance within the play
+  // horizon so a cared-for tree's reserves don't deplete (W80 root cause).
+  const matureMult = maturityMultiplier(
+    tree.ageDays,
+    PROVISIONAL_BIOLOGY_GROWTH_MATURITY_AGE_DAYS,
+  );
   const isWinterDormant = ctx.species.deciduous && ctx.season === 'winter';
 
   const w = PROVISIONAL_BIOLOGY_ALLOCATION_WEIGHTS;

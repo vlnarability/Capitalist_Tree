@@ -360,6 +360,43 @@ foliage capacity) so it keeps up with growing maintenance. Any fix needs a 25yr
 re-run (~15min) + a 5yr bot re-run (~5min) + a neglect-death check to confirm no
 DR-1 regression. The DR-1 design promise (5yr) remains fully verified.
 
+**W81 — option (b) structural-growth cap FIXES the 25yr death (2026-11-25).**
+Diagnosed the W80 root cause precisely: the White Oak's `matureAgeDays = 200×120
+= 24000` (200 sim-years to botanical maturity), but the 25yr test (3000d) is
+only 12.5% of the way there — the tree is in the SAPLING phase the entire test
+(growth rate ~88% of sapling at 25yr), so `biomassScore` + maintenance keep
+rising (a 12yr diagnostic confirmed consumption climbs 1.85→3.45 eu/day over
+9yr, +81%) while harvesting caps production (flat ~3.3 eu/day). The thin margin
+crosses negative at ~year 6 → reserves deplete → reserves-exhaustion death.
+`MATURE_GROWTH_FRACTION` (the post-maturity floor) was irrelevant — the tree
+never reaches maturity.
+
+FIX (option (b) "cap biomass growth sooner"): decoupled STRUCTURAL growth
+allocation from the species' 200yr botanical maturity. Added
+`PROVISIONAL_BIOLOGY_GROWTH_MATURITY_AGE_DAYS = 600` (5yr gameplay plateau) +
+the energy-allocation `maturityMultiplier` call now uses THIS horizon instead of
+`species.matureAgeDays`. The tree's structural growth (height/trunk/branch →
+biomass → maintenance) now plateaus by year 5, freezing maintenance at a level
+the cared-for canopy sustains. Fruiting/reproduction age (which uses
+`species.matureAgeDays × FRUITING_AGE_FRACTION` directly, not the multiplier)
+is UNAFFECTED. The neglected + extractive trees die BEFORE year 5 (neglect
+6-12mo via wear path; extractive ~2mo via reserves+stress), so the growth cap
+never kicks in for them — the 6-12mo neglect-death target holds.
+
+VERIFICATION: 1232 sim tests pass. 5yr bot: all 4 DR-1 targets MET (neglect
+6-12mo via wear; extractive fatal day 61; financial independence ≤60d; collapse/
+recovery follow-up). 25yr test (re-run, ~12min): BOTH trees ALIVE AT 25yr —
+sustainable (previously died 16.61yr) health 0.746, cash 251000 linear (1.14x,
+no runaway), biodiv +0.003 stable, env never collapsed; balanced (previously
+died 9.37yr) health 0.744, cash 1573500 linear (3.39x ≈ 5x), biodiv +0.003
+stable, env never collapsed. The 12yr diagnostic confirmed reserves stabilize at
+~220-230 eu (previously peaked ~259 then depleted to 0) + consumption plateaus
+at ~2.35 eu/day (previously rose to 3.45+).
+
+**Status (W81):** the 25yr long-horizon wear/reserves death is FIXED. The DR-1
+5yr design promise remains fully verified. The 25yr test is kept as a regression
+guard.
+
 **Status:** Adopted — targets provisional; balance audit complete. Replaces the
 GDD §17 "Environmental recovery timescales" + "Detailed photosynthesis and
 energy allocation equations" open items with concrete measured goals.
