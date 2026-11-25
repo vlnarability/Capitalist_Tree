@@ -95,7 +95,7 @@ Severity counts in this corpus: **BLOCKER 0, HIGH 12, MEDIUM 18, LOW 21, INFO/UN
 | RV4-F-L12 | Environment | LOW | high | N/A | regional.ts:459-464 | `'area'` aggregation silently falls back to equal weighting. **Fix:** add `area` field or remove mode. |
 | RV5-F6 | Persistence | LOW | high | N/A | catch-up.ts:360, simulation.ts:120 | Redundant double deepCopy on catch-up entry. **Fix:** skip one. |
 | RV5-F7 | Performance | LOW | high | N/A | biology/environment/weather-system.ts | Three systems still per-step `structuredClone` of large sub-trees. **Fix:** targeted clones. |
-| RV5-F8 | Persistence | LOW | high | N/A | migrations/defaults.ts (v0→v1) | v0→v1 migration is a stub (no v0 saves). **Fix:** document v0 unsupported. |
+| RV5-F8 | Persistence | LOW | high | N/A | migrations/defaults.ts (v0→v1) | v0→v1 migration is a stub (no v0 saves). **~~Fix: document v0 unsupported.~~ RESOLVED (W76, 2026-11-25):** v0 documented unsupported in `docs/simulation.md` ("no real v0 saves exist in production") + `defaults.ts:85` comment ("In reality, no v0 saves exist — this is here to demonstrate the framework"). |
 | RV6-5 | UI | LOW | high | N/A | e2e smoke spec step 9 | Playwright step 9 false negative. **Fix:** assert container exists, not visibility. |
 | RV6-6 | UI | LOW | high | N/A | TreeView.tsx | `useReducedMotion` not consumed (R-P5d-2). **Fix:** consume it. |
 | RV6-7 | UI | LOW | high | N/A | TreeView.tsx | Canvas `aria-label` static. **Fix:** live textual alternative. |

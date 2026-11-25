@@ -70,9 +70,10 @@ Match by *description*, not number:
       (`accumulator -= consumedSeconds`). The `advance`-layer floor is correct
       (preserves purity / splittability). RV1-3 clarified in MASTER-REVIEW; no
       code change.
-- [ ] **W76** mark RV5-F8 RESOLVED in MASTER-REVIEW (v0→v1 stub exists,
+- [x] **W76** mark RV5-F8 RESOLVED in MASTER-REVIEW (v0→v1 stub exists,
       `defaults.ts:84`; v0 documented unsupported in `simulation.md:558`).
-      Effort XS.
+      **DONE 2026-11-25** — RV5-F8 row marked RESOLVED (v0-unsupported was
+      already documented in `simulation.md` + `defaults.ts:85`).
 - [ ] **W79** doc staleness sweep — `progression.md:858` + `ui.md:13-23`
       confirmed stale vs HEAD. Effort S.
 - [ ] **W78** diagnose `biology-system.test.ts` hang (DR-4/DR-6, pre-existing).
@@ -139,3 +140,5 @@ re-review decision** — W57's DR-1 targets already pass at 5yr
 - 2026-11-25 — W77 RESOLVED (by design): sub-step remainder already carried by
   the consumer's fixed-timestep accumulator; RV1-3 clarified as non-defect in
   MASTER-REVIEW (no code change — moving carry into `advance` would break purity).
+- 2026-11-25 — W76 RESOLVED: RV5-F8 marked RESOLVED in MASTER-REVIEW (v0
+  unsupported already documented in simulation.md + defaults.ts).
