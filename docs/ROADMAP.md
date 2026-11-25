@@ -90,8 +90,15 @@ Match by *description*, not number:
 
 ### 🟡 Phase B — Core sim tightening (now unblocked: W57 5yr validates constants)
 
-- [ ] **W73** promote `@provisional` constants → shared config
-      (`regional.ts`/`climate.ts`/`markets.ts`/`objectives.ts`). Effort M.
+- [x] **W73** promote `@provisional` constants → shared config. **DONE 2026-11-25**
+      — created `packages/shared/src/constants/decided.ts` (the promotion target
+      per `provisional.ts`'s convention) + promoted 10 structural/foundational
+      constants (`REAL_TO_SIM_SECONDS`, `SIMULATION_STEP_SECONDS`, the `SPEED_*`
+      set, `DAYS_PER_SEASON`/`YEAR`) from `provisional.ts` → `decided.ts` (dropped
+      the `PROVISIONAL_` prefix). Backward-compat aliases in `provisional.ts`
+      re-export the old names → zero import-site breakage (~47 sites).
+      Balance/economy constants stay provisional (need 100yr validation; W58
+      wires inflation). Typecheck ✓ (shared+sim), 39 tests ✓.
 - [ ] **W58** wire `inflationTarget`/`moneySupplyGrowth` into authority
       issuance cadence (fields exist `event-system.ts:404`, display-only;
       `authority.ts` never reads them). Effort M.
@@ -160,6 +167,9 @@ re-review decision** — W57's DR-1 targets already pass at 5yr
 - 2026-11-25 — W78 RESOLVED: biology-system.test.ts hang no longer reproduces
   (23/23 in ~22s); root cause was the structural-growth runaway fixed by
   W80/W81; DECISIONS.md hang mentions updated (3 sites).
+- 2026-11-25 — W73: created `decided.ts` + promoted 10 structural constants
+  from `provisional.ts` (backward-compat aliases, zero import-site breakage);
+  typecheck (shared+sim) + 39 tests ✓. Balance constants stay provisional.
 
 **Phase A complete (2026-11-25):** W72, W57, W60, W77, W76, W79, W78 all
 resolved. The only true launch-gate (W72 warn-vs-block re-review) is decided —

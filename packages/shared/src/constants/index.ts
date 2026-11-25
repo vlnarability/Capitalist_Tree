@@ -1,4 +1,8 @@
 export * from './provisional';
+// W73 (2026-11-25): constants promoted from provisional → decided after DR-1
+// + long-horizon validation (structural/foundational only). provisional.ts
+// re-exports each under its old PROVISIONAL_ name for backward compat.
+export * from './decided';
 export * from './biology';
 export * from './resources';
 export * from './economy';

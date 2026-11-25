@@ -16,54 +16,30 @@
  *     PROVISIONAL_ prefix. Leave a comment so the migration is traceable.
  */
 
-// PROVISIONAL (GDD §17: Exact real-time-to-simulation-time relationship)
-//
-// At 1x speed (factor 60 — 1 real second = 60 simulation seconds):
-//   1 real second  = 1 simulation minute (= 60 sim seconds)
-//   1 real minute  = 1 simulation hour (3_600 sim sec)
-//   1 real hour    = 2.5 simulation days (216_000 sim sec)
-//   1 real day     = 2 simulation months (60 sim days = 5_184_000 sim sec)
-//
-// Note: an earlier draft of this comment read "1 real hour = 1 simulation
-// day" and "1 real day = 1 simulation month", which corresponds to factor
-// 24, not factor 60. The VALUE below (60) was always correct; only the
-// comment math was wrong. See packages/shared/src/constants/offline.ts for
-// the chunk-count consequences (30 real days = 1_800 chunks at factor 60).
-//
-// This is the relationship between wall-clock time and in-game time when the
-// speed multiplier is 1. The TimeSystem does NOT use this directly; it is the
-// consumer (apps/web) that converts wall-clock elapsed real seconds to
-// elapsed simulation seconds via `simSeconds = realSeconds * REAL_TO_SIM_SECONDS * speed`.
-//
-// Marked provisional because GDD §17 lists this as unresolved.
-export const PROVISIONAL_REAL_TO_SIM_SECONDS = 60;
+// MOVED to ./decided.ts (W73, 2026-11-25) — promoted to DECIDED
+// (REAL_TO_SIM_SECONDS) after DR-1 + long-horizon validation. Re-exported here
+// under the old PROVISIONAL_ name for backward compat; new code should import
+// REAL_TO_SIM_SECONDS from ./decided.ts.
+export { REAL_TO_SIM_SECONDS as PROVISIONAL_REAL_TO_SIM_SECONDS } from './decided.js';
 
-// PROVISIONAL (TDD §6.2: fixed timestep "one simulation update per in-game minute")
-//
-// One simulation step = 60 simulation seconds = 1 in-game minute.
-// TDD §6.2 calls this "a reasonable starting point" and asks that it be
-// benchmarked, so it is provisional.
-export const PROVISIONAL_SIMULATION_STEP_SECONDS = 60;
+// MOVED to ./decided.ts (W73, 2026-11-25) — promoted to DECIDED
+// (SIMULATION_STEP_SECONDS). Re-exported here under the old PROVISIONAL_ name
+// for backward compat; new code should import SIMULATION_STEP_SECONDS from
+// ./decided.ts.
+export { SIMULATION_STEP_SECONDS as PROVISIONAL_SIMULATION_STEP_SECONDS } from './decided.js';
 
-// PROVISIONAL (GDD §4.1: simulation speeds)
-//
-// The speed multipliers exposed by the speed control. TDD/GDD call these
-// "initial configuration options, not final balance decisions," so they are
-// provisional.
-export const PROVISIONAL_SPEED_PAUSED = 0;
-export const PROVISIONAL_SPEED_1X = 1;
-export const PROVISIONAL_SPEED_5X = 5;
-export const PROVISIONAL_SPEED_15X = 15;
-export const PROVISIONAL_SPEED_60X = 60;
-
-// Canonical ordered list of speed multipliers exposed by the UI.
-export const PROVISIONAL_SPEED_MULTIPLIERS: readonly number[] = [
-  PROVISIONAL_SPEED_PAUSED,
-  PROVISIONAL_SPEED_1X,
-  PROVISIONAL_SPEED_5X,
-  PROVISIONAL_SPEED_15X,
-  PROVISIONAL_SPEED_60X,
-] as const;
+// MOVED to ./decided.ts (W73, 2026-11-25) — promoted to DECIDED (SPEED_* /
+// SPEED_MULTIPLIERS) as a settled UI/UX surface. Re-exported here under the
+// old PROVISIONAL_ names for backward compat; new code should import the
+// unprefixed SPEED_* names from ./decided.ts.
+export {
+  SPEED_PAUSED as PROVISIONAL_SPEED_PAUSED,
+  SPEED_1X as PROVISIONAL_SPEED_1X,
+  SPEED_5X as PROVISIONAL_SPEED_5X,
+  SPEED_15X as PROVISIONAL_SPEED_15X,
+  SPEED_60X as PROVISIONAL_SPEED_60X,
+  SPEED_MULTIPLIERS as PROVISIONAL_SPEED_MULTIPLIERS,
+} from './decided.js';
 
 // PROVISIONAL (GDD §17: starting currency and initial living expenses)
 //
@@ -85,13 +61,14 @@ export const PROVISIONAL_DEFAULT_SPECIES_ID = 'species:white-oak';
 // later-phase feature; P0 uses a single fixed currency id.
 export const PROVISIONAL_DEFAULT_CURRENCY_ID = 'currency:leaf-dollar';
 
-// PROVISIONAL (GDD §4.4: seasons)
-//
-// Number of in-game days per season. With 30 days/season * 4 seasons = 120
-// days/year. Picked so that a full year completes inside a reasonable
-// playtest window. Marked provisional — final value depends on tuning.
-export const PROVISIONAL_DAYS_PER_SEASON = 30;
-export const PROVISIONAL_DAYS_PER_YEAR = PROVISIONAL_DAYS_PER_SEASON * 4; // 120
+// MOVED to ./decided.ts (W73, 2026-11-25) — promoted to DECIDED
+// (DAYS_PER_SEASON / DAYS_PER_YEAR) as load-bearing structural calendar
+// values. Re-exported here under the old PROVISIONAL_ names for backward
+// compat; new code should import the unprefixed names from ./decided.ts.
+export {
+  DAYS_PER_SEASON as PROVISIONAL_DAYS_PER_SEASON,
+  DAYS_PER_YEAR as PROVISIONAL_DAYS_PER_YEAR,
+} from './decided.js';
 
 // PROVISIONAL (GDD §4.1: day/night)
 //
