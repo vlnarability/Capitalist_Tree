@@ -57,6 +57,12 @@ export default defineConfig({
       // run; run manually for an overnight verification of the collapse ≥2yr /
       // recovery ≥1yr targets.
       'packages/simulation/test/dr1-long-run.test.ts',
+      // W77: 25yr long-horizon steady-state verification (P12-C follow-up).
+      // Excluded from the default suite (~15min); run manually:
+      //   npx vitest run packages/simulation/test/_w77-long-horizon.test.ts
+      // (temporarily comment out this exclude line first — vitest applies
+      // excludes even when a file is passed explicitly).
+      'packages/simulation/test/_w77-long-horizon.test.ts',
     ],
     environment: 'node',
     globals: false,

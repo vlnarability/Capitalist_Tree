@@ -19,6 +19,7 @@ import { recoverWear } from '../src/biology/wear.js';
 import { testTree, testContext } from './_biology-helpers.js';
 import {
   PROVISIONAL_BIOLOGY_WEAR_RECOVERY_RATE_PER_DAY,
+  PROVISIONAL_BIOLOGY_WEAR_RECOVERY_PROPORTIONAL_FRACTION_PER_DAY,
   PROVISIONAL_BIOLOGY_WEAR_RECOVERY_ENERGY_COST,
 } from '@capitalist-tree/shared';
 import type { BiologyContext } from '../src/biology/types.js';
@@ -35,7 +36,12 @@ describe('W59 — wear recovery', () => {
     });
     const ctx = testContext({ stepSeconds: DAY }) as BiologyContext;
     const r = recoverWear(tree, ctx);
-    const expectedDecay = PROVISIONAL_BIOLOGY_WEAR_RECOVERY_RATE_PER_DAY; // 1 day
+    // W78: hybrid recovery = max(flat rate, proportional fraction of wear).
+    // At wear=2.0, 1 day: max(0.04, 2.0 × 0.05) = max(0.04, 0.1) = 0.1.
+    const expectedDecay = Math.max(
+      PROVISIONAL_BIOLOGY_WEAR_RECOVERY_RATE_PER_DAY,
+      tree.wear * PROVISIONAL_BIOLOGY_WEAR_RECOVERY_PROPORTIONAL_FRACTION_PER_DAY,
+    ); // 1 day
     expect(r.wear).toBeCloseTo(2.0 - expectedDecay, 5);
     expect(r.recoveryCost).toBeCloseTo(
       expectedDecay * PROVISIONAL_BIOLOGY_WEAR_RECOVERY_ENERGY_COST,

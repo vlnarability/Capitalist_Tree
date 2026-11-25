@@ -21,6 +21,7 @@ import type { TreeState } from '@capitalist-tree/shared';
 import {
   PROVISIONAL_BIOLOGY_DEATH_RESERVE_CRITICAL_FRACTION,
   PROVISIONAL_BIOLOGY_WEAR_RECOVERY_RATE_PER_DAY,
+  PROVISIONAL_BIOLOGY_WEAR_RECOVERY_PROPORTIONAL_FRACTION_PER_DAY,
   PROVISIONAL_BIOLOGY_WEAR_RECOVERY_ENERGY_COST,
 } from '@capitalist-tree/shared';
 import type { BiologyContext } from './types.js';
@@ -83,7 +84,17 @@ export function recoverWear(tree: TreeState, ctx: BiologyContext): WearUpdate {
     return { wear: tree.wear, recoveryCost: 0 };
   }
 
-  const wearReduce = Math.min(tree.wear, PROVISIONAL_BIOLOGY_WEAR_RECOVERY_RATE_PER_DAY * stepDays);
+  // W78 (2026-11-25): hybrid recovery — the flat rate is a floor for low-wear
+  // clearance, but a mature tree's disease-driven wear peaks escalate beyond
+  // what the flat rate can clear (the 25yr long-horizon test found wear peaks
+  // climbing 0.96 -> 2.13 as the tree grows, killing it at 9-17yr). The
+  // proportional term (wear × fraction per day) is self-stabilizing: high wear
+  // recovers fast, pulling peaks back down. The flat floor ensures low wear
+  // still clears to ~0 quickly (no exponential lingering).
+  const flatReduce = PROVISIONAL_BIOLOGY_WEAR_RECOVERY_RATE_PER_DAY * stepDays;
+  const proportionalReduce =
+    tree.wear * PROVISIONAL_BIOLOGY_WEAR_RECOVERY_PROPORTIONAL_FRACTION_PER_DAY * stepDays;
+  const wearReduce = Math.min(tree.wear, Math.max(flatReduce, proportionalReduce));
   const recoveryCost = wearReduce * PROVISIONAL_BIOLOGY_WEAR_RECOVERY_ENERGY_COST;
 
   return { wear: tree.wear - wearReduce, recoveryCost };

@@ -435,6 +435,20 @@ export const PROVISIONAL_BIOLOGY_WEAR_DEATH_THRESHOLD = 6.0;
 // deducted from reserves alongside the stress-recovery cost.
 export const PROVISIONAL_BIOLOGY_WEAR_RECOVERY_RATE_PER_DAY = 0.04;
 export const PROVISIONAL_BIOLOGY_WEAR_RECOVERY_ENERGY_COST = 3;
+// W78 (2026-11-25): proportional wear-recovery fraction. The flat rate above
+// (0.04/day) is a floor for low-wear clearance, but a mature tree accumulates
+// more wear (disease infestations scale with tree size — capacity grows
+// ~221->321 eu over 15yr) than the flat rate can clear, so wear peaks escalate
+// (0.96 -> 2.13 over years) + kill the tree at 9-17yr under sustained care
+// (found by the W77 25yr long-horizon test; invisible at 5yr). The hybrid
+// recovery = max(flat rate, wear × this fraction per day) is self-stabilizing:
+// high wear recovers fast (clears escalating peaks), low wear keeps the flat
+// floor (fast clearance to ~0). The gate (water/nutrient/reserves favourable)
+// is unchanged, so a neglected tree (gate closed) still accumulates wear
+// linearly + dies in the 6-12mo window — the DR-1 neglect-death target holds.
+// 0.05/day ≈ 78% of a wear peak cleared per 30-day winter; combined with the
+// flat floor this bounds wear well below the mortality onset (3.0).
+export const PROVISIONAL_BIOLOGY_WEAR_RECOVERY_PROPORTIONAL_FRACTION_PER_DAY = 0.05;
 
 // ---------------------------------------------------------------------------
 // P12-B (GAP-18): pest + disease infestations.

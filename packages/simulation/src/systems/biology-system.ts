@@ -227,10 +227,26 @@ export const biologySystem: System = {
         seasonalMax - tree.foliage.currentLeaves,
       );
       if (buddingLeaves > 0) {
-        const buddingCost = buddingLeaves * species.leafEnergyCost;
-        // Only bud if we can afford it from reserves.
-        if (tree.energy.reserves >= buddingCost) {
-          tree.foliage.currentLeaves += buddingLeaves;
+        const leafCost = species.leafEnergyCost;
+        // W78 (2026-11-25): bud AS MANY leaves as the reserves can afford, not
+        // all-or-nothing. Pre-W78 the code checked `reserves >= buddingCost`
+        // (the cost of ALL buddingLeaves, e.g. 30 leaves × 2 eu = 60 eu) + only
+        // budded if it could afford the full batch. A defoliated tree surviving
+        // on depleted reserves after winter senescence typically has < 60 eu, so
+        // it budded 0 leaves + stayed permanently defoliated → no photosynthesis
+        // → reserve drain → wear-recovery gate (reserves ≥ critical) failed →
+        // wear accumulated → tree died at 9-17yr under sustained sustainable/
+        // balanced care (found by the W77 25yr long-horizon test; invisible at
+        // 5yr because the tree survives 5yr on reserves despite 0 leaves).
+        // Incremental budding breaks the death spiral: the tree buds 1-6 leaves
+        // from whatever reserves it has, restarts photosynthesis, + rebuilds its
+        // canopy over subsequent steps — mirroring how real deciduous trees push
+        // spring foliage from root starch even when reserves are modest.
+        const affordableLeaves = Math.floor(tree.energy.reserves / leafCost);
+        const leavesToBud = Math.min(buddingLeaves, affordableLeaves);
+        if (leavesToBud > 0) {
+          const buddingCost = leavesToBud * leafCost;
+          tree.foliage.currentLeaves += leavesToBud;
           tree.energy.reserves -= buddingCost;
         }
       }

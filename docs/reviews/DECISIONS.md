@@ -244,6 +244,80 @@ Re-run results (5yr bot): ALL FOUR DR-1 TARGETS NOW PASS.
   follow-up is the 25yr/100yr detached runner (P12-C spec) for long-term steady-state
   extrapolation — the 5yr asymptotic trend is sufficient for the DR-1 targets.
 
+**W76-W78 — 25yr long-horizon verification + partial wear fix (2026-11-25).** The
+Phase 6 note above flagged the 25yr/100yr runner as the remaining P12-C follow-up.
+Phase 7 built + ran a focused 25yr (3000d) steady-state test for the two long-term
+cases (sustainable + balanced) — the extractive/recovery scenarios are verified at
+5yr (collapse + recovery behavior). The 25yr test is saved as
+`packages/simulation/test/_w77-long-horizon.test.ts` (excluded from the default
+suite, ~15min; run manually) + writes
+`download/dr1-long-horizon-25yr-report.md`.
+
+Findings (W77, 25yr pre-fix):
+- ✅ **Env stable:** never collapsed over 25yr for either scenario (forestCov /
+  ecoResil / soilHealth / biodiv all ~0.72-0.75). No slow env collapse.
+- ✅ **No cash runaway:** cash is LINEAR or sub-linear (drains to ~0 after tree
+  death — no income, wages/costs drain it). No exponential/compound growth + no
+  missing cash sink.
+- ❌ **Trees die at 9-17yr:** sustainable tree dies day 1993 (16.61yr); balanced
+  dies day 1124 (9.37yr). Cause: cumulative `wear` crossing the mortality onset.
+  This is INVISIBLE at 5yr (wear stays ~0 within the 5yr window) — the 25yr
+  window was needed to catch it.
+
+Root-cause diagnosis (W78b 15yr diagnostic tracking the wear-recovery gate):
+- The wear-recovery GATE always passes (waterF=1, nutrientF=1, reserveFrac≥0.5)
+  — the gate is NOT the failure. The wear-recovery RATE is.
+- Wear oscillates (high in growing season from disease infestations, low in
+  winter) but the PEAKS escalate over years (0.96→2.13) as the tree grows
+  structurally (reserve capacity 221→321 eu over 15yr). Disease infestations
+  scale with tree size, but the wear recovery was a FLAT 0.04/day that doesn't
+  scale — so over years the peaks exceed what the flat recovery can clear, +
+  wear trends up, eventually crossing the mortality onset (3.0).
+- A separate 2yr diagnostic confirmed the tree DOES re-bootstrap foliage each
+  spring (budding works; reserves healthy at ~176 eu after winter) — the death
+  is NOT a defoliation death spiral.
+
+Fixes applied (W78a + W78b):
+- **W78a — budding incremental** (`biology-system.ts`): the budding fallback was
+  all-or-nothing (tried to bud 30 leaves at once, only budded if reserves ≥ the
+  full 60 eu cost). Changed to bud AS MANY leaves as reserves afford. A safe
+  robustness improvement (the all-or-nothing path already worked in the tested
+  scenarios because reserves stayed ≥ 60 eu, but the incremental path handles
+  the low-reserve edge case correctly). 1232 tests pass.
+- **W78b — hybrid wear recovery** (`biology/wear.ts` + `shared/constants/biology.ts`):
+  changed wear recovery from a flat `0.04/day` to `max(flat 0.04/day, wear ×
+  0.05/day)` — self-stabilizing: high wear recovers fast (clears escalating
+  peaks), low wear keeps the flat floor (fast clearance to ~0). The gate
+  (water/nutrient/reserves favourable) is UNCHANGED, so a neglected tree (gate
+  closed) still accumulates wear linearly + dies in the 6-12mo window — the
+  DR-1 neglect-death target holds. Added `PROVISIONAL_BIOLOGY_WEAR_RECOVERY_
+  PROPORTIONAL_FRACTION_PER_DAY = 0.05`. Updated 2 wear unit tests for the new
+  formula. 1232 tests pass.
+
+Verification (W78c, 25yr re-run with both fixes):
+- The hybrid recovery reduced the wear BASELINE (balanced year-10 wear 3.125→
+  1.478; sustainable year-15 wear 1.631→1.565) — confirmed by a 15yr diagnostic.
+- ❌ **BUT the trees still die at the same days** (sustainable 16.61yr, balanced
+  9.37yr). The wear PEAKS still occasionally cross the mortality onset (3.0)
+  during heavy disease seasons, triggering the wear death. The 0.05 proportional
+  fraction stabilizes the equilibrium (~1.6) but doesn't cap the transient peaks
+  below 3.0.
+- Env still stable, cash still linear. No regressions at 5yr (the 5yr DR-1
+  targets are unaffected — wear stays ~0 within 5yr regardless).
+
+Remaining issue + fix direction (follow-up):
+- The 25yr wear-death persists because the disease-driven wear peaks
+  occasionally cross the onset despite the hybrid recovery. Two viable next
+  steps: (a) raise the proportional fraction (e.g. 0.08-0.10) to cap peaks lower
+  — but risk making wear meaningless for cared-for trees; (b) reduce the disease
+  infestation rate for mature trees (scale the infestation rate down with tree
+  size, or cap the per-event wear) — more principled but risks the neglect-death
+  target if the rate drops too far. Either needs a 25yr re-run (~15min) +
+  a 5yr bot re-run (~5min) to verify no DR-1 regression.
+- The DR-1 design promise (5yr) is UNAFFECTED + still fully verified. The 25yr
+  death is a long-horizon issue beyond the DR-1 spec, discovered + partially
+  addressed by Phase 7. The 25yr test is kept as a regression guard.
+
 **Status:** Adopted — targets provisional; balance audit complete. Replaces the
 GDD §17 "Environmental recovery timescales" + "Detailed photosynthesis and
 energy allocation equations" open items with concrete measured goals.
