@@ -74,8 +74,11 @@ Match by *description*, not number:
       `defaults.ts:84`; v0 documented unsupported in `simulation.md:558`).
       **DONE 2026-11-25** — RV5-F8 row marked RESOLVED (v0-unsupported was
       already documented in `simulation.md` + `defaults.ts:85`).
-- [ ] **W79** doc staleness sweep — `progression.md:858` + `ui.md:13-23`
-      confirmed stale vs HEAD. Effort S.
+- [x] **W79** doc staleness sweep — `progression.md:858` + `ui.md:13-23`.
+      **DONE 2026-11-25** — fixed both confirmed-stale sections: progression.md
+      R-P9-2 ("trait-effects wiring deferred" → DONE W9/W32, verified
+      `biology-system.ts:132`); ui.md P5d phase status ("This phase" → Shipped).
+      Broader doc-vs-HEAD sweep remains ongoing (lower priority).
 - [ ] **W78** diagnose `biology-system.test.ts` hang (DR-4/DR-6, pre-existing).
       Effort S-M.
 
@@ -142,3 +145,5 @@ re-review decision** — W57's DR-1 targets already pass at 5yr
   MASTER-REVIEW (no code change — moving carry into `advance` would break purity).
 - 2026-11-25 — W76 RESOLVED: RV5-F8 marked RESOLVED in MASTER-REVIEW (v0
   unsupported already documented in simulation.md + defaults.ts).
+- 2026-11-25 — W79: corrected two confirmed-stale doc sections (progression.md
+  R-P9-2 trait-effects wiring → DONE W9/W32; ui.md P5d phase status → Shipped).

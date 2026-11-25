@@ -17,7 +17,7 @@ win and a fix must be filed against this document.
 | P5a   | Zustand `game-store` + `useSimulationLoop` (rAF + accumulator) + provisional UI constants + pure action factories | Shipped |
 | P5b   | Main game screen + dashboard summary components (Money / Tree / Expenses / Resources / Weather / Speed) + common UI primitives (Panel/Button/Stat/ProgressBar) | Shipped |
 | P5c   | Advanced view toggle + BiologyPanel / EnvironmentPanel / HarvestControls / PurchaseControls / TransactionsPanel / CurrencyCosmeticPicker + `lib/format` describe helpers | Shipped |
-| P5d   | NotificationsPanel + `useReducedMotion` + `dispatch-wrapper` (typed-error → notification) + A11y pass + this doc | **This phase** |
+| P5d   | NotificationsPanel + `useReducedMotion` + `dispatch-wrapper` (typed-error → notification) + A11y pass + this doc | Shipped |
 
 > **Cardinal rule (rule 6 — TDD §15.1, GDD §6.1):** rendering / UI reads
 > state, NEVER writes. The store is the ONLY place UI code can request

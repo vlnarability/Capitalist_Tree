@@ -855,17 +855,18 @@ non-advancing sub-stream derivation. References: `genetics.ts` (file doc +
 `actions.ts` (`prestigeResetHandler` doc), `systems/progression.ts` (file doc
 + inline `@provisional` block). Three determinism tests pin it.
 
-### R-P9-2: BiologySystem trait-effects wiring deferred
+### R-P9-2: BiologySystem trait-effects wiring — DONE (W9/W32)
 
 The pure `applyTraitEffects` helper + the `BiologyParameters` multiplier set
-exist and are fully tested (`trait-effects.ts`, 16 tests). The BiologySystem
-(slot #3) is the intended consumer — it would call
-`applyTraitEffects(defaultBiologyParameters(), activeTraits)` each tick and
-apply the multipliers to its photosynthesis / growth / water-demand / reserve
-/ stress computations. P9c provides the helper but does NOT wire it into the
-BiologySystem (stay in scope — the task contract forbids modifying the
-BiologySystem logic; its per-tick computation would need restructuring to
-consume the multiplier set). The wiring is a one-line call when it lands.
+exist and are fully tested (`progression-trait-effects.test.ts`, 16 tests;
++`trait-effects-w60.test.ts` default-throw invariant — W60). The BiologySystem
+(slot #3) consumes them: `biology-system.ts:74` imports `applyTraitEffects` +
+`:132` calls `const traitParams = applyTraitEffects(defaultBiologyParameters(),
+activeTraits)` each tick, then passes `traitParams` to its photosynthesis /
+growth / water-demand / reserve / stress modules (`:149,154,166`). Originally
+deferred in P9c (the task contract forbade modifying the BiologySystem logic);
+landed in W9 (RV4-F-M7) + extended in W32 (large-foliage production multiplier).
+(The earlier "deferred" wording here was stale vs HEAD — corrected W79.)
 References: `trait-effects.ts:18` (`WIRING` doc) + `trait-effects.ts:54`
 (`BiologyParameters` field doc) + `genetics.ts:228` (`getActiveTraitEffects`
 future-task note).
