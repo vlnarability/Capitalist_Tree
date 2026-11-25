@@ -20,7 +20,7 @@
 import type { TreeSpecies } from '@capitalist-tree/shared';
 import { WHITE_OAK } from './white-oak.js';
 import { EASTERN_HEMLOCK } from './eastern-hemlock.js';
-import { KAPOK, TEAK, SENEAGAL_MAHOGANY, BAOBAB } from './tropical.js';
+import { KAPOK, TEAK, SENEGAL_MAHOGANY, BAOBAB } from './tropical.js';
 import { DATE_PALM, SAXAUL, HONEY_MESQUITE, PONDEROSA_PINE } from './arid.js';
 import {
   LIVE_OAK,
@@ -46,7 +46,7 @@ import { ARCTIC_WILLOW } from './polar.js';
 
 export { WHITE_OAK } from './white-oak.js';
 export { EASTERN_HEMLOCK } from './eastern-hemlock.js';
-export { KAPOK, TEAK, SENEAGAL_MAHOGANY, BAOBAB } from './tropical.js';
+export { KAPOK, TEAK, SENEGAL_MAHOGANY, BAOBAB } from './tropical.js';
 export { DATE_PALM, SAXAUL, HONEY_MESQUITE, PONDEROSA_PINE } from './arid.js';
 export {
   LIVE_OAK,
@@ -81,7 +81,7 @@ export const ALL_SPECIES: readonly TreeSpecies[] = [
   EASTERN_HEMLOCK,
   KAPOK,
   TEAK,
-  SENEAGAL_MAHOGANY,
+  SENEGAL_MAHOGANY,
   BAOBAB,
   DATE_PALM,
   SAXAUL,

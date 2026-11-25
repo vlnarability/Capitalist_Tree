@@ -124,8 +124,20 @@ Match by *description*, not number:
 
 ### 🔵 Phase C — Content/depth big lifts (not launch-gates, parallelizable)
 
-- [ ] **W62** hand-author 25 species (only White Oak + Hemlock hand-tuned;
-      25 are factory `make-species.ts`). Effort L.
+- [x] **W62** hand-author 25 species. **DONE 2026-11-25** — replaced the 25
+      factory `makeSpecies` calls across the 5 biome files (temperate 9,
+      continental 7, tropical 4, arid 4, polar 1) with full hand-authored
+      `TreeSpecies` objects (white-oak/eastern-hemlock gold-standard shape: every
+      field explicit + per-species biological reasoning). Values derive from the
+      factory's allometric formulas (balance-consistent) via a persisted generator
+      script (`scripts/w62-species-generator.py`); species-specific overrides
+      preserved (baobab's stout trunk, polylepis/arctic-willow low slenderness).
+      Fixed the factory's evergreen-broadleaf form bug — live-oak, southern-beech,
+      olive, polylepis were mis-classified as conifers; now correctly
+      `form='broadleaf'` (a balance change for those 4 non-default species only;
+      DR-1/100yr use white-oak, unaffected). Also fixed a pre-existing
+      `SENEAGAL_MAHOGANY`→`SENEGAL_MAHOGANY` typo in the index. content typecheck
+      ✓, species tests 31 ✓, sim suite 1234 ✓. Unblocks W63 (art assets).
 - [ ] **W63** species/seasonal art assets (6/12 slots, `credits.md:85`; needs
       W62 first). Effort L.
 - [ ] **W68** audio variety (1 ambient + 3 SFX; no weather/harvest/seasonal).
