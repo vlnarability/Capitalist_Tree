@@ -36,8 +36,7 @@
  */
 import type { GameState, SimulationEvent } from '@capitalist-tree/shared';
 import type { System, SystemResult, SystemContext } from './system.js';
-import { drainPendingIssuances, updateMarkets } from '../economy/index.js';
-import { DEFAULT_ISSUANCE_POLICY } from '@capitalist-tree/content';
+import { drainPendingIssuances, updateMarkets, deriveIssuancePolicy } from '../economy/index.js';
 import { PROVISIONAL_STARTING_PERSONAL_CASH_MINOR } from '@capitalist-tree/shared';
 
 export const economySystem: System = {
@@ -55,7 +54,10 @@ export const economySystem: System = {
         next.originalTree,
         saveId,
         ctx.now,
-        { policy: DEFAULT_ISSUANCE_POLICY },
+        // W58: derive the issuance policy from the live monetary-policy levers
+        // (inflationTarget → cooling fee, moneySupplyGrowth → growable cap)
+        // instead of the static DEFAULT_ISSUANCE_POLICY.
+        { policy: deriveIssuancePolicy(next) },
       );
       next = issuanceResult.state;
       events.push(...issuanceResult.events);

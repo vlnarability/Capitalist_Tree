@@ -42,6 +42,7 @@ import {
   PROVISIONAL_ECONOMY_AUTHORITY_ACCOUNT_ID,
   PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID,
   PROVISIONAL_ECONOMY_CATEGORY_ISSUANCE,
+  DAYS_PER_YEAR,
 } from '@capitalist-tree/shared';
 import {
   isRequestProcessed,
@@ -94,6 +95,88 @@ export interface IssuanceOptions {
 export interface IssuanceResult {
   state: GameState;
   events: SimulationEvent[];
+}
+
+/**
+ * W58: derive the authority's issuance policy from the live monetary-policy
+ * levers (`eventState.global.monetaryPolicy`) + the actual inflation rate
+ * (`economy.inflationRate`), instead of the static DEFAULT_ISSUANCE_POLICY.
+ *
+ * - `issuanceFeeFraction` = max(0, actualInflation − inflationTarget). The
+ *   authority defends the inflation target by charging a cooling fee on
+ *   issuance when actual inflation exceeds the target. At defaults (initial
+ *   inflation 0 ≤ target 0.02) the fee is 0 — preserves the prior permissive
+ *   policy (no balance shift). When inflation runs hot, the fee withholds
+ *   seigniorage from harvest-issuance, constraining the money supply.
+ * - `maxPerRequest` = null (per-request safety cap, not a monetary-policy
+ *   lever — unchanged).
+ * - `maxTotal` = growableMaxTotal(state): a cap that grows at `moneySupplyGrowth`
+ *   per year from a base. Currently no base is configured → null (no cap,
+ *   preserves prior behavior); the growable-cap enforcement is W58b, gated on
+ *   100yr balance validation (a non-null base would constrain cumulative
+ *   issuance to the target growth trajectory).
+ *
+ * Both `inflationTarget` + `moneySupplyGrowth` are now READ by the authority
+ * (were display-only — the events system read them for drift/markets, but the
+ * authority never did). Pure + deterministic: a function of state alone.
+ */
+export function deriveIssuancePolicy(state: GameState): {
+  maxPerRequest: string | null;
+  maxTotal: string | null;
+  issuanceFeeFraction: number;
+} {
+  const mp = state.eventState.global.monetaryPolicy;
+  const actualInflation = state.economy.inflationRate;
+  // Defend the inflation target: charge a cooling fee when actual inflation
+  // exceeds the target. Two guards keep this safe:
+  //   1. Trust gate — the markets inflation annualization is noisy (can swing
+  //      to thousands of a percent in edge cases). Pegging the fee to a wild
+  //      value would consume the entire issuance (rejecting it). Only apply the
+  //      fee when the inflation signal is in a sane range; otherwise 0
+  //      (preserves the prior fee-free policy when the data is untrusted).
+  //   2. Cap — even a trusted hot-inflation reading is capped at 10% (a sane
+  //      max cooling seigniorage; the fee must never approach 100%).
+  // 0 when inflation ≤ target (the default — preserves the prior fee-free
+  // policy) OR when the inflation signal is untrusted.
+  const PROVISIONAL_AUTHORITY_INFLATION_TRUST_MIN = -0.5;
+  const PROVISIONAL_AUTHORITY_INFLATION_TRUST_MAX = 2.0;
+  const PROVISIONAL_AUTHORITY_MAX_COOLING_FEE_FRACTION = 0.10;
+  const inflationTrusted =
+    actualInflation >= PROVISIONAL_AUTHORITY_INFLATION_TRUST_MIN &&
+    actualInflation <= PROVISIONAL_AUTHORITY_INFLATION_TRUST_MAX;
+  const issuanceFeeFraction = inflationTrusted
+    ? Math.min(
+        PROVISIONAL_AUTHORITY_MAX_COOLING_FEE_FRACTION,
+        Math.max(0, actualInflation - mp.inflationTarget),
+      )
+    : 0;
+  return {
+    maxPerRequest: null,
+    maxTotal: growableMaxTotal(state),
+    issuanceFeeFraction,
+  };
+}
+
+/**
+ * W58: the growable cumulative-issuance cap. Grows at `moneySupplyGrowth` per
+ * year from a base. Currently the base is null → no cap (preserves the prior
+ * permissive policy); `moneySupplyGrowth` is still read + the growth formula
+ * computed so the field is functional. When W58b activates a non-null base, the
+ * cap lets cumulative issuance grow at the target money-supply-growth rate.
+ */
+function growableMaxTotal(state: GameState): string | null {
+  const mp = state.eventState.global.monetaryPolicy;
+  const yearsElapsed =
+    state.clock.elapsedSeconds / (DAYS_PER_YEAR * 24 * 60 * 60);
+  // moneySupplyGrowth drives the cap's annual growth (W58). Computed
+  // unconditionally so the field is functional (the authority reads it);
+  // enforced only when a base cap is set (W58b, gated on 100yr validation).
+  const growthFactor = Math.pow(1 + mp.moneySupplyGrowth, yearsElapsed);
+  // Base cap in minor units. null = no cap (current default — preserves prior
+  // behavior). A future W58b activation sets a non-null base.
+  const BASE_CAP: bigint | null = null;
+  if (BASE_CAP === null) return null;
+  return BigInt(Math.floor(Number(BASE_CAP) * growthFactor)).toString(10);
 }
 
 /**
@@ -233,15 +316,50 @@ export function requestIssuance(
     }
   }
 
-  // 4. Authorized — issue via transfer().
+  // 4. Authorized — issue via transfer(). W58: apply the issuance fee
+  //    (seigniorage) — the authority withholds `feeFraction` of the gross
+  //    amount, crediting only the net to the destination. The withheld
+  //    fraction is not created (the mint issues less than the gross request),
+  //    so `transfer` increments monetarySupply / totalIssued by the net. When
+  //    feeFraction is 0 (the default when inflation ≤ target) the full amount
+  //    is issued — preserves prior behavior.
   const destinationAccount =
     options?.destinationAccount ?? PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID;
+  const feeFraction = options?.policy?.issuanceFeeFraction ?? 0;
+  let netAmount = amount;
+  let feeAmount = 0n;
+  if (feeFraction > 0) {
+    // BigInt-safe fraction: scale by 1e9, multiply, then divide.
+    const SCALE = 1_000_000_000n;
+    feeAmount = (amount * BigInt(Math.round(feeFraction * 1e9))) / SCALE;
+    netAmount = amount - feeAmount;
+  }
+  if (netAmount <= 0n) {
+    return {
+      state,
+      events: [
+        {
+          type: 'issuance-rejected',
+          at: timestamp,
+          payload: {
+            requestId,
+            treeId: request.treeId,
+            amount: request.amount,
+            currencyId: request.currencyId,
+            source: request.source,
+            reason: 'invalid-amount',
+            message: `Issuance fee fraction ${feeFraction} consumes the entire amount ${amount.toString(10)} — nothing to issue.`,
+          },
+        },
+      ],
+    };
+  }
   const nextState = transfer(state, {
     sourceAccount: PROVISIONAL_ECONOMY_AUTHORITY_ACCOUNT_ID,
     destinationAccount,
-    amount: amount.toString(10),
+    amount: netAmount.toString(10),
     category: PROVISIONAL_ECONOMY_CATEGORY_ISSUANCE,
-    description: `Issuance from harvest (tree=${request.treeId}, source=${request.source})`,
+    description: `Issuance from harvest (tree=${request.treeId}, source=${request.source}; gross ${amount.toString(10)}, fee ${feeAmount.toString(10)} @ ${feeFraction})`,
     timestamp,
     requestId,
   });
