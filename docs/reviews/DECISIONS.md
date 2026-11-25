@@ -318,6 +318,48 @@ Remaining issue + fix direction (follow-up):
   death is a long-horizon issue beyond the DR-1 spec, discovered + partially
   addressed by Phase 7. The 25yr test is kept as a regression guard.
 
+**W80 — 0.10 fraction raise + corrected root cause (2026-11-25).** Raised
+`PROVISIONAL_BIOLOGY_WEAR_RECOVERY_PROPORTIONAL_FRACTION_PER_DAY` 0.05→0.10
+(option (a) above) + re-ran the 25yr test. The threshold-death unit test was
+rewritten to call `checkMortality` directly with `stepDays=30` (probability
+0.05×30=1.5 → certain death) — the old integration test (engine.advance, 1-day
+steps) became unreliable with the faster recovery (the probabilistic death, max
+0.05/day → P=0.79 over 30 days, no longer reliably fires before recovery clears
+wear). 1232 sim tests pass.
+
+RESULT: raising the fraction to 0.10 did NOT fix the 25yr death — the trees
+STILL die at the EXACT same days (sustainable day 1993 / 16.61yr, balanced day
+1124 / 9.37yr). The wear at death is ~1.3-1.6, WELL BELOW the mortality onset
+(3.0). So the wear path (path 4) is NOT the killer — the W78 diagnosis was
+incomplete.
+
+CORRECTED root cause (a 12yr death-cause diagnostic on the balanced scenario,
+which captures the tree-died event): the death cause is **"reserves-exhausted"**
+(path 2: reserves at 0.0% of capacity AND stress at 100.0%). The reserves
+PEAK at ~year 6 (216 eu) then STEADILY DEPLETE (198→160→112→0 by year 9.37) as
+the tree grows structurally (reserve capacity grows 221→321 eu over 15yr — the
+tree hasn't reached max size, so `biomassScore` + maintenance keep increasing)
+while harvesting caps the canopy (production flat). The gap (maintenance >
+production) widens over years → reserves deplete → stress maxes → path 2 fires.
+The steady health decline (0.747→0.717→0.673→0.620→0) is the symptom of the
+depleting reserves, not wear.
+
+The 0.10 fraction is KEPT (it's a valid, neutral improvement — wear stays lower
+for cared-for trees, passes all tests; the death is reserves-driven so the
+fraction value is moot for the 25yr death). The W78a budding incremental fix is
+also kept (genuine robustness improvement).
+
+Real fix direction (next, unattempted — needs the user's go-ahead): address the
+reserves depletion. Three options: (a) reduce `PROVISIONAL_BIOLOGY_MAINTENANCE_-
+FRACTION` (0.4→~0.34) so maintenance doesn't outpace production — simplest but
+RISKS the 6-12mo neglect-death target if the neglected tree dies via path 2
+(reserves+stress) rather than path 4 (wear); (b) cap biomass growth sooner /
+raise `PROVISIONAL_BIOLOGY_MATURE_GROWTH_FRACTION` toward 0 so the tree reaches
+max size + maintenance plateaus; (c) increase production (photosynthesisRate or
+foliage capacity) so it keeps up with growing maintenance. Any fix needs a 25yr
+re-run (~15min) + a 5yr bot re-run (~5min) + a neglect-death check to confirm no
+DR-1 regression. The DR-1 design promise (5yr) remains fully verified.
+
 **Status:** Adopted — targets provisional; balance audit complete. Replaces the
 GDD §17 "Environmental recovery timescales" + "Detailed photosynthesis and
 energy allocation equations" open items with concrete measured goals.

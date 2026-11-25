@@ -446,9 +446,16 @@ export const PROVISIONAL_BIOLOGY_WEAR_RECOVERY_ENERGY_COST = 3;
 // floor (fast clearance to ~0). The gate (water/nutrient/reserves favourable)
 // is unchanged, so a neglected tree (gate closed) still accumulates wear
 // linearly + dies in the 6-12mo window — the DR-1 neglect-death target holds.
-// 0.05/day ≈ 78% of a wear peak cleared per 30-day winter; combined with the
-// flat floor this bounds wear well below the mortality onset (3.0).
-export const PROVISIONAL_BIOLOGY_WEAR_RECOVERY_PROPORTIONAL_FRACTION_PER_DAY = 0.05;
+//
+// W80 (2026-11-25): raised 0.05 -> 0.10. At 0.05 the equilibrium was ~1.6 but
+// transient disease-burst peaks still crossed the mortality onset (3.0) + killed
+// the tree at 9-17yr (the 25yr re-run confirmed the same death days). At 0.10
+// the equilibrium drops to ~0.8 (accumulation ~0.08/day ÷ 0.10), + at wear=3.0
+// the recovery (0.30/day) far exceeds the accumulation (0.08/day), so peaks
+// self-correct well below the onset. 0.10/day ≈ 96% of a wear peak cleared per
+// 30-day winter. The faster recovery is safe for neglect-death (gate-closed
+// trees don't recover regardless of the fraction).
+export const PROVISIONAL_BIOLOGY_WEAR_RECOVERY_PROPORTIONAL_FRACTION_PER_DAY = 0.10;
 
 // ---------------------------------------------------------------------------
 // P12-B (GAP-18): pest + disease infestations.

@@ -11,37 +11,42 @@
  */
 import { describe, it, expect } from 'vitest';
 import { engine, DEFAULT_GAME_CONFIG } from '../src/index.js';
+import { checkMortality } from '../src/biology/death.js';
+import { Rng } from '../src/rng.js';
+import { testTree, testContext } from './_biology-helpers.js';
+import type { BiologyContext } from '../src/biology/types.js';
 
 const DAY = 86400;
 
 describe('P12-C redesign — wear mortality path', () => {
-  it('a tree with wear at the threshold dies via the wear path (cause: "wear")', () => {
-    // Wear well above the threshold (20.0 >> 6.0) → wearOverage capped at 1.0 →
-    // probability = DEATH_DAILY_PROBABILITY (0.05/day). The tree should die
-    // within ~30 days, + the tree-died event must record the wear cause (not
-    // reserves/stress/defoliation).
+  it('a tree with wear above the onset dies via the wear path (cause: "wear")', () => {
+    // Wear above the mortality onset (3.0) → wearOverage ramps the daily
+    // probability toward DEATH_DAILY_PROBABILITY (0.05/day) at the threshold
+    // (6.0). The tree-died event must record the wear cause (not reserves/
+    // stress/defoliation).
     //
-    // W78 (2026-11-25): wear is set to 20.0 (not 6.0) because the W78 hybrid
-    // wear recovery (max(flat 0.04, wear×0.05) per day) now saves a cared-for
-    // tree from wear=6.0 within ~15 days — correct behavior (a cared-for tree
-    // shouldn't die from wear). At wear=20.0 the hybrid recovery (~1.0/day)
-    // cannot bring wear below the onset (3.0) within 30 days (20×0.95^30 ≈ 4.3),
-    // so the mortality path reliably fires. Reserves kept high so path 2
-    // (reserves+stress) stays blocked + the death cause is "wear".
-    const s = engine.initialize({ ...DEFAULT_GAME_CONFIG, seed: 42, createdAt: 0 });
-    const state = {
-      ...s,
-      originalTree: {
-        ...s.originalTree,
-        wear: 20.0,
-        energy: { ...s.originalTree.energy, reserves: 1000 },
-      },
-    };
-    const r: any = engine.advance(state, DAY * 30);
-    expect(r.state.originalTree.alive).toBe(false);
-    const diedEvent = r.events.find((e: any) => e.type === 'tree-died');
-    expect(diedEvent).toBeDefined();
-    expect(diedEvent.payload.cause).toBe('wear');
+    // W80 (2026-11-25): call checkMortality DIRECTLY with stepDays=30 (one
+    // 30-day step) instead of engine.advance (which runs 1-day steps). With the
+    // W78 hybrid wear recovery, a 1-day-step integration test is unreliable:
+    // the fast recovery (max(flat 0.04, wear×0.10) per day) brings wear below
+    // the onset before the probabilistic death (max 0.05/day → P=0.79 over 30
+    // days) reliably fires — correct behavior (a cared-for tree shouldn't die
+    // from wear). Calling checkMortality directly with stepDays=30 makes the
+    // probability 0.05×30 = 1.5 > 1 → death is CERTAIN — isolating the mortality
+    // PATH test from the recovery. The tree has high reserves + low stress + no
+    // defoliations so only the wear path (path 4) can fire.
+    const tree = testTree({
+      wear: 6.0, // at the threshold → wearOverage = 1.0 → max probability
+      water: { stored: 50, capacity: 50 },
+      energy: { reserves: 800, production: 0, consumption: 0 },
+      stress: 0,
+      damage: [],
+    });
+    const ctx = testContext({ stepSeconds: DAY * 30 }) as BiologyContext; // stepDays=30
+    const rng = Rng.fromSeed(42);
+    const r = checkMortality(tree, ctx, rng);
+    expect(r.died).toBe(true);
+    expect(r.cause).toBe('wear');
   });
 
   it('a tree with wear below the onset does NOT die via the wear path', () => {
