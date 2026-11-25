@@ -82,8 +82,11 @@ Match by *description*, not number:
       R-P9-2 ("trait-effects wiring deferred" → DONE W9/W32, verified
       `biology-system.ts:132`); ui.md P5d phase status ("This phase" → Shipped).
       Broader doc-vs-HEAD sweep remains ongoing (lower priority).
-- [ ] **W78** diagnose `biology-system.test.ts` hang (DR-4/DR-6, pre-existing).
-      Effort S-M.
+- [x] **W78** diagnose `biology-system.test.ts` hang (DR-4/DR-6, pre-existing).
+      **DONE 2026-11-25** — hang no longer reproduces: 23/23 tests pass in ~22s.
+      Root cause was the structural-growth runaway that W80/W81 capped (5yr
+      plateau); the long-run invariant tests now complete bounded. DR-4/DR-6 hang
+      mentions updated in DECISIONS.md (3 sites).
 
 ### 🟡 Phase B — Core sim tightening (now unblocked: W57 5yr validates constants)
 
@@ -154,3 +157,10 @@ re-review decision** — W57's DR-1 targets already pass at 5yr
   (`_w57-long-horizon-100yr.test.ts`, env-configurable via `DR1_HORIZON_YEARS`,
   smoke-tested at 1yr); DECISIONS/MASTER-REVIEW updated (25yr+100yr runners now
   both exist). Full 100yr run is on-demand (~45min).
+- 2026-11-25 — W78 RESOLVED: biology-system.test.ts hang no longer reproduces
+  (23/23 in ~22s); root cause was the structural-growth runaway fixed by
+  W80/W81; DECISIONS.md hang mentions updated (3 sites).
+
+**Phase A complete (2026-11-25):** W72, W57, W60, W77, W76, W79, W78 all
+resolved. The only true launch-gate (W72 warn-vs-block re-review) is decided —
+BLOCK retained. See the per-item checkboxes above.

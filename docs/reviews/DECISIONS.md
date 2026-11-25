@@ -614,6 +614,9 @@ economy-integration, progression-trait-effects, progression-genetics).
 `biology-system.test.ts` hangs in this sandbox but the hang is pre-existing
 (reproduces on the pre-DR-4 commit dba5b33) + unrelated to DR-4; a single
 biology-system test runs + passes. P12-A (2nd species) is unblocked.
+**W78 (2026-11-25):** the hang no longer reproduces — `biology-system.test.ts`
+runs 23/23 in ~22s post-W80/W81 (the structural-growth cap at the 5yr plateau
+bounded the runaway that made the long-run invariant tests appear to hang).
 
 ---
 
@@ -731,7 +734,8 @@ Test recalibration for the v2 sequence:
     rng.next()` so the replayed root state matches the full engine's.
 
 Verified: simulation suite 1008/1008 (excluding biology-system.test.ts, which
-hangs pre-existingly on both v1 + v2 — unrelated); shared suite 63/63; full-repo
+~~hangs pre-existingly on both v1 + v2 — unrelated~~ **W78 (2026-11-25): no longer
+reproduces** — runs 23/23 post-W80/W81); shared suite 63/63; full-repo
 typecheck 0 errors. The v2 mechanism + switchover are regression-guarded by
 `packages/simulation/test/rng.test.ts` (DR-6 fork-versioning describe block) +
 the recalibrated mortality/root-RNG tests.
@@ -856,7 +860,7 @@ executable regression-test coverage:
 
 The RV2-1 test was the last gap (closed here): pre-fix the `weather-damage` event was emitted but no consumer wrote to `tree.damage`, so frost/storm/heat-wave death causes were unreachable. The test constructs a weather sub-stream (Rng.fromSeed) that transitions `sunny → frost` in one step + asserts the damage is APPLIED to `tree.damage` (the exact regression), deterministically.
 
-Verified: simulation suite 1020/1020 (43 files, excluding biology-system.test.ts which hangs pre-existingly); NotificationsPanel suite 22/22.
+Verified: simulation suite 1020/1020 (43 files, excluding biology-system.test.ts which ~~hangs pre-existingly~~ **W78 (2026-11-25): no longer reproduces** — runs 23/23 post-W80/W81); NotificationsPanel suite 22/22.
 
 ---
 
