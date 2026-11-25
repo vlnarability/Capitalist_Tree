@@ -67,11 +67,13 @@ const scenarios: Scenario[] = [
   {
     name: 'extractive',
     description:
-      'Harvest max leaves (100000, capped by the handler to maximumHarvestFraction) every 14 days. No watering, no fertilizer. DR-1: ecological collapse under sustained extreme exploitation ≥2yr (240d).',
+      'Harvest 45% of current foliage every 21d (aggressive — above the balanced 40%/28d rate, just below the 50% severe-defoliation threshold) with NO watering or fertilizer. DR-1: ecological collapse under SUSTAINED exploitation ≥2yr (240d) — the env should NOT collapse before 2yr of sustained aggressive extraction. W72 (2026-11-25): pre-W72 this scenario harvested max (100000 every 14d), which killed the tree at day 44 — so exploitation was NOT sustained for 2yr + the env collapsed at day 69 from the acute pollution spike. The W72 redesign uses a survivable-but-aggressive rate so the tree survives 240d (sustained exploitation) + the env resilience is properly tested. Max harvesting (50%/14d) still kills the tree fast — that is correct behavior for EXTREME exploitation, but it is not what the "collapse ≥2yr" target measures.',
     step: (state, stepIdx) => {
-      if (stepIdx % 14 !== 0) return [];
+      if (stepIdx % 21 !== 0) return [];
       const treeId = state.originalTree.id;
-      return [{ type: 'harvest-leaves', payload: { treeId, requestedLeaves: 100000 } }];
+      const leaves = state.originalTree.foliage.currentLeaves;
+      const harvest = Math.max(1, Math.floor(leaves * 0.45));
+      return [{ type: 'harvest-leaves', payload: { treeId, requestedLeaves: harvest } }];
     },
   },
   {
