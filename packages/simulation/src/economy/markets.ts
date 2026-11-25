@@ -495,7 +495,7 @@ function lerpBigInt(from: bigint, to: bigint, fraction: number): bigint {
  * always ≥ 1 minor unit, enforced by `parseAmount` + the `Math.max(1, ...)`
  * floor in `computeTargetPrice` / `lerpBigInt`).
  */
-function priceMoveIsSignificant(oldPrice: bigint, newPrice: bigint): boolean {
+export function priceMoveIsSignificant(oldPrice: bigint, newPrice: bigint): boolean {
   if (newPrice === oldPrice) return false;
   const delta =
     newPrice > oldPrice ? newPrice - oldPrice : oldPrice - newPrice;

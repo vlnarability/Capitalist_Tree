@@ -74,7 +74,7 @@ import {
   PROVISIONAL_MARKET_PRICE_LAND,
 } from '@capitalist-tree/shared';
 import { transfer, getBalance, parseAmount, registerAccount } from '../economy/ledger.js';
-import { deriveMarketAccountId } from '../economy/markets.js';
+import { deriveMarketAccountId, priceMoveIsSignificant } from '../economy/markets.js';
 
 /** Transaction categories (free-form strings — NOT Zod enums). */
 const CATEGORY_BUSINESS_MARKET_SALE = 'business-market-sale';
@@ -225,7 +225,9 @@ export interface ClearMarketsResult {
  *      from supply/demand (prices move toward equilibrium, bounded by
  *      `PROVISIONAL_BUSINESS_MARKET_PRICE_VOLATILITY` per tick).
  *   3. Update `lastPriceUpdate` to `now`.
- *   4. Emit one `market-price-changed` event per market whose price moved.
+ *   4. Emit one `market-price-changed` event per market whose price moved
+ *      significantly (≥ `PROVISIONAL_ECONOMY_MARKET_PRICE_EMIT_REL_THRESHOLD`
+ *      relative — H1 event-flood fix, mirroring `updateMarkets`'s W45 guard).
  *
  * This complements the EconomySystem's `updateMarkets` (slot #6, log-ratio
  * supply/demand factor × monetary conditions factor, supply/demand refill +
@@ -265,23 +267,31 @@ export function clearMarkets(state: GameState, now: number): ClearMarketsResult 
     // (the EconomySystem mean-reverts them via basePriceById).
     const anchor = deferredBasePrice.get(m.id) ?? currentPrice;
     const newPrice = computePriceDrift(m, PROVISIONAL_BUSINESS_MARKET_PRICE_VOLATILITY, anchor);
-    if (newPrice === currentPrice) {
-      // P11 (W36): reset the per-tick demand-injection budget each tick.
-      return { ...m, lastPriceUpdate: now, demandInjectedThisTick: '0' };
+    // H1 (event-flood fix): apply the SAME significance guard as
+    // `updateMarkets` (economy/markets.ts — W45). Pre-H1 `clearMarkets` emitted
+    // on a bare `newPrice !== currentPrice`, so high-basePrice markets (land at
+    // 100000) drifting ~1 minor unit per tick (0.001% relative) flooded the
+    // event log with 41.5M events in a long sim — the exact flood W45 diagnosed
+    // + suppressed one layer up in `updateMarkets`, but `clearMarkets` (added
+    // later in P8c) inherited the bare `!==` guard. The price STATE is always
+    // updated (the market panel sees the correct drifted price); the
+    // `market-price-changed` event fires only on a ≥0.5% relative move
+    // (`PROVISIONAL_ECONOMY_MARKET_PRICE_EMIT_REL_THRESHOLD`).
+    if (priceMoveIsSignificant(currentPrice, newPrice)) {
+      events.push({
+        type: 'market-price-changed',
+        at: now,
+        payload: {
+          marketId: m.id,
+          commodityId: m.commodityId,
+          oldPrice: currentPrice.toString(10),
+          newPrice: newPrice.toString(10),
+          supply: m.supply,
+          demand: m.demand,
+          inflationIndexAfter: withMarkets.economy.inflationIndex,
+        },
+      });
     }
-    events.push({
-      type: 'market-price-changed',
-      at: now,
-      payload: {
-        marketId: m.id,
-        commodityId: m.commodityId,
-        oldPrice: currentPrice.toString(10),
-        newPrice: newPrice.toString(10),
-        supply: m.supply,
-        demand: m.demand,
-        inflationIndexAfter: withMarkets.economy.inflationIndex,
-      },
-    });
     return {
       ...m,
       price: newPrice.toString(10),
