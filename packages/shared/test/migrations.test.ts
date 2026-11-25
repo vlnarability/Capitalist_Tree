@@ -1414,8 +1414,32 @@ describe('MigrationRegistry', () => {
     expect(market.demandInjectedThisTick).toBe('75000');
   });
 
-  it('v18 is the current schema version', () => {
-    expect(CURRENT_SCHEMA_VERSION).toBe(18);
+  it('v18 -> v19 migration backfills eventState.objectives.details (W74)', () => {
+    // A v18 save predates W74 — it has objectives.completed but no details.
+    const v18State = freshState();
+    const withoutDetails = {
+      ...v18State,
+      eventState: {
+        ...v18State.eventState,
+        objectives: {
+          completed: ['last-tree'],
+        } as unknown as typeof v18State.eventState.objectives,
+      },
+    };
+    const out = migrations.migrate(withoutDetails, 18, CURRENT_SCHEMA_VERSION);
+    // details backfilled to {} ; completed preserved.
+    expect(out.eventState.objectives.details).toEqual({});
+    expect(out.eventState.objectives.completed).toEqual(['last-tree']);
+  });
+
+  it('v18 -> v19 migration is idempotent on a v19 save (details already present)', () => {
+    const v19State = freshState();
+    const out = migrations.migrate(v19State, 18, CURRENT_SCHEMA_VERSION);
+    expect(out).toEqual(v19State);
+  });
+
+  it('v19 is the current schema version', () => {
+    expect(CURRENT_SCHEMA_VERSION).toBe(19);
   });
 
   it('v12 -> v13 migration is a defensive no-op on the environment derivation when world.environment is missing', () => {

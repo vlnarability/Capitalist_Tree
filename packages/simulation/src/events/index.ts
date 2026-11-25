@@ -100,6 +100,8 @@ export {
   diffObjectives,
   OBJECTIVE_IDS,
   OBJECTIVE_CONSTANTS,
+  OBJECTIVE_METADATA,
+  recordObjectiveAchievements,
   type ObjectiveId,
   type ObjectiveResult,
   type ObjectiveMap,

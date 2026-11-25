@@ -1315,8 +1315,9 @@ const v14ToV15: Migration = (state: GameState): GameState => {
     return out;
   }
 
-  (out.eventState as { objectives: { completed: string[] } }).objectives = {
+  (out.eventState as { objectives: { completed: string[]; details: Record<string, unknown> } }).objectives = {
     completed: [],
+    details: {},
   };
   return out;
 };
@@ -1417,3 +1418,33 @@ const v17ToV18: Migration = (state: GameState): GameState => {
 };
 
 migrations.register(17, v17ToV18);
+
+// W74: v18 -> v19 migration. Adds `eventState.objectives.details` — a
+// Record<objectiveId, { achievedAt, category, reward }> populated on first
+// achievement (richer persistence than the v15 `completed: ObjectiveId[]`).
+// Pre-v19 saves have `objectives.completed` but no `details`; backfill
+// `details: {}` (legacy completions keep their id in `completed`; `details` is
+// populated going forward, + readers fall back to OBJECTIVE_METADATA for
+// category/reward on legacy entries). Idempotent — a save that already has
+// `details` keeps its value.
+const v18ToV19: Migration = (state: GameState): GameState => {
+  const out: GameState = { ...state };
+  // A pre-v19 save may lack `details` at runtime (the type has it post-W74).
+  // Cast to an optional-details view to check, then create a fresh objectives
+  // object (don't mutate the input). The v14→v15 migration already set
+  // `details: {}` for saves it creates, so this only backfills pre-W74 v18
+  // saves that have `objectives.completed` but no `details`.
+  const objectives = out.eventState.objectives as {
+    completed: string[];
+    details?: unknown;
+  };
+  if (objectives.details === undefined) {
+    out.eventState = {
+      ...out.eventState,
+      objectives: { completed: objectives.completed, details: {} },
+    } as typeof out.eventState;
+  }
+  return out;
+};
+
+migrations.register(18, v18ToV19);

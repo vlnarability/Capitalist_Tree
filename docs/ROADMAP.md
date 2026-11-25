@@ -112,8 +112,15 @@ Match by *description*, not number:
       activates the cap pending 100yr validation). EconomySystem now derives the
       policy per-tick instead of the static `DEFAULT_ISSUANCE_POLICY`. +w58
       test (8 cases). Full sim suite 1244/1244 ✓.
-- [ ] **W74** objectives richer persistence (schema stores only `ObjectiveId[]`,
-      `event-system.ts:518`; add timestamp/category/rewards). Effort M.
+- [x] **W74** objectives richer persistence. **DONE 2026-11-25** — added
+      `eventState.objectives.details`: a `Record<id, { achievedAt, category,
+      reward }>` populated on first achievement (parallel to the existing
+      `completed: ObjectiveId[]`, which stays for backward compat — zero reader
+      churn). Added `OBJECTIVE_METADATA` (category + reward per objective) +
+      extracted `recordObjectiveAchievements` (pure writer, idempotent across
+      re-crossings — first `achievedAt` preserved). Schema v18→v19 migration
+      backfills `details: {}` for pre-W74 saves. +w74 test (7 cases) + 2
+      migration tests. shared 73 ✓, sim 1251 ✓.
 
 ### 🔵 Phase C — Content/depth big lifts (not launch-gates, parallelizable)
 
@@ -184,6 +191,15 @@ re-review decision** — W57's DR-1 targets already pass at 5yr
   authority (cooling fee ← inflationTarget, trust-gated + capped; moneySupplyGrowth
   ← growable cap formula, gated W58b); implemented the dead `issuanceFeeFraction`
   application; EconomySystem derives policy per-tick. Full sim suite 1244/1244 ✓.
+- 2026-11-25 — W74: objectives richer persistence — `objectives.details`
+  (achievedAt/category/reward) + `OBJECTIVE_METADATA` + `recordObjectiveAchievements`
+  (pure writer); schema v18→v19 migration backfills `details: {}`. shared 73 ✓,
+  sim 1251 ✓.
+
+**Phase B complete (2026-11-25):** W73, W58, W74 all resolved. The core sim is
+tightened — provisional structural constants promoted to `decided.ts`, the
+monetary-policy levers wired into authority issuance, + objective completion
+persists rich metadata. See the per-item checkboxes above.
 
 **Phase A complete (2026-11-25):** W72, W57, W60, W77, W76, W79, W78 all
 resolved. The only true launch-gate (W72 warn-vs-block re-review) is decided —

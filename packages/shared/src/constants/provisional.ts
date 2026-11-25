@@ -392,7 +392,11 @@ export const PROVISIONAL_INITIAL_INTEREST_RATE = 0;
 // Bumped to 18 in W36 (per-tick demand-injection cap — added
 // MarketState.demandInjectedThisTick, reset by clearMarkets each tick; the
 // v17→v18 migration backfills '0' on every market).
-export const CURRENT_SCHEMA_VERSION = 18;
+// Bumped to 19 in W74 (objectives richer persistence — added
+// `eventState.objectives.details`: a Record<id, { achievedAt, category, reward }>
+// populated on first achievement; the v18→v19 migration backfills `details: {}`
+// for saves that have an `objectives` block but no `details`).
+export const CURRENT_SCHEMA_VERSION = 19;
 
 // Used by migration tests to exercise the v0 -> v1 path. Real saves are
 // always written at CURRENT_SCHEMA_VERSION.

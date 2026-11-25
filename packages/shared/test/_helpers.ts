@@ -241,6 +241,7 @@ export function baseState(overrides: Partial<GameState> = {}): GameState {
       // P11 (W8): persisted objective completion (v15+).
       objectives: {
         completed: [],
+        details: {},
       },
       // P11 (W15 follow-up): persisted last soil-health band (v16+). Populated
       // explicitly so the deep-equal round-trip holds (same pattern as the

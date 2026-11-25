@@ -85,6 +85,25 @@ const OBJECTIVE_DESCRIPTIONS: Readonly<Record<ObjectiveId, string>> = {
     'Establish at least three generations through prestige resets.',
 };
 
+/**
+ * W74: per-objective metadata for richer persistence — `category` (UI grouping
+ * for a future Objectives panel) + `reward` (the entitlement the player earns on
+ * first achievement — a forward-looking cosmetic id that W67's cosmetic catalog
+ * will register; stored now so the completion record is complete rather than
+ * retro-fitted later). Read by the EventSystem on first achievement to populate
+ * `eventState.objectives.details[id]`. Pure data.
+ */
+export const OBJECTIVE_METADATA: Readonly<
+  Record<ObjectiveId, { category: string; reward: string }>
+> = {
+  'wealthiest-being': { category: 'wealth', reward: 'cosmetic:golden-leaf' },
+  'great-restoration': { category: 'environment', reward: 'cosmetic:restoration-grove' },
+  'last-tree': { category: 'environment', reward: 'cosmetic:wasteland-mark' },
+  'natural-balance': { category: 'balance', reward: 'cosmetic:balance-totem' },
+  'industrial-empire': { category: 'industry', reward: 'cosmetic:industrial-banner' },
+  'generational-legacy': { category: 'legacy', reward: 'cosmetic:legacy-monument' },
+};
+
 // ---------------------------------------------------------------------------
 // Local @provisional objective thresholds (GDD §12 — endings; §17 — tuning)
 // ---------------------------------------------------------------------------
@@ -352,6 +371,46 @@ export function diffObjectives(before: ObjectiveMap, after: ObjectiveMap): Objec
     }
   }
   return newlyAchieved;
+}
+
+/**
+ * W74: build the next `objectives` block (`completed` + `details`) given the
+ * current block + the ids that flipped false → true this tick. Pure — extracted
+ * from the EventSystem so the richer persistence (achievedAt / category / reward)
+ * is unit-testable. `details[id]` is populated only on FIRST achievement
+ * (idempotent across threshold re-crossings + save/load — the first `achievedAt`
+ * is preserved).
+ */
+export function recordObjectiveAchievements(
+  current: {
+    completed: readonly string[];
+    details: Readonly<
+      Record<string, { achievedAt: number; category: string; reward: string }>
+    >;
+  },
+  newlyAchieved: readonly ObjectiveId[],
+  now: number,
+): {
+  completed: string[];
+  details: Record<
+    string,
+    { achievedAt: number; category: string; reward: string }
+  >;
+} {
+  const completedSet = new Set(current.completed);
+  const details = { ...current.details };
+  for (const id of newlyAchieved) {
+    completedSet.add(id);
+    if (details[id] === undefined) {
+      const meta = OBJECTIVE_METADATA[id];
+      details[id] = {
+        achievedAt: now,
+        category: meta.category,
+        reward: meta.reward,
+      };
+    }
+  }
+  return { completed: [...completedSet], details };
 }
 
 /**

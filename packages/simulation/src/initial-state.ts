@@ -509,6 +509,7 @@ export function initializeState(config: GameConfig): GameState {
       // first time an objective is achieved it's recorded here permanently.
       objectives: {
         completed: [],
+        details: {},
       },
       // P11 (W15 follow-up / RV4-F-M8): persisted last soil-health band. Starts
       // at 0 (healthy) — the EnvironmentSystem updates it each tick so the

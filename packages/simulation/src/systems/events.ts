@@ -119,6 +119,7 @@ import {
   rollRandomEvents,
   evaluateObjectives,
   diffObjectives,
+  recordObjectiveAchievements,
 } from '../events/index.js';
 import {
   PROVISIONAL_SIMULATION_STEP_SECONDS,
@@ -244,17 +245,21 @@ export const eventSystem: System = {
         });
       }
     }
-    // Persist: append any newly-achieved ids to the permanent completed set.
+    // Persist: append any newly-achieved ids to the permanent completed set +
+    // record rich per-objective details (W74: achievedAt, category, reward) for
+    // first-time achievements (idempotent across re-crossings — the first
+    // achievedAt is preserved).
     if (newlyAchieved.length > 0) {
-      const completedSet = new Set(next.eventState.objectives.completed);
-      for (const id of newlyAchieved) completedSet.add(id);
+      const updated = recordObjectiveAchievements(
+        next.eventState.objectives,
+        newlyAchieved,
+        ctx.now,
+      );
       next = {
         ...next,
         eventState: {
           ...next.eventState,
-          objectives: {
-            completed: [...completedSet],
-          },
+          objectives: updated,
         },
       };
     }

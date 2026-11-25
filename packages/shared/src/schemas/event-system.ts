@@ -516,8 +516,23 @@ export const eventStateSchema = z.object({
     .object({
       /** Objective ids that have EVER been achieved (GDD §12 endings). */
       completed: z.array(z.string()).default([]),
+      /** W74: rich per-objective completion details — `achievedAt` (sim second
+       *  of first achievement), `category`, + `reward` entitlement. Keyed by
+       *  objective id. Populated on first achievement; legacy completions
+       *  (pre-W74 saves) have an id in `completed` but no entry here (readers
+       *  fall back to `OBJECTIVE_METADATA`). */
+      details: z
+        .record(
+          z.string(),
+          z.object({
+            achievedAt: z.number(),
+            category: z.string(),
+            reward: z.string(),
+          }),
+        )
+        .default({}),
     })
-    .default({ completed: [] }),
+    .default({ completed: [], details: {} }),
   /**
    * P11 (W15 follow-up / RV4-F-M8): persisted last-emitted severity band for
    * cross-system environment notifications. The W15 crossing-throttle compares

@@ -122,7 +122,7 @@ export const gameStateSchema = z
       // inner .default() (Zod 3 was lenient + filled them in). objectives +
       // environment both have inner defaults in eventStateSchema; mirror them
       // here so the default value matches the full EventState shape.
-      objectives: { completed: [] },
+      objectives: { completed: [], details: {} },
       environment: { lastSoilHealthBand: 0 },
     })),
   })
