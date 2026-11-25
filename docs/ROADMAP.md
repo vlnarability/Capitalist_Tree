@@ -60,8 +60,10 @@ Match by *description*, not number:
 - [ ] **W57** 100yr extrapolation. 5yr DR-1 verified ✓, 25yr ✓; 100yr runner
       missing (~23min/scenario detached). Not DR-1-required (`DECISIONS.md:245`)
       but closes P12-C scope. Effort M.
-- [ ] **W60** trait-effects `default:` skip → throw on unknown trait
-      (`trait-effects.ts:274`). Effort S.
+- [x] **W60** trait-effects `default:` skip → throw on unknown trait
+      (`trait-effects.ts:274`). **DONE 2026-11-25** — `default:` now throws for a
+      defined-but-unwired trait id (unknown ids still skipped by the
+      `getTraitById` guard); +`trait-effects-w60.test.ts` (2 tests).
 - [ ] **W77** sub-step remainder carry, RV1-3 (`simulation.ts:207`
       `Math.floor` discards fractional tick). Effort S.
 - [ ] **W76** mark RV5-F8 RESOLVED in MASTER-REVIEW (v0→v1 stub exists,
@@ -128,3 +130,5 @@ re-review decision** — W57's DR-1 targets already pass at 5yr
 - 2026-11-25 — initial audit + roadmap created.
 - 2026-11-25 — W72 RESOLVED: concurrent-tab BLOCK retained for launch; DR-10
   re-reviewed with post-launch revisit criterion.
+- 2026-11-25 — W60 RESOLVED: trait-effects `default:` now throws (loud failure
+  for defined-but-unwired traits); +trait-effects-w60.test.ts.

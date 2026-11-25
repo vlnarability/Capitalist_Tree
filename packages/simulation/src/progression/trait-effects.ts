@@ -270,10 +270,19 @@ export function applyTraitEffects(
           1 - m * PROVISIONAL_EFFICIENT_PHOTOSYNTHESIS_MAX_PENALTY;
         break;
       default:
-        // A known definition whose id has no case here (a future trait whose
-        // effect is not yet interpreted) — skip. Documented as a future
-        // wiring task when the trait is added.
-        break;
+        // W60 (RV4-F-L12): reachable only for a trait id that passed the
+        // `getTraitById` guard above (i.e. a KNOWN definition) but has no
+        // explicit case here — a future trait was added to the definitions
+        // without wiring its effect into this switch. Throw loudly so the
+        // gap surfaces in tests before it can ship as a silently-no-op
+        // trait. The old `break;` default hid exactly this class of bug.
+        // All 7 currently-defined trait ids have explicit cases above, so
+        // this is unreachable today.
+        throw new Error(
+          `applyTraitEffects: defined trait "${trait.traitId}" has no effect ` +
+            `case — add one in the switch ` +
+            `(packages/simulation/src/progression/trait-effects.ts).`,
+        );
     }
   }
 
