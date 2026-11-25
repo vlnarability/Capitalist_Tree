@@ -64,8 +64,12 @@ Match by *description*, not number:
       (`trait-effects.ts:274`). **DONE 2026-11-25** — `default:` now throws for a
       defined-but-unwired trait id (unknown ids still skipped by the
       `getTraitById` guard); +`trait-effects-w60.test.ts` (2 tests).
-- [ ] **W77** sub-step remainder carry, RV1-3 (`simulation.ts:207`
-      `Math.floor` discards fractional tick). Effort S.
+- [x] **W77** sub-step remainder carry, RV1-3 (`simulation.ts:207`).
+      **DONE 2026-11-25** — non-defect: the consumer (`use-engine-game.ts:77-80`)
+      already carries the fractional remainder in a fixed-timestep accumulator
+      (`accumulator -= consumedSeconds`). The `advance`-layer floor is correct
+      (preserves purity / splittability). RV1-3 clarified in MASTER-REVIEW; no
+      code change.
 - [ ] **W76** mark RV5-F8 RESOLVED in MASTER-REVIEW (v0→v1 stub exists,
       `defaults.ts:84`; v0 documented unsupported in `simulation.md:558`).
       Effort XS.
@@ -132,3 +136,6 @@ re-review decision** — W57's DR-1 targets already pass at 5yr
   re-reviewed with post-launch revisit criterion.
 - 2026-11-25 — W60 RESOLVED: trait-effects `default:` now throws (loud failure
   for defined-but-unwired traits); +trait-effects-w60.test.ts.
+- 2026-11-25 — W77 RESOLVED (by design): sub-step remainder already carried by
+  the consumer's fixed-timestep accumulator; RV1-3 clarified as non-defect in
+  MASTER-REVIEW (no code change — moving carry into `advance` would break purity).

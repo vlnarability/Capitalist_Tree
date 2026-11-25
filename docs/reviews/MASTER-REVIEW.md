@@ -83,7 +83,7 @@ Severity counts in this corpus: **BLOCKER 0, HIGH 12, MEDIUM 18, LOW 21, INFO/UN
 | RV6-3 | UI | MEDIUM | high | N/A | OfflineModal.tsx | Modal has `role="dialog"` but no Escape handler, focus trap, or autofocus. **Fix:** add focus management. |
 | RV6-4 | Security | MEDIUM | high | N/A | package.json (zod dep) | Zod 3.25.76 vulnerable to GHSA-mrhx-c7xc-m3w5 (memory exhaustion on save validation). **Fix:** upgrade to zod 4.6.6+ or pre-validate size. |
 | RV1-1 | Architecture | LOW | high | N/A | systems/economy.ts:24-26, personal.ts:34-37 | Stale doc comments about engine wrapping deepCopy. **Fix:** update comments. |
-| RV1-3 | Architecture | LOW | high | REPRO | simulation.ts:117-118, TDD §6.3 | Engine drops sub-step remainder. **RV8 confirmed:** `simulation.ts:117-118` matches exactly (`wholeSteps = Math.floor(elapsedSeconds / STEP)`, `consumed = wholeSteps * STEP`). Low severity, accurate. |
+| RV1-3 | Architecture | LOW | high | REPRO | simulation.ts:117-118, TDD §6.3 | Engine drops sub-step remainder. **RV8 confirmed:** `simulation.ts:117-118` matches exactly (`wholeSteps = Math.floor(elapsedSeconds / STEP)`, `consumed = wholeSteps * STEP`). Low severity, accurate. **W77 (2026-11-25) resolution:** not a live defect — the consumer (`use-engine-game.ts:77-80`) carries the fractional remainder in a fixed-timestep accumulator (`accumulatorRef += simDelta`; `advance(state, accumulator)`; `accumulator -= consumedSeconds`), so no sim time is lost. The `advance`-layer floor is correct + must stay (moving the carry inside `advance` would break its pure / deterministic / splittable contract, TDD §6.3). Acknowledged-by-design. |
 | RV1-4 | Architecture | LOW | medium | N/A | events/scheduler.ts:63-95 | P0 scheduler tie-break relies on sort stability. **Fix:** add secondary sort key. |
 | RV1-5 | Architecture | LOW | high | N/A | initial-state.ts:88 | `void PROVISIONAL_WEATHER_DEFAULT_CLIMATE_ID;` dead expression to silence unused import. **Fix:** remove the import. |
 | RV1-7 | Architecture | LOW | medium | N/A | tests/import-boundaries.test.ts:85-97 | Boundary test misses bare DOM-global access. **Fix:** add `no-restricted-globals` ESLint rule. |
@@ -523,7 +523,7 @@ RV7-gap-analysis additionally lists 41 backlog items (GAP-1 through GAP-41); the
 | RV2-1 weather-damage unconsumed | HIGH | **REPRODUCED** — `weather-system.ts:158` emits `weather-damage`; `weather/index.ts:9` comments "P3+ consumes... currently emitted but [not consumed]". No biology consumer exists. |
 | RV2-2 globalTemperature vs weather.temperature | HIGH | **REPRODUCED** — `photosynthesis.ts:215` reads `ctx.environment.globalTemperature`, not `weather.temperature`. Frost/heat-wave have no photosynthesis effect. |
 | RV6-1 critical notifications filtered | HIGH | **REPRODUCED** — `NotificationsPanel.tsx:87-96` `ACTIONABLE_NOTIFICATION_CODES` contains `expense-due, low-funds, issuance-rejected, tree-died, storm-damage, severe-weather` — none of `offline-clock-tampered`, `save-corrupt`, `original-tree-protected`. |
-| RV1-3 engine drops sub-step remainder (bonus) | LOW | **REPRODUCED** — `simulation.ts:117-118` matches exactly. |
+| RV1-3 engine drops sub-step remainder (bonus) | LOW | **REPRODUCED** — `simulation.ts:117-118` matches exactly. **W77 (2026-11-25):** non-defect — consumer accumulator carries the remainder (see RV1-3 row above). |
 
 **Tally: 6 spot-checks; 6 reproduced (5 HIGH + 1 LOW). All 5 nominated HIGH findings confirmed as live defects in the P10 codebase.**
 
