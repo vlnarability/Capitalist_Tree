@@ -96,8 +96,12 @@ severe). Re-run results:
 - The wear-recovery is the foundation fix (without it, no tuning makes
   sustainable play viable — the tree always dies from chronic wear). The
   financial-independence + env-collapse are the next tuning pass.
-- 25yr/100yr need a detached runner (~11min/~23min per scenario). Report at
-  `download/dr1-long-run-report.md`.
+- ~~25yr/100yr need a detached runner (~11min/~23min per scenario).~~ **DONE
+  (W77/W57):** the 25yr runner (`packages/simulation/test/_w77-long-horizon.test.ts`,
+  ~15min) + the 100yr runner (`packages/simulation/test/_w57-long-horizon-100yr.test.ts`,
+  env-configurable via `DR1_HORIZON_YEARS`, ~45min at full 100yr) both exist +
+  are excluded from the default suite (run on demand). Reports at
+  `download/dr1-long-horizon-{25yr,100yr}-report.md`.
 
 **W61 + W62 balance tuning (2026-11-24).** The W59 bot surfaced two follow-up
 issues once the tree could survive long-term: the sustainable player went broke

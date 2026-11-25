@@ -63,6 +63,14 @@ export default defineConfig({
       // (temporarily comment out this exclude line first — vitest applies
       // excludes even when a file is passed explicitly).
       'packages/simulation/test/_w77-long-horizon.test.ts',
+      // W57: 100yr long-horizon steady-state extrapolation (P12-C full scope).
+      // Env-configurable (DR1_HORIZON_YEARS, default 100); ~45min at full 100yr
+      // (smoke-tested at DR1_HORIZON_YEARS=1). Excluded from the default suite;
+      // run manually:
+      //   DR1_HORIZON_YEARS=100 npx vitest run packages/simulation/test/_w57-long-horizon-100yr.test.ts
+      // (temporarily comment out this exclude line first — vitest applies
+      // excludes even when a file is passed explicitly).
+      'packages/simulation/test/_w57-long-horizon-100yr.test.ts',
     ],
     environment: 'node',
     globals: false,

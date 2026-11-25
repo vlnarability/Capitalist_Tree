@@ -57,9 +57,12 @@ Match by *description*, not number:
 - [x] **W72** concurrent-tab re-review (DR-10). **DONE 2026-11-25** — BLOCK
       retained for launch (data-loss risk > UX friction; no telemetry pre-launch;
       post-launch revisit criterion set in DR-10).
-- [ ] **W57** 100yr extrapolation. 5yr DR-1 verified ✓, 25yr ✓; 100yr runner
-      missing (~23min/scenario detached). Not DR-1-required (`DECISIONS.md:245`)
-      but closes P12-C scope. Effort M.
+- [x] **W57** 100yr extrapolation. **DONE 2026-11-25** —
+      `_w57-long-horizon-100yr.test.ts` (env-configurable via `DR1_HORIZON_YEARS`,
+      default 100yr, ~45min full run); smoke-tested at 1yr (27s, report
+      well-formed); excluded from default suite (run on demand). 5yr DR-1 ✓,
+      25yr ✓, 100yr runner shipped. Full 100yr run is on-demand (~45min,
+      exceeds the sandbox 10-min command limit).
 - [x] **W60** trait-effects `default:` skip → throw on unknown trait
       (`trait-effects.ts:274`). **DONE 2026-11-25** — `default:` now throws for a
       defined-but-unwired trait id (unknown ids still skipped by the
@@ -147,3 +150,7 @@ re-review decision** — W57's DR-1 targets already pass at 5yr
   unsupported already documented in simulation.md + defaults.ts).
 - 2026-11-25 — W79: corrected two confirmed-stale doc sections (progression.md
   R-P9-2 trait-effects wiring → DONE W9/W32; ui.md P5d phase status → Shipped).
+- 2026-11-25 — W57 RESOLVED: 100yr long-horizon runner shipped
+  (`_w57-long-horizon-100yr.test.ts`, env-configurable via `DR1_HORIZON_YEARS`,
+  smoke-tested at 1yr); DECISIONS/MASTER-REVIEW updated (25yr+100yr runners now
+  both exist). Full 100yr run is on-demand (~45min).
