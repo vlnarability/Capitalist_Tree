@@ -54,8 +54,9 @@ Match by *description*, not number:
 
 ### 🔴 Phase A — Launch gates + quick wins
 
-- [ ] **W72** concurrent-tab re-review (DR-10). BLOCK shipped (`ff60f8f`);
-      pre-launch warn-vs-block re-review not done (`DECISIONS.md:878`). Effort S.
+- [x] **W72** concurrent-tab re-review (DR-10). **DONE 2026-11-25** — BLOCK
+      retained for launch (data-loss risk > UX friction; no telemetry pre-launch;
+      post-launch revisit criterion set in DR-10).
 - [ ] **W57** 100yr extrapolation. 5yr DR-1 verified ✓, 25yr ✓; 100yr runner
       missing (~23min/scenario detached). Not DR-1-required (`DECISIONS.md:245`)
       but closes P12-C scope. Effort M.
@@ -125,3 +126,5 @@ re-review decision** — W57's DR-1 targets already pass at 5yr
 ## Changelog
 
 - 2026-11-25 — initial audit + roadmap created.
+- 2026-11-25 — W72 RESOLVED: concurrent-tab BLOCK retained for launch; DR-10
+  re-reviewed with post-launch revisit criterion.

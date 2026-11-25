@@ -856,7 +856,7 @@ Verified: simulation suite 1020/1020 (43 files, excluding biology-system.test.ts
 
 ---
 
-## DR-10: Concurrent-tab protection — BLOCK approach (review later)
+## DR-10: Concurrent-tab protection — BLOCK approach (re-reviewed 2026-11-25)
 
 **Context.** RV5-F4 / W21: two tabs of the same origin both running the
 simulation can race on the shared IndexedDB save (last-write-wins clobbers the
@@ -882,6 +882,27 @@ chooses to close one). The swap is localized to `useConcurrentTabLock` +
 `ConcurrentTabGate` (the gate becomes a banner that always renders children).
 Re-review before launch — likely after observing how often players actually open
 a second tab.
+
+**Re-review (2026-11-25, pre-launch).** Decision: **keep BLOCK for launch.** The
+game is local-first with no server authority to serialize tabs — a second tab
+running `useSimulationLoop` is a genuine **data-loss** risk (last-write-wins
+clobbers the newer tab's progress on the shared IndexedDB save), not merely UX
+friction. WARN would let players silently corrupt their saves. The original
+"observe how often players open a second tab" criterion cannot be satisfied
+pre-launch (no telemetry yet), so the conservative choice — BLOCK, which
+protects saves until we have data — is correct. The BLOCK UX is already graceful
+(a clear "paused — another tab is open, reload this one" screen + a
+`navigator.locks` fallback that proceeds without cross-tab protection rather
+than breaking on unsupported browsers).
+
+**Post-launch revisit criterion.** Revisit to WARN **only if both** hold:
+(a) telemetry shows the gate triggers at a rate indicating real player friction,
+**and** (b) the race risk is first mitigated — the preferred softening is a
+Page Visibility API sim-pause (pause the rAF loop + IndexedDB writes while the
+tab is hidden), not a pure WARN (which still races on focus return). Until both
+conditions hold, BLOCK stays.
+
+**RV5-F4 / W72 (ROADMAP Phase A): RESOLVED — BLOCK retained for launch.**
 
 ---
 
