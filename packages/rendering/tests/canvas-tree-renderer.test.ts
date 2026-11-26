@@ -749,8 +749,8 @@ describe('CanvasTreeRenderer — mock context snapshot', () => {
     const midnightEnv = buildEnvironmentRenderData(baseWorld(), baseClock({ timeOfDay: 0.0 }));
     r.render(matureSummerTree(), midnightEnv, 16);
     const calls = canvas._mockContext.calls;
-    // At midnight, brightness = NIGHT_LIGHT_LEVEL (0.25). dimAlpha = 0.75.
-    // The lighting overlay records: save → set:globalAlpha 0.75 → set:fillStyle
+    // At midnight, brightness = NIGHT_LIGHT_LEVEL (0.7). dimAlpha = 0.3.
+    // The lighting overlay records: save → set:globalAlpha 0.3 → set:fillStyle
     // '#000000' → fillRect. We look for that exact 4-call sequence.
     const lightingFillRect = calls.find((c, i) => {
       if (c.op !== 'fillRect') return false;
@@ -761,7 +761,7 @@ describe('CanvasTreeRenderer — mock context snapshot', () => {
         prev.args[0] === '#000000' &&
         prev2?.op === 'set:globalAlpha' &&
         typeof prev2.args[0] === 'number' &&
-        Math.abs((prev2.args[0] as number) - 0.75) < 0.01
+        Math.abs((prev2.args[0] as number) - 0.3) < 0.01
       );
     });
     expect(lightingFillRect).toBeDefined();

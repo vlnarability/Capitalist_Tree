@@ -156,15 +156,19 @@ export const PROVISIONAL_RENDER_SNOW_OPACITY_MAX = 0.6;
 
 // PROVISIONAL (GDD §4.1: day/night, TDD §15.2)
 //
-// Brightness multiplier (0..1) applied to the scene at midnight. 0.25 =
-// night is dim but the tree silhouette is still readable (we never go fully
-// black — the player needs to see the tree).
-export const PROVISIONAL_RENDER_NIGHT_LIGHT_LEVEL = 0.25;
+// Brightness multiplier (0..1) applied to the scene at midnight. 0.7 = night
+// is dim but the tree + canopy stay clearly readable. Raised from 0.25 — the
+// old value stacked a 75% black overlay on top of an already near-black night
+// sky, making the scene super-dark; combined with the sim starting at midnight
+// + a 24h day cycle, the player saw near-uniform darkness.
+export const PROVISIONAL_RENDER_NIGHT_LIGHT_LEVEL = 0.7;
 
 // PROVISIONAL (GDD §4.1: day/night, TDD §15.2)
 //
-// Brightness multiplier at dawn/dusk (sunrise/sunset transition window).
-export const PROVISIONAL_RENDER_DAWN_DUSK_LIGHT_LEVEL = 0.7;
+// Brightness multiplier at dawn/dusk (sunrise/sunset transition window). 0.9 =
+// only lightly dimmed. Raised from 0.7 — the transition windows are wide + the
+// old 0.3 black overlay darkened too much of the play session.
+export const PROVISIONAL_RENDER_DAWN_DUSK_LIGHT_LEVEL = 0.9;
 
 // PROVISIONAL (GDD §4.1: day/night, TDD §15.2)
 //
@@ -299,9 +303,11 @@ export const PROVISIONAL_RENDER_FOLIAGE_STRESSED_TINT = '#c8b560';
 // 0.75 = 18:00.
 // ----------------------------------------------------------------------------
 
-// PROVISIONAL (GDD §4.1: day/night — night sky)
-export const PROVISIONAL_RENDER_SKY_NIGHT_TOP = '#0a0a1f';
-export const PROVISIONAL_RENDER_SKY_NIGHT_BOTTOM = '#1a1a3a';
+// PROVISIONAL (GDD §4.1: day/night — night sky). Brightened from #0a0a1f /
+// #1a1a3a — the old near-black sky stacked with the night light overlay made
+// the scene super-dark; these are still night-dark but readable.
+export const PROVISIONAL_RENDER_SKY_NIGHT_TOP = '#1a2540';
+export const PROVISIONAL_RENDER_SKY_NIGHT_BOTTOM = '#2a3550';
 // PROVISIONAL (GDD §4.1: day/night — dawn sky)
 export const PROVISIONAL_RENDER_SKY_DAWN_TOP = '#ff9966';
 export const PROVISIONAL_RENDER_SKY_DAWN_BOTTOM = '#ffcc99';
