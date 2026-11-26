@@ -13,12 +13,16 @@ import type { TreeRenderer, CreateTreeRendererTarget } from './types.js';
 import { HeadlessTreeRenderer } from './headless-renderer.js';
 import { CanvasTreeRenderer } from './canvas-tree-renderer.js';
 import type { CanvasLike } from './canvas-tree-renderer.js';
+import { SvgTreeRenderer } from './svg-tree-renderer.js';
+import type { SvgContainer } from './svg-tree-renderer.js';
+import { WebGlTreeRenderer } from './webgl-tree-renderer.js';
+import type { WebGlLike } from './webgl-tree-renderer.js';
 
 /**
  * Factory: create a TreeRenderer implementation for the requested target.
  *
- * P4a shipped `kind: 'headless'`. P4b adds `kind: 'canvas'`. The 'svg' and
- * 'webgl' variants still throw — they're future phases.
+ * P4a shipped `kind: 'headless'`. P4b adds `kind: 'canvas'`. W64 adds
+ * `kind: 'svg'` + W65 adds `kind: 'webgl'` (deferred / post-launch backends).
  *
  * The factory is intentionally NOT a class — it's a function returning an
  * object that satisfies the TreeRenderer interface. This keeps the surface
@@ -44,15 +48,31 @@ export function createTreeRenderer(target: CreateTreeRendererTarget): TreeRender
       return new CanvasTreeRenderer({ canvas });
     }
 
-    case 'svg':
-      throw new Error(
-        "createTreeRenderer({ kind: 'svg' }) is not implemented yet — future phase.",
-      );
+    case 'svg': {
+      // W64: SvgTreeRenderer. The factory accepts the container as `unknown`
+      // (per CreateTreeRendererTarget's shape) and casts through to
+      // SvgContainer — the settable-innerHTML surface SvgTreeRenderer needs.
+      // Real HTMLElement satisfies this structurally; tests pass a mock.
+      const container = target.container as unknown as SvgContainer;
+      if (!container || typeof container !== 'object') {
+        throw new Error(
+          "createTreeRenderer({ kind: 'svg' }) requires a container element with a settable innerHTML.",
+        );
+      }
+      return new SvgTreeRenderer({ container });
+    }
 
-    case 'webgl':
-      throw new Error(
-        "createTreeRenderer({ kind: 'webgl' }) is not implemented yet — future phase.",
-      );
+    case 'webgl': {
+      // W65: WebGlTreeRenderer. The factory accepts the canvas as `unknown`
+      // and casts through to WebGlLike — the getContext('webgl') surface.
+      const canvas = target.canvas as unknown as WebGlLike;
+      if (!canvas || typeof canvas.getContext !== 'function') {
+        throw new Error(
+          "createTreeRenderer({ kind: 'webgl' }) requires a canvas with a getContext('webgl') method.",
+        );
+      }
+      return new WebGlTreeRenderer({ canvas });
+    }
 
     default: {
       // Exhaustiveness guard — if CreateTreeRendererTarget gains a new

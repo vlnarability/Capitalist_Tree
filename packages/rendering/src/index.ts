@@ -74,5 +74,32 @@ export type { HeadlessRenderSnapshot } from './headless-renderer.js';
 export { CanvasTreeRenderer } from './canvas-tree-renderer.js';
 export type { CanvasTreeRendererOptions, CanvasLike } from './canvas-tree-renderer.js';
 
+// W64 — SVG renderer (deferred / post-launch backend).
+export { SvgTreeRenderer } from './svg-tree-renderer.js';
+export type { SvgTreeRendererOptions, SvgContainer } from './svg-tree-renderer.js';
+
+// W65 — WebGL renderer (deferred / post-launch backend).
+export { WebGlTreeRenderer } from './webgl-tree-renderer.js';
+export type { WebGlTreeRendererOptions, WebGlLike } from './webgl-tree-renderer.js';
+
+// W64/W65 — shared layout + color helpers (extracted from the Canvas renderer
+// so all three drawing backends paint the same geometry).
+export { buildTreeLayout, treeStructureSignature, canopyGeometryForShape } from './tree-layout.js';
+export type {
+  TreeLayout,
+  BranchSegment,
+  LeafSlot,
+  DamageMarkerPlacement,
+  CanopyGeometry,
+  CanopyMode,
+} from './tree-layout.js';
+export {
+  seasonalFoliageColorHex,
+  leafSizeForTier,
+  TRUNK_COLOR,
+  SKY_COLOR,
+  GROUND_COLOR,
+} from './render-colors.js';
+
 // Provisional visual tuning constants (GDD §13.4, §14, §17).
 export * from './constants/index.js';

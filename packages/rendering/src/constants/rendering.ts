@@ -220,6 +220,14 @@ export const PROVISIONAL_RENDER_HEADLESS_TARGET_KIND = 'headless' as const;
 // for canvas vs an <SVGSVGElement> for svg).
 export const PROVISIONAL_RENDER_CANVAS_TARGET_KIND = 'canvas' as const;
 
+// PROVISIONAL (TDD §15.3 — svg / webgl target discriminators, W64/W65)
+//
+// The SVG (W64) + WebGL (W65) renderer `targetKind` identifiers. Deferred /
+// post-launch backends; the production renderer stays Canvas. P4d's React
+// wrapper switches on targetKind to decide which DOM element to mount.
+export const PROVISIONAL_RENDER_SVG_TARGET_KIND = 'svg' as const;
+export const PROVISIONAL_RENDER_WEBGL_TARGET_KIND = 'webgl' as const;
+
 // ----------------------------------------------------------------------------
 // Canvas layout — default viewport + ground/baseline fractions (GDD §13.4).
 // @provisional: exact canvas size + tree-on-screen proportions are GDD §17

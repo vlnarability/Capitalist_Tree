@@ -159,10 +159,23 @@ Match by *description*, not number:
       infra + Packs 2-N unimplemented). Effort L.
 - [ ] **W66** palm render type (declared `types.ts:55`, no renderer branch,
       P6+ tropics). Effort S-M.
-- [ ] **W64** SVG renderer (`renderer-factory.ts:49` throws "future phase").
-      Effort L — deferrable.
-- [ ] **W65** WebGL renderer (`renderer-factory.ts:54` throws "future phase").
-      Effort L — deferrable.
+- [x] **W64** SVG renderer. **DONE 2026-11-26** — the factory threw "future
+      phase" for `kind: 'svg'`. W64 ships `SvgTreeRenderer` (renders the tree as
+      SVG markup — `<line>` branches, `<circle>` leaves, sky/ground rects — into a
+      container's `innerHTML`; caches the layout by signature). To avoid per-backend
+      layout drift, the canvas renderer's `_buildStructure` was extracted to a shared
+      `tree-layout.ts` (`buildTreeLayout` + `treeStructureSignature` + `canopyGeometryForShape`)
+      that Canvas / SVG / WebGL all consume; `render-colors.ts` holds the shared
+      seasonal-foliage + leaf-size helpers. rendering typecheck ✓.
+- [x] **W65** WebGL renderer. **DONE 2026-11-26** — the factory threw "future
+      phase" for `kind: 'webgl'`. W65 ships `WebGlTreeRenderer` (a minimal shader
+      program — vertex + fragment — that draws branches as `gl.LINES` + leaves as
+      `gl.POINTS` against a sky-colored clear; lazy shader compile, cached
+      layout/buffers, px→clip-space conversion). Every GL call is guarded against
+      falsy returns (lost context / mock / compile failure → silent no-op, TDD §15.3).
+      Shares `buildTreeLayout` with Canvas + SVG. +w64/w65 test (17 cases: interface,
+      no-throw per shape, winter-bare, dead/stump, null-GL no-op, factory wiring).
+      rendering 144 ✓.
 
 ### ⚪ Phase D — Deferred by design / post-launch — do NOT build now
 
@@ -232,6 +245,12 @@ persists rich metadata. See the per-item checkboxes above.
   27 species + implemented per-shape canopy geometry (`canopyGeometryForShape`:
   disc/cone/fan distributions; palm branchDepth=0). The shape was cached but not
   drawn before; now each species renders a distinct silhouette. rendering 127 ✓.
+- 2026-11-26 — W64/W65: SVG + WebGL renderers — extracted the canvas layout to a
+  shared `tree-layout.ts` (`buildTreeLayout` + `treeStructureSignature` +
+  `canopyGeometryForShape`) + `render-colors.ts` so all three backends paint the
+  same geometry; shipped `SvgTreeRenderer` (SVG markup into a container) +
+  `WebGlTreeRenderer` (GL_LINES branches + GL_POINTS leaves, minimal shader
+  program). The factory's svg/webgl cases no longer throw. rendering 144 ✓.
 
 **Phase A complete (2026-11-25):** W72, W57, W60, W77, W76, W79, W78 all
 resolved. The only true launch-gate (W72 warn-vs-block re-review) is decided —

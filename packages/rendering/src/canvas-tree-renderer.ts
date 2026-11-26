@@ -53,10 +53,11 @@ import type {
   TreeRenderer,
   CurrencyVisual,
   SeasonalAppearance,
-  SpeciesShape,
   LeafHit,
 } from './types.js';
 import { getDefaultCurrencyVisual } from './currency-visuals.js';
+import { buildTreeLayout, treeStructureSignature } from './tree-layout.js';
+import type { TreeLayout } from './tree-layout.js';
 import {
   // Layout + scaling.
   PROVISIONAL_RENDER_TREE_HEIGHT_SCALE_PX_PER_M,
@@ -175,62 +176,10 @@ export interface CanvasTreeRendererOptions {
 // Internal data shapes (layout cache + particle pools).
 // ============================================================================
 
-/** A pre-computed branch segment in the cached layout. */
-interface BranchSegment {
-  /** Start point (canvas px, origin top-left). */
-  readonly x0: number;
-  readonly y0: number;
-  /** End point (canvas px). */
-  readonly x1: number;
-  readonly y1: number;
-  /** Recursion depth from the trunk (0 = trunk itself). */
-  readonly depth: number;
-  /** Diameter in px. */
-  readonly diameter: number;
-}
-
-/** A pre-computed leaf attachment slot. */
-interface LeafSlot {
-  /** Position (canvas px). */
-  readonly x: number;
-  readonly y: number;
-  /** Currency denomination tier (0..2). */
-  readonly tier: number;
-  /** Per-slot sway phase offset (radians). */
-  readonly phaseOffset: number;
-  /** Per-slot size jitter multiplier (~1.0). */
-  readonly sizeJitter: number;
-}
-
-/** A pre-computed damage marker placement. */
-interface DamageMarkerPlacement {
-  readonly x: number;
-  readonly y: number;
-  readonly severity: number;
-  readonly type: string;
-}
-
-/**
- * Cached tree structure (recomputed only when the structural signature
- * changes — see `treeStructureSignature`).
- */
-interface CachedTreeStructure {
-  readonly signature: string;
-  readonly branches: readonly BranchSegment[];
-  readonly leafSlots: readonly LeafSlot[];
-  readonly damageMarkers: readonly DamageMarkerPlacement[];
-  /** True when the tree is dead (alive=false) — renderer draws a stump only. */
-  readonly stump: boolean;
-  /** Trunk base (canvas px, origin top-left). */
-  readonly baseX: number;
-  readonly baseY: number;
-  /** Rendered tree height (px, clamped to MIN/MAX). */
-  readonly treeHeightPx: number;
-  /** Trunk length (px). */
-  readonly trunkLengthPx: number;
-  /** Trunk diameter (px). */
-  readonly trunkDiameterPx: number;
-}
+// Layout types (BranchSegment, LeafSlot, DamageMarkerPlacement, TreeLayout) +
+// the pure layout function buildTreeLayout + canopyGeometryForShape now live
+// in tree-layout.ts — shared with the SVG (W64) + WebGL (W65) renderers so
+// every backend paints the same geometry. The canvas keeps a TreeLayout cache.
 
 /** A particle in any of the pools (rain / snow / falling leaf). */
 interface Particle {
@@ -265,34 +214,8 @@ interface Particle {
 // particle pool init (which is non-deterministic but cosmetic).
 // ============================================================================
 
-/**
- * Linear-congruential generator (Numerical Recipes constants). Deterministic
- * across JS engines (unlike Math.random) — the same seed always produces the
- * same sequence, so the same TreeRenderData always produces the same tree.
- */
-function createLcg(seed: number): () => number {
-  let s = seed >>> 0;
-  // Avoid the degenerate seed=0 case (the LCG would stay at 0 for one step).
-  if (s === 0) s = 0xdeadbeef;
-  return () => {
-    // a = 1664525, c = 1013904223, m = 2^32 (Numerical Recipes).
-    s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
-    return s / 0x100000000;
-  };
-}
-
-/**
- * FNV-1a string hash → uint32 seed. Used to derive a deterministic LCG seed
- * from the tree's structural signature string.
- */
-function hashStringToSeed(s: string): number {
-  let h = 0x811c9dc5 >>> 0;
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 0x01000193) >>> 0;
-  }
-  return h >>> 0;
-}
+// Deterministic RNG (createLcg, hashStringToSeed) moved to tree-layout.ts —
+// the canvas no longer computes the layout itself (buildTreeLayout does).
 
 // ============================================================================
 // Colour helpers — hex → rgb + lerp. Tiny and pure.
@@ -336,81 +259,8 @@ function lerpHex(a: string, b: string, t: number): string {
   return rgbToHex(lerpRgb(parseHex(a), parseHex(b), t));
 }
 
-// ============================================================================
-// Signature — what triggers a layout rebuild.
-// ============================================================================
-
-/**
- * Derive the structural signature for a tree. Only fields that affect the
- * LAYOUT (branch positions, leaf-slot positions) are included. Cosmetic
- * per-frame fields (foliage density, damage list, seasonal appearance) do
- * NOT trigger a rebuild — they're applied at draw time against the cached
- * layout.
- *
- * This keeps per-frame cost low: a tree growing slowly (height ticks up
- * each sim step) rebuilds only when height crosses an integer metre, not
- * on every animation frame.
- */
-function treeStructureSignature(tree: TreeRenderData, width: number, height: number): string {
-  return [
-    tree.speciesId,
-    tree.speciesShape,
-    // Quantise height to 0.1 m to avoid thrashing the cache during slow growth.
-    Math.round(tree.height * 10) / 10,
-    // Quantise trunk diameter to 0.01 m.
-    Math.round(tree.trunkDiameter * 100) / 100,
-    // Quantise branchDevelopment to nearest 0.5 unit (0..100 → 200 buckets).
-    Math.round(tree.branchDevelopment * 2) / 2,
-    tree.alive ? 'alive' : 'dead',
-    // ageDays affects trunk texture (sapling vs mature) but is a coarse driver.
-    Math.floor(tree.ageDays / 10),
-    width,
-    height,
-  ].join('|');
-}
-
-// ============================================================================
-// W63: per-shape canopy geometry — varies the leaf-slot distribution + canopy
-// dimensions by SpeciesShape so each silhouette renders distinctly:
-//   broadleaf-round — spreading rounded canopy (oak, live oak, baobab).
-//   broadleaf-oval  — taller/oval canopy (beech, kapok, mahogany).
-//   conical         — narrowing upward (spruce, hemlock, pine, redwood).
-//   columnar        — tall + narrow (lodgepole pine, poplar, cypress).
-//   palm            — frond crown radiating from the trunk apex (date palm).
-//   unknown         — fallback to broadleaf-round (the baseline).
-// See tree-render-data.ts SPECIES_SHAPE_BY_ID for the species→shape mapping.
-// ============================================================================
-
-/**
- * Per-shape canopy geometry: the canopy radii (px), the center-Y offset above
- * the trunk top (px, positive = up), + the distribution mode the leaf-slot
- * loop uses (`disc` = ellipse, `cone` = narrowing upward, `fan` = radiating
- * from the apex). Pure — a function of shape + tree height.
- */
-function canopyGeometryForShape(
-  shape: SpeciesShape,
-  treeHeightPx: number,
-): {
-  radiusX: number;
-  radiusY: number;
-  centerYAboveTrunkTop: number;
-  mode: 'disc' | 'cone' | 'fan';
-} {
-  switch (shape) {
-    case 'broadleaf-oval': // taller, slightly narrower (maple/birch/beech/kapok)
-      return { radiusX: treeHeightPx * 0.30, radiusY: treeHeightPx * 0.42, centerYAboveTrunkTop: treeHeightPx * 0.25, mode: 'disc' };
-    case 'conical': // narrowing upward (spruce/fir/hemlock/pine/redwood)
-      return { radiusX: treeHeightPx * 0.35, radiusY: treeHeightPx * 0.45, centerYAboveTrunkTop: treeHeightPx * 0.22, mode: 'cone' };
-    case 'columnar': // narrow + tall (lodgepole pine/poplar/cypress)
-      return { radiusX: treeHeightPx * 0.18, radiusY: treeHeightPx * 0.45, centerYAboveTrunkTop: treeHeightPx * 0.25, mode: 'disc' };
-    case 'palm': // fronds radiating from the trunk apex (downward fan)
-      return { radiusX: treeHeightPx * 0.40, radiusY: treeHeightPx * 0.30, centerYAboveTrunkTop: 0, mode: 'fan' };
-    case 'broadleaf-round': // rounded spreading canopy (oak) — the baseline
-    case 'unknown':
-    default:
-      return { radiusX: treeHeightPx * 0.35, radiusY: treeHeightPx * 0.35, centerYAboveTrunkTop: treeHeightPx * 0.20, mode: 'disc' };
-  }
-}
+// treeStructureSignature moved to tree-layout.ts — shared with SVG (W64) +
+// WebGL (W65) so every backend caches the layout on the same key.
 
 // ============================================================================
 // Theme registry — banknote theme name → per-tier colour triplet.
@@ -545,7 +395,7 @@ export class CanvasTreeRenderer implements TreeRenderer {
   private _currency: CurrencyVisual;
 
   // Cached structure — recomputed only when the structural signature changes.
-  private _cachedStructure: CachedTreeStructure | null = null;
+  private _cachedStructure: TreeLayout | null = null;
 
   // Cached count of leaves actually drawn in the last _renderLeaves pass.
   // Reflects canopyFactor × density × conditionFactor rounding — the set of
@@ -744,209 +594,13 @@ export class CanvasTreeRenderer implements TreeRenderer {
   // -------------------------------------------------------------------------
 
   /**
-   * Build (or rebuild) the cached procedural structure for `tree`. Uses a
-   * deterministic LCG seeded from `signature` so the same tree always
-   * produces the same layout.
+   * Build (or rebuild) the cached procedural structure for `tree`. Delegates to
+   * the shared `buildTreeLayout` (tree-layout.ts) so Canvas / SVG / WebGL all
+   * paint the same geometry. Deterministic: seeded from `signature` so the
+   * same tree always produces the same layout.
    */
-  private _buildStructure(tree: TreeRenderData, signature: string): CachedTreeStructure {
-    const baseX = this._width / 2;
-    const baseY = this._height * PROVISIONAL_RENDER_TREE_BASELINE_FRACTION;
-
-    // Rendered tree height: clamp height × scale into [MIN, MAX] px.
-    const treeHeightPx = Math.min(
-      PROVISIONAL_RENDER_MAX_TREE_HEIGHT_PX,
-      Math.max(
-        PROVISIONAL_RENDER_MIN_TREE_HEIGHT_PX,
-        tree.height * PROVISIONAL_RENDER_TREE_HEIGHT_SCALE_PX_PER_M,
-      ),
-    );
-
-    // Trunk diameter in px. Floor at 2 px so saplings still have a visible trunk.
-    const trunkDiameterPx = Math.max(
-      2,
-      tree.trunkDiameter * PROVISIONAL_RENDER_TRUNK_DIAMETER_SCALE_PX_PER_M,
-    );
-
-    // Dead tree → stump only.
-    if (!tree.alive) {
-      const stumpHeightPx = Math.min(treeHeightPx * 0.18, 50);
-      const stump: BranchSegment = {
-        x0: baseX,
-        y0: baseY,
-        x1: baseX,
-        y1: baseY - stumpHeightPx,
-        depth: 0,
-        diameter: trunkDiameterPx * 1.3, // Stumps are stubby + thick.
-      };
-      return {
-        signature,
-        branches: [stump],
-        leafSlots: [],
-        damageMarkers: [], // Damage markers are not drawn on a stump.
-        stump: true,
-        baseX,
-        baseY,
-        treeHeightPx: stumpHeightPx,
-        trunkLengthPx: stumpHeightPx,
-        trunkDiameterPx: stump.diameter,
-      };
-    }
-
-    // Trunk length: ~45% of tree height (canopy occupies the remaining 55%).
-    const trunkLengthPx = treeHeightPx * 0.45;
-
-    // Branch recursion depth: derived from branchDevelopment (0..100 → 1..MAX).
-    // W63: palms have no branches — just the trunk + a frond crown (leaf slots).
-    // branchDepth = 0 so `grow` pushes only the trunk segment (no recursion).
-    const branchDepth =
-      tree.speciesShape === 'palm'
-        ? 0
-        : Math.max(
-            1,
-            Math.min(
-              PROVISIONAL_RENDER_MAX_BRANCH_DEPTH,
-              1 + Math.floor(tree.branchDevelopment / 25),
-            ),
-          );
-
-    // LCG seeded from the structural signature.
-    const rng = createLcg(hashStringToSeed(signature));
-
-    // Recursive branch generator.
-    const branches: BranchSegment[] = [];
-    const angleSpreadRad = (PROVISIONAL_RENDER_BRANCH_ANGLE_SPREAD_DEG * Math.PI) / 180;
-
-    const grow = (
-      x0: number,
-      y0: number,
-      angle: number, // 0 = straight up; positive = clockwise.
-      length: number,
-      diameter: number,
-      depth: number,
-    ): void => {
-      const x1 = x0 + Math.sin(angle) * length;
-      const y1 = y0 - Math.cos(angle) * length;
-      branches.push({ x0, y0, x1, y1, depth, diameter });
-
-      if (depth >= branchDepth) return;
-
-      const childCount = PROVISIONAL_RENDER_BRANCH_CHILD_COUNT;
-      const childLen = length * PROVISIONAL_RENDER_BRANCH_LENGTH_DECAY;
-      const childDia = Math.max(0.5, diameter * PROVISIONAL_RENDER_BRANCH_DIAMETER_DECAY);
-
-      for (let i = 0; i < childCount; i++) {
-        // Even fan distribution across [-1, +1] when there are multiple
-        // children; falls back to straight-ahead when only one. Using a
-        // `Math.max(1, ...)` denom avoids divide-by-zero without tripping
-        // TS2367 (which would flag a `childCount === 1` literal-type check
-        // against the constant `2`).
-        const denom = Math.max(1, childCount - 1);
-        const t = (i / denom) * 2 - 1;
-        const jitter = (rng() * 2 - 1) * 0.4; // ±40% jitter.
-        const childAngleOffset = (t + jitter) * angleSpreadRad;
-        // Children fan outward from the parent's direction.
-        let childAngle = angle + childAngleOffset;
-
-        // Constrain: children must not bend backward below the parent's start.
-        // (Prevents branches that grow back down into the ground.)
-        if (childAngle > Math.PI / 2) childAngle = Math.PI / 2;
-        if (childAngle < -Math.PI / 2) childAngle = -Math.PI / 2;
-
-        // Slight upward bias so the canopy stays round, not drooping.
-        const upwardBias = (1 - depth / branchDepth) * 0.15;
-        const biasedAngle = childAngle * (1 - upwardBias * 0.2);
-
-        grow(x1, y1, biasedAngle, childLen, childDia, depth + 1);
-      }
-    };
-
-    grow(baseX, baseY, 0, trunkLengthPx, trunkDiameterPx, 0);
-
-    // ----- Leaf slots -----
-    // Distribute leaf slots around the canopy. The canopy is roughly a
-    // disc centered on the trunk top, radius = treeHeightPx × 0.35.
-    // Each slot's tier is picked from a deterministic distribution:
-    //   ~70% tier 0, ~20% tier 1, ~10% tier 2 (provisional tier weights).
-    // W63: per-shape canopy geometry — varies the leaf-slot distribution by
-    // SpeciesShape so each silhouette renders distinctly (round oak vs oval
-    // maple vs conical spruce vs columnar poplar vs palm frond crown).
-    const geo = canopyGeometryForShape(tree.speciesShape, treeHeightPx);
-    const canopyCenterX = baseX;
-    const trunkTopY = baseY - trunkLengthPx;
-    const canopyCenterY = trunkTopY - geo.centerYAboveTrunkTop;
-
-    // Cap the total slot count to keep per-frame draw cost bounded. The
-    // seasonal canopy factor (below) reduces the active count further.
-    const maxSlots = 120;
-    // Density from foliageDensity (so a sparse canopy has fewer slots).
-    const densityFactor = Math.min(1, Math.max(0, tree.foliageDensity));
-    const slotCount = Math.max(0, Math.round(maxSlots * densityFactor));
-
-    const leafSlots: LeafSlot[] = [];
-    for (let i = 0; i < slotCount; i++) {
-      // W63: distribution varies by shape mode.
-      //   disc — ellipse (broadleaf-round/oval, columnar): uniform-in-ellipse.
-      //   cone — narrowing upward (conical): radius shrinks linearly with height.
-      //   fan  — fronds from the apex (palm): downward semicircle radiating out.
-      const theta = rng() * Math.PI * 2;
-      let x: number;
-      let y: number;
-      if (geo.mode === 'fan') {
-        // Palm: fronds radiate from the trunk apex outward + downward.
-        // Lower hemisphere (theta in [0,π] → sin ≥ 0 → downward).
-        const fanTheta = rng() * Math.PI;
-        const fanR = (0.2 + rng() * 0.8) * geo.radiusX;
-        x = canopyCenterX + Math.cos(fanTheta) * fanR;
-        y = canopyCenterY + Math.sin(fanTheta) * fanR;
-      } else if (geo.mode === 'cone') {
-        // Conical: radius shrinks linearly from base (t=0) to apex (t=1).
-        const t = rng(); // 0=base of canopy, 1=top
-        const coneR = Math.sqrt(rng()) * (1 - t) * geo.radiusX;
-        x = canopyCenterX + Math.cos(theta) * coneR;
-        y = canopyCenterY + (t - 0.5) * 2 * geo.radiusY; // base..top
-      } else {
-        // Disc/ellipse: uniform-in-ellipse (broadleaf-round, -oval, columnar).
-        const er = Math.sqrt(rng());
-        x = canopyCenterX + Math.cos(theta) * er * geo.radiusX;
-        y = canopyCenterY + Math.sin(theta) * er * geo.radiusY;
-      }
-      // Pick tier: 0 (70%), 1 (20%), 2 (10%).
-      const tierRoll = rng();
-      const tier = tierRoll < 0.7 ? 0 : tierRoll < 0.9 ? 1 : 2;
-      // Per-slot sway phase offset + size jitter (drives variety at draw time).
-      const phaseOffset = rng() * Math.PI * 2;
-      const sizeJitter = 0.8 + rng() * 0.4; // 0.8..1.2
-      leafSlots.push({ x, y, tier, phaseOffset, sizeJitter });
-    }
-
-    // ----- Damage markers -----
-    // Place each damage entry along the trunk at a height derived from its
-    // appliedAt timestamp (so distinct events sit at distinct heights).
-    const damageMarkers: DamageMarkerPlacement[] = [];
-    for (const d of tree.damage) {
-      const t = (d.appliedAt % 1000) / 1000; // 0..1 — wraps so multiple events spread.
-      const yOffset = trunkLengthPx * (0.1 + t * 0.8); // 10%..90% up the trunk.
-      const xOffset = (trunkDiameterPx / 2 + 2) * (d.appliedAt % 2 === 0 ? 1 : -1);
-      damageMarkers.push({
-        x: baseX + xOffset,
-        y: baseY - yOffset,
-        severity: Math.min(1, Math.max(0, d.severity)),
-        type: d.type,
-      });
-    }
-
-    return {
-      signature,
-      branches,
-      leafSlots,
-      damageMarkers,
-      stump: false,
-      baseX,
-      baseY,
-      treeHeightPx,
-      trunkLengthPx,
-      trunkDiameterPx,
-    };
+  private _buildStructure(tree: TreeRenderData, signature: string): TreeLayout {
+    return buildTreeLayout(tree, this._width, this._height, signature);
   }
 
   // -------------------------------------------------------------------------
@@ -1054,7 +708,7 @@ export class CanvasTreeRenderer implements TreeRenderer {
   private _renderTree(
     ctx: CanvasRenderingContext2D,
     tree: TreeRenderData,
-    struct: CachedTreeStructure,
+    struct: TreeLayout,
     env: EnvironmentRenderData,
   ): void {
     // Wind sway: sinusoidal, scaled by branch depth (tips sway more).
@@ -1103,7 +757,7 @@ export class CanvasTreeRenderer implements TreeRenderer {
   private _renderLeaves(
     ctx: CanvasRenderingContext2D,
     tree: TreeRenderData,
-    struct: CachedTreeStructure,
+    struct: TreeLayout,
     swayPhase: number,
     env: EnvironmentRenderData,
   ): void {
@@ -1190,7 +844,7 @@ export class CanvasTreeRenderer implements TreeRenderer {
   // Damage markers — small dark-red circles on the trunk (GDD §13.4 physical damage).
   // -------------------------------------------------------------------------
 
-  private _renderDamageMarkers(ctx: CanvasRenderingContext2D, struct: CachedTreeStructure): void {
+  private _renderDamageMarkers(ctx: CanvasRenderingContext2D, struct: TreeLayout): void {
     ctx.save();
     for (const m of struct.damageMarkers) {
       const radius =
@@ -1322,7 +976,7 @@ export class CanvasTreeRenderer implements TreeRenderer {
   /** Update + draw falling leaves (autumn only). */
   private _updateFallingLeaves(
     ctx: CanvasRenderingContext2D,
-    struct: CachedTreeStructure,
+    struct: TreeLayout,
     swayPhase: number,
   ): void {
     // Spawn one new leaf every few frames from a random canopy slot.

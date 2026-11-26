@@ -391,14 +391,16 @@ describe('TreeRenderer interface + factory', () => {
     expect(r.targetKind).toBe('canvas');
   });
 
-  it('createTreeRenderer({ kind: "svg" }) throws (future phase)', () => {
-    const target: CreateTreeRendererTarget = { kind: 'svg', container: {} };
-    expect(() => createTreeRenderer(target)).toThrowError(/future phase/);
+  it('createTreeRenderer({ kind: "svg" }) returns an SVG renderer (W64)', () => {
+    const target: CreateTreeRendererTarget = { kind: 'svg', container: { innerHTML: '' } };
+    const r = createTreeRenderer(target);
+    expect(r.targetKind).toBe('svg');
+    r.dispose();
   });
 
-  it('createTreeRenderer({ kind: "webgl" }) throws (future phase)', () => {
+  it('createTreeRenderer({ kind: "webgl" }) throws if canvas lacks getContext (W65)', () => {
     const target: CreateTreeRendererTarget = { kind: 'webgl', canvas: {} };
-    expect(() => createTreeRenderer(target)).toThrowError(/future phase/);
+    expect(() => createTreeRenderer(target)).toThrowError(/getContext/);
   });
 
   it('headless renderer render() does not mutate its inputs', () => {

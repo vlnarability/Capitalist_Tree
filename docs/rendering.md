@@ -12,6 +12,8 @@ this package; the web app does.
 |-------|-------|--------|
 | P4a   | Types + pure mapping + `HeadlessTreeRenderer` + factory + currency visuals | Shipped |
 | P4b   | `CanvasTreeRenderer` (procedural Canvas 2D + particles + env overlays) | Shipped |
+| W64   | `SvgTreeRenderer` (SVG markup into a container — deferred backend, shares `buildTreeLayout`) | Shipped |
+| W65   | `WebGlTreeRenderer` (GL_LINES branches + GL_POINTS leaves — deferred backend, shares `buildTreeLayout`) | Shipped |
 | P4c   | Environment + currency rendering refinements (TBD) | Future |
 | P4d   | React wrapper (`TreeView`) + dev demo page + import-boundary extension | **This phase** |
 

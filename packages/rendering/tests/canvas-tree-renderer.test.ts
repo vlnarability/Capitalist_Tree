@@ -229,9 +229,12 @@ describe('CanvasTreeRenderer — interface conformance', () => {
     expect(() => createTreeRenderer(target)).toThrowError(/getContext/);
   });
 
-  it('createTreeRenderer({ kind: "svg" }) still throws (future phase)', () => {
-    const target: CreateTreeRendererTarget = { kind: 'svg', container: {} };
-    expect(() => createTreeRenderer(target)).toThrowError(/future phase/);
+  it('createTreeRenderer({ kind: "svg" }) returns an SVG renderer (W64 — no longer throws)', () => {
+    const target: CreateTreeRendererTarget = { kind: 'svg', container: { innerHTML: '' } };
+    const r = createTreeRenderer(target);
+    expect(r.targetKind).toBe('svg');
+    expect(typeof r.render).toBe('function');
+    r.dispose();
   });
 });
 
