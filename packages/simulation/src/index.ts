@@ -119,3 +119,7 @@ export * from './progression/index.js';
 // global-aggregation / policy-reaction / effect-application invariants (TDD
 // §18.1, §18.4, GDD §10.1 / §10.2 / §10.3 / §148-152 / §404-408).
 export * from './events/index.js';
+
+// W68: audio system — HeadlessAudioPlayer (the AudioPlayer contract + a
+// test/SSR stub; the real Web Audio player lives in the future UI).
+export * from './audio/index.js';

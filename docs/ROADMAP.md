@@ -151,7 +151,16 @@ Match by *description*, not number:
       slots). The 4-season `SeasonalAppearance` system was already complete. +w63
       test (12 cases: coverage, all-5-shapes-used, assignments, render-smoke per
       shape). rendering typecheck ✓, rendering suite 127 ✓.
-- [ ] **W68** audio variety (1 ambient + 3 SFX; no weather/harvest/seasonal).
+- [x] **W68** audio variety. **DONE 2026-11-26** — shipped 1 ambient
+      (`ambient:forest` loop) + 3 SFX (`sfx:purchase`, `sfx:notify`, `sfx:error`;
+      explicitly NO weather/harvest/seasonal sounds). New audio content registry
+      (`packages/content/src/audio/` with `getSoundById` + `UnknownSoundError`),
+      a `play-sound` SimulationEvent (registered in the event union), + a
+      headless `AudioPlayer` stub (`HeadlessAudioPlayer` — records calls for
+      tests/SSR; the real Web Audio player lands with P4d). Wired play-sound
+      events into the axe actions: buy-tool → `sfx:purchase`, cut-down-tree
+      success → `sfx:notify`, cut-down-tree warnings (no-axe / cut-dead-tree)
+      → `sfx:error`. +12 tests; sim suite 1272 ✓.
       Effort M.
 - [ ] **W69** i18n deeper strings + locales (en/zh-CN/es, UI chrome only).
       Effort M.
@@ -251,6 +260,23 @@ persists rich metadata. See the per-item checkboxes above.
   same geometry; shipped `SvgTreeRenderer` (SVG markup into a container) +
   `WebGlTreeRenderer` (GL_LINES branches + GL_POINTS leaves, minimal shader
   program). The factory's svg/webgl cases no longer throw. rendering 144 ✓.
+- 2026-11-26 — Darkness fix: the scene was super-dark no matter the time/weather
+  because the night light level (0.25) stacked a 75% black overlay on a near-black
+  night sky (#0a0a1f) + the sim starts at midnight. Raised night 0.25→0.7, dawn/dusk
+  0.7→0.9, + brightened the night sky to #1a2540/#2a3550. The scene is now 70-100%
+  bright at all times. rendering 144 ✓, sim 1251 ✓.
+- 2026-11-26 — Axe feature (W-axe): buy-tool action (sink transfer of 2000 minor,
+  credits `state.inventory.items` with `tool:axe`, reusable) + cut-down-tree action
+  (requires axe ownership; kills the tree — alive=false/stress=1/health=0/wear past
+  death threshold + 'axed' damage; maxes exploitation via `applyPlayerEnvironmentalImpact`
+  trashing the home region — no `exploitation` field exists; sells wood via
+  `computeTimberYield` = biomassScore × quality × `PROVISIONAL_TIMBER_VALUE_PER_BIOMASS_MINOR`).
+  Both money flows through `transfer()` so conservation holds. +9 tests; sim 1260 ✓.
+- 2026-11-26 — W68 audio variety: 1 ambient (`ambient:forest`) + 3 SFX
+  (`sfx:purchase`/`sfx:notify`/`sfx:error`; NO weather/harvest/seasonal). New audio
+  content registry + `play-sound` SimulationEvent + `HeadlessAudioPlayer` stub.
+  Wired play-sound into the axe actions (buy→purchase, cut-success→notify,
+  cut-warnings→error). +12 tests; sim 1272 ✓.
 
 **Phase A complete (2026-11-25):** W72, W57, W60, W77, W76, W79, W78 all
 resolved. The only true launch-gate (W72 warn-vs-block re-review) is decided —

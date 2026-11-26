@@ -448,6 +448,11 @@ export const buyToolHandler: ActionListener<BuyToolAction> = (state, action) => 
 
   const events: SimulationEvent[] = [
     {
+      type: 'play-sound',
+      at: timestamp,
+      payload: { soundId: 'sfx:purchase' },
+    },
+    {
       type: 'transaction-recorded',
       at: timestamp,
       payload: { record: transaction },

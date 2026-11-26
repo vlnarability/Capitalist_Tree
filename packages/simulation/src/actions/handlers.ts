@@ -622,6 +622,11 @@ const cutDownTreeHandler: ActionListener<CutDownTreeAction> = (state, action) =>
       state,
       events: [
         {
+          type: 'play-sound',
+          at: timestamp,
+          payload: { soundId: 'sfx:error' },
+        },
+        {
           type: 'biology-notification',
           at: timestamp,
           payload: {
@@ -643,6 +648,11 @@ const cutDownTreeHandler: ActionListener<CutDownTreeAction> = (state, action) =>
     return {
       state,
       events: [
+        {
+          type: 'play-sound',
+          at: timestamp,
+          payload: { soundId: 'sfx:error' },
+        },
         {
           type: 'biology-notification',
           at: timestamp,
@@ -695,6 +705,8 @@ const cutDownTreeHandler: ActionListener<CutDownTreeAction> = (state, action) =>
   );
 
   const events: SimulationEvent[] = [];
+  // W68: play the notify chime for a successful cut.
+  events.push({ type: 'play-sound', at: timestamp, payload: { soundId: 'sfx:notify' } });
 
   // Sell the wood: authority → player:personal (issuance — money enters
   // circulation). The dead tree won't tick to drain a queued issuance, so a

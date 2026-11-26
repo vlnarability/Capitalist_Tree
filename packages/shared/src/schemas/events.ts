@@ -8,6 +8,7 @@ import {
   seedDispersedEventSchema,
   seedPlantedEventSchema,
 } from './events-biology.js';
+import { playSoundEventSchema } from './events-audio.js';
 import {
   weatherDamageEventSchema,
   waterAppliedEventSchema,
@@ -205,6 +206,8 @@ export const simulationEventSchema = z.discriminatedUnion('type', [
   governmentPolicyChangedEventSchema,
   monetaryPolicyChangedEventSchema,
   regionalConditionShiftedEventSchema,
+  // W68: audio events — emitted by action handlers when a sound should play.
+  playSoundEventSchema,
 ]);
 export type SimulationEvent = z.infer<typeof simulationEventSchema>;
 
