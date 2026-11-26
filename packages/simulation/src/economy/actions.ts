@@ -35,6 +35,7 @@ import type {
   TransferAction,
   SellTreeAction,
   PerformLaborAction,
+  BuyToolAction,
   SimulationEvent,
   TransactionRecord,
 } from '@capitalist-tree/shared';
@@ -55,6 +56,7 @@ import type { SystemResult } from '../systems/system.js';
 import { transfer, getBalance, findAccount, parseAmount } from './ledger.js';
 import { UnknownAccountError } from './errors.js';
 import { processExpensePayment } from '../personal/expenses.js';
+import { getToolById } from '@capitalist-tree/content';
 
 /**
  * Listener signature for an action handler. Mirrors the `ActionListener`
@@ -381,6 +383,82 @@ export const performLaborHandler: ActionListener<PerformLaborAction> = (
         healthCost,
         playerBalanceAfter: playerBalanceAfter.toString(10),
         transactionId: transaction.id,
+      },
+    },
+  ];
+
+  return { state: next, events };
+};
+
+/**
+ * `buy-tool` handler (W-axe — player purchases a hand tool, e.g. an axe).
+ *
+ * Mirrors `purchaseEquipmentHandler`'s money flow (sink transfer + balance
+ * mirror) but credits `state.inventory.items` instead of spawning an
+ * AutomationState — a hand tool is not scheduled automation. The tool is
+ * reusable (not consumed); gating the `cut-down-tree` action on ownership is
+ * the only read.
+ *
+ * Throws `UnknownToolError` (from `getToolById`) if `toolId` is unknown, and
+ * `InsufficientFundsError` (from `transfer()`) if the player can't afford the
+ * cost — matching `purchase`'s contract (a failed purchase is a hard error,
+ * not a graceful notification).
+ */
+export const buyToolHandler: ActionListener<BuyToolAction> = (state, action) => {
+  const { toolId } = action.payload;
+  const tool = getToolById(toolId); // throws UnknownToolError if unknown.
+  const timestamp = state.clock.elapsedSeconds;
+  const costMinor = parseAmount(tool.cost, 'toolCost');
+
+  // Debit the cost: player:personal → authority (a SINK — money leaves
+  // circulation; conservation-safe via transfer()'s invariant).
+  const requestId = `tool:${state.metadata.saveId}:${timestamp}:${toolId}:${state.economy.transactions.length}`;
+  let next = transfer(state, {
+    sourceAccount: PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID,
+    destinationAccount: PROVISIONAL_ECONOMY_AUTHORITY_ACCOUNT_ID,
+    amount: costMinor.toString(10),
+    category: 'tool',
+    description: `Purchase ${tool.name} (${toolId})`,
+    timestamp,
+    requestId,
+  });
+
+  const transaction: TransactionRecord =
+    next.economy.transactions[next.economy.transactions.length - 1]!;
+
+  // Mirror the new player balance (player.personalCash is a denormalized view
+  // of the player:personal account — every handler that moves money mirrors it).
+  const playerBalanceAfter = getBalance(next, PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID);
+  next = {
+    ...next,
+    player: { ...next.player, personalCash: playerBalanceAfter.toString(10) },
+  };
+
+  // Credit the inventory: { resourceId: toolId, quantity: 1 } (increment if the
+  // player already owns one — they can buy multiples, though tools are reusable).
+  const items = [...next.inventory.items];
+  const existingIdx = items.findIndex((i) => i.resourceId === toolId);
+  if (existingIdx >= 0) {
+    const existing = items[existingIdx]!;
+    items[existingIdx] = { ...existing, quantity: existing.quantity + 1 };
+  } else {
+    items.push({ resourceId: toolId, quantity: 1 });
+  }
+  next = { ...next, inventory: { ...next.inventory, items } };
+
+  const events: SimulationEvent[] = [
+    {
+      type: 'transaction-recorded',
+      at: timestamp,
+      payload: { record: transaction },
+    },
+    {
+      type: 'notification',
+      at: timestamp,
+      payload: {
+        severity: 'info',
+        code: 'tool-purchased',
+        message: `Bought ${tool.name} for ${(Number(tool.cost) / 100).toFixed(2)} currency. Use cut-down-tree to fell the tree for timber.`,
       },
     },
   ];

@@ -430,6 +430,17 @@ export const PROVISIONAL_BIOLOGY_WEAR_PER_DAMAGE = 1.0;
 export const PROVISIONAL_BIOLOGY_WEAR_MORTALITY_ONSET = 3.0;
 export const PROVISIONAL_BIOLOGY_WEAR_DEATH_THRESHOLD = 6.0;
 
+// PROVISIONAL (W-axe / GDD §17 — timber value).
+//
+// Sell value of one unit of `biomassScore` (the [0,4] "how big is the tree"
+// metric from `biology/energy-allocation.ts`) when a tree is felled for timber.
+// The cut-down-tree handler computes `amountMinor = round(biomassScore ×
+// qualityFactor × TIMBER_VALUE_PER_BIOMASS)` — so a mature, healthy tree
+// (biomassScore ~3, quality ~0.8) yields ~3 × 0.8 × 5000 = 12000 minor (120.00
+// currency), a meaningful lump sum that compensates for killing the
+// currency-producing tree. Tunable per GDD §17.
+export const PROVISIONAL_TIMBER_VALUE_PER_BIOMASS_MINOR: bigint = 5000n;
+
 // PROVISIONAL (W59 / GDD §5.6 — wear recovery).
 //
 // Pre-W59, `tree.wear` was strictly monotonic — it NEVER decayed. Ambient

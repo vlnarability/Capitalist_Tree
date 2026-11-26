@@ -1,9 +1,10 @@
 import { z } from 'zod';
 import { PROVISIONAL_SPEED_MULTIPLIERS } from '../constants/provisional.js';
-import { harvestLeavesActionSchema, plantSeedActionSchema } from './actions-biology.js';
+import { harvestLeavesActionSchema, plantSeedActionSchema, cutDownTreeActionSchema } from './actions-biology.js';
 import { applyWaterActionSchema, applyFertilizerActionSchema } from './actions-resources.js';
 import {
   purchaseActionSchema,
+  buyToolActionSchema,
   payExpenseActionSchema,
   transferActionSchema,
   sellTreeActionSchema,
@@ -82,9 +83,11 @@ export const gameActionSchema = z.discriminatedUnion('type', [
   setSpeedActionSchema,
   harvestLeavesActionSchema,
   plantSeedActionSchema,
+  cutDownTreeActionSchema,
   applyWaterActionSchema,
   applyFertilizerActionSchema,
   purchaseActionSchema,
+  buyToolActionSchema,
   payExpenseActionSchema,
   transferActionSchema,
   sellTreeActionSchema,

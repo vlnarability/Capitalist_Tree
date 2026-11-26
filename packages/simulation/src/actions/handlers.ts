@@ -18,11 +18,13 @@ import type {
   GameAction,
   HarvestLeavesAction,
   PlantSeedAction,
+  CutDownTreeAction,
   HarvestResult,
   SimulationEvent,
   SetSpeedAction,
   TreeDamageState,
   TreeState,
+  TransactionRecord,
   ApplyWaterAction,
   ApplyFertilizerAction,
   FertilizerApplicationResult,
@@ -35,14 +37,18 @@ import {
   PROVISIONAL_BIOLOGY_HARVEST_STRESS_PER_LEAF_FRACTION,
   PROVISIONAL_BIOLOGY_DEATH_DEFOLIATION_WINDOW_DAYS,
   PROVISIONAL_BIOLOGY_WEAR_PER_DAMAGE,
+  PROVISIONAL_BIOLOGY_WEAR_DEATH_THRESHOLD,
   PROVISIONAL_RESOURCE_SOIL_WATER_CAPACITY,
   PROVISIONAL_PROGRESSION_LEGACY_POINTS_PER_SEED,
+  PROVISIONAL_ECONOMY_AUTHORITY_ACCOUNT_ID,
+  PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID,
   UnknownActionError,
 } from '@capitalist-tree/shared';
 import type { SystemResult } from '../systems/system.js';
 import {
   biologyContextFromState,
   harvestLeaves,
+  computeTimberYield,
   getSpeciesOrFail,
   SEVERE_DEFOLIATION_FRACTION,
   type BiologyContext,
@@ -53,6 +59,8 @@ import {
   applyPurchase,
   applyImport,
   applyExport,
+  transfer,
+  getBalance,
   InsufficientFundsError,
   InsufficientInventoryError,
   UnknownMarketError,
@@ -60,6 +68,7 @@ import {
   transferHandler,
   sellTreeHandler,
   performLaborHandler,
+  buyToolHandler,
 } from '../economy/index.js';
 import {
   setAutomationPolicyHandler,
@@ -581,14 +590,170 @@ const exportCommodityHandler: ActionListener<ExportCommodityAction> = (state, ac
 // wrap them into `notification` events for the UI).
 export { InsufficientFundsError, InsufficientInventoryError, UnknownMarketError };
 
+/**
+ * `cut-down-tree` handler (W-axe — player fells the original tree for timber).
+ *
+ * Requires axe ownership (gated on `state.inventory.items` containing
+ * `tool:axe`). Kills the tree (alive=false, stress=1, health=0, wear past the
+ * death threshold, foliage cleared, + an `axed` damage entry), maxes
+ * exploitation (trashes the home region's environment via
+ * `applyPlayerEnvironmentalImpact` — the codebase has no `exploitation` field,
+ * so the regional industrialActivity spike + forest/biodiversity/soil crater
+ * is the visible "max exploitation" signal), then sells the wood in one shot
+ * (authority → player:personal issuance, category `'timber'`). The axe is NOT
+ * consumed (reusable across generations).
+ *
+ * Graceful-rejects (no throw) if the tree is already dead or the player owns
+ * no axe — matches the harvest-dead-tree / pay-expense no-throw pattern.
+ */
+const cutDownTreeHandler: ActionListener<CutDownTreeAction> = (state, action) => {
+  const timestamp = action.payload.tick;
+
+  // Resolve the tree (only the original tree is fellable).
+  if (action.payload.treeId !== state.originalTree.id) {
+    throw new Error(
+      `cut-down-tree: unknown treeId "${action.payload.treeId}". Only the original tree ("${state.originalTree.id}") is fellable.`,
+    );
+  }
+
+  // Guard 1: already dead — a stump has no merchantable wood.
+  if (!state.originalTree.alive) {
+    return {
+      state,
+      events: [
+        {
+          type: 'biology-notification',
+          at: timestamp,
+          payload: {
+            treeId: state.originalTree.id,
+            severity: 'warning',
+            code: 'cut-dead-tree',
+            message: 'The tree is already dead — nothing to fell.',
+          },
+        },
+      ],
+    };
+  }
+
+  // Guard 2: no axe — the player must own one to cut.
+  const hasAxe = state.inventory.items.some(
+    (i) => i.resourceId === 'tool:axe' && i.quantity > 0,
+  );
+  if (!hasAxe) {
+    return {
+      state,
+      events: [
+        {
+          type: 'biology-notification',
+          at: timestamp,
+          payload: {
+            treeId: state.originalTree.id,
+            severity: 'warning',
+            code: 'no-axe',
+            message: 'You need an axe to cut down the tree. Buy one with the buy-tool action.',
+          },
+        },
+      ],
+    };
+  }
+
+  // Compute the timber yield BEFORE mutating (biomassScore × quality × value).
+  const tree = state.originalTree;
+  const species = getSpeciesOrFail(tree.speciesId);
+  const timber = computeTimberYield(tree, species);
+
+  // Kill the tree: alive=false, stress=1, health=0, wear past the death
+  // threshold (so checkMortality agrees the tree is dead), foliage cleared,
+  // + a damage entry recording the axe.
+  const killedTree: TreeState = {
+    ...tree,
+    alive: false,
+    stress: 1,
+    health: 0,
+    wear: Math.max(tree.wear, PROVISIONAL_BIOLOGY_WEAR_DEATH_THRESHOLD + 1),
+    foliage: { ...tree.foliage, currentLeaves: 0 },
+    damage: [
+      ...tree.damage,
+      { type: 'axed', severity: 1, appliedAt: timestamp } as TreeDamageState,
+    ],
+  };
+
+  // Max exploitation: trash the home region's environment (visible to the
+  // DR-1 recovery tests). applyPlayerEnvironmentalImpact scales + writes to
+  // the home region's industrialActivity / pollution / forestCoverage / etc.
+  const maxImpact = {
+    carbonEmissions: 1.0,
+    waterConsumption: 0.5,
+    soilDegradation: 1.0,
+    pollution: 1.0,
+    landDisturbance: 1.0,
+    biodiversityImpact: 1.0,
+  };
+  let next = applyPlayerEnvironmentalImpact(
+    { ...state, originalTree: killedTree },
+    maxImpact,
+  );
+
+  const events: SimulationEvent[] = [];
+
+  // Sell the wood: authority → player:personal (issuance — money enters
+  // circulation). The dead tree won't tick to drain a queued issuance, so a
+  // direct transfer (not pendingIssuances) is the right path. Skip the
+  // transfer if the yield is 0 (a sapling has no merchantable wood) —
+  // transfer() rejects amount=0.
+  let playerBalanceAfter = getBalance(next, PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID);
+  if (timber.amountMinor !== '0') {
+    const requestId = `timber:${state.metadata.saveId}:${timestamp}:${tree.id}`;
+    next = transfer(next, {
+      sourceAccount: PROVISIONAL_ECONOMY_AUTHORITY_ACCOUNT_ID,
+      destinationAccount: PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID,
+      amount: timber.amountMinor,
+      category: 'timber',
+      description: `Timber sale: felled ${tree.speciesId} (${timber.woodUnits.toFixed(2)} biomass units, quality ${timber.qualityFactor.toFixed(2)})`,
+      timestamp,
+      requestId,
+    });
+    const transaction: TransactionRecord =
+      next.economy.transactions[next.economy.transactions.length - 1]!;
+    playerBalanceAfter = getBalance(next, PROVISIONAL_ECONOMY_PLAYER_ACCOUNT_ID);
+    events.push({
+      type: 'transaction-recorded',
+      at: timestamp,
+      payload: { record: transaction },
+    });
+  }
+  next = {
+    ...next,
+    player: { ...next.player, personalCash: playerBalanceAfter.toString(10) },
+  };
+
+  events.push({
+    type: 'biology-notification',
+    at: timestamp,
+    payload: {
+      treeId: tree.id,
+      severity: 'info',
+      code: 'tree-cut-down',
+      message:
+        timber.amountMinor === '0'
+          ? 'Felled the tree, but it had no merchantable wood (too young). The tree is dead; exploitation maxed.'
+          : `Felled the tree for timber. Yield: ${(Number(timber.amountMinor) / 100).toFixed(2)} currency. The tree is dead; exploitation maxed.`,
+    },
+  });
+
+  return { state: next, events };
+};
+
 export const actionHandlers: Record<string, ActionListener> = {
   'no-op': noOp,
   'set-speed': setSpeed as ActionListener,
   'harvest-leaves': harvestLeavesHandler as ActionListener,
   'plant-seed': plantSeedHandler as ActionListener,
+  'cut-down-tree': cutDownTreeHandler as ActionListener,
   'apply-water': applyWaterHandler as ActionListener,
   'apply-fertilizer': applyFertilizerHandler as ActionListener,
   'purchase': purchaseHandler as ActionListener,
+  'buy-tool': buyToolHandler as ActionListener,
   'import-commodity': importCommodityHandler as ActionListener,
   'export-commodity': exportCommodityHandler as ActionListener,
   'pay-expense': payExpenseHandler as ActionListener,

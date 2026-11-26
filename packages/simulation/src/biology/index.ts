@@ -20,6 +20,7 @@ export * from './stress.js';
 export * from './health.js';
 export * from './death.js';
 export * from './harvest.js';
+export * from './timber.js';
 export * from './wear.js';
 export * from './species-registry.js';
 export * from './infestation.js';

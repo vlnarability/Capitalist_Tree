@@ -63,6 +63,28 @@ export const purchaseActionSchema = z.object({
 export type PurchaseAction = z.infer<typeof purchaseActionSchema>;
 
 /**
+ * `buy-tool` action (W-axe — player purchases a hand tool, e.g. an axe). The
+ * handler resolves the tool via `getToolById(toolId)`, debits `cost` from
+ * `player:personal` to the authority (a **sink** — money leaves circulation;
+ * conservation-safe via `transfer()`), mirrors the new balance to
+ * `player.personalCash`, then credits `state.inventory.items` with
+ * `{ resourceId: toolId, quantity: 1 }` (incrementing if already present —
+ * the player can own multiple). Emits `transaction-recorded` + a
+ * `notification` (code `tool-purchased`). The axe is reusable + gates the
+ * `cut-down-tree` action on ownership.
+ *
+ * PROVISIONAL per GDD §17 (tool cost/economy balance).
+ */
+export const buyToolActionSchema = z.object({
+  type: z.literal('buy-tool'),
+  payload: z.object({
+    /** Tool id to buy, e.g. `'tool:axe'`. MUST match a `ToolDefinition.id`. */
+    toolId: z.string().min(1),
+  }),
+});
+export type BuyToolAction = z.infer<typeof buyToolActionSchema>;
+
+/**
  * `pay-expense` action — manually pay a living-expense bill (P3c — GDD §7.1).
  *
  * The handler debits `player:personal` and sinks the amount to the central
