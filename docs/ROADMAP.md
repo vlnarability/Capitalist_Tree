@@ -138,8 +138,19 @@ Match by *description*, not number:
       DR-1/100yr use white-oak, unaffected). Also fixed a pre-existing
       `SENEAGAL_MAHOGANY`→`SENEGAL_MAHOGANY` typo in the index. content typecheck
       ✓, species tests 31 ✓, sim suite 1234 ✓. Unblocks W63 (art assets).
-- [ ] **W63** species/seasonal art assets (6/12 slots, `credits.md:85`; needs
-      W62 first). Effort L.
+- [x] **W63** species/seasonal art assets. **DONE 2026-11-26** — the procedural
+      renderer's species silhouette system was scaffolded but hollow: `SPECIES_SHAPE_BY_ID`
+      mapped only 2/27 species (proto-oak, white-oak) + `speciesShape` was cached
+      but never drawn (every species rendered the same round canopy). W63 (a) extends
+      `SPECIES_SHAPE_BY_ID` to all 27 hand-authored species (assigned by real-world
+      form: broadleaf-round=oak/baobab, broadleaf-oval=beech/kapok, conical=spruce/
+      hemlock/pine/redwood, columnar=lodgepole-pine, palm=date-palm) + (b) implements
+      per-shape canopy geometry in `_buildStructure` via `canopyGeometryForShape`
+      (disc/ellipse for round/oval/columnar, cone narrowing upward for conical,
+      downward fan for palm) + branchDepth=0 for palms (trunk-only, fronds=leaf
+      slots). The 4-season `SeasonalAppearance` system was already complete. +w63
+      test (12 cases: coverage, all-5-shapes-used, assignments, render-smoke per
+      shape). rendering typecheck ✓, rendering suite 127 ✓.
 - [ ] **W68** audio variety (1 ambient + 3 SFX; no weather/harvest/seasonal).
       Effort M.
 - [ ] **W69** i18n deeper strings + locales (en/zh-CN/es, UI chrome only).
@@ -212,6 +223,15 @@ re-review decision** — W57's DR-1 targets already pass at 5yr
 tightened — provisional structural constants promoted to `decided.ts`, the
 monetary-policy levers wired into authority issuance, + objective completion
 persists rich metadata. See the per-item checkboxes above.
+
+- 2026-11-25 — W62: hand-authored the 25 factory species as full `TreeSpecies`
+  objects (generator `scripts/w62-species-generator.py`, balance-consistent via
+  the factory formulas); fixed the evergreen-broadleaf form bug + the
+  SENEAGAL→SENEGAL typo. content typecheck ✓, species 31 ✓, sim 1251 ✓.
+- 2026-11-26 — W63: species silhouettes — extended `SPECIES_SHAPE_BY_ID` to all
+  27 species + implemented per-shape canopy geometry (`canopyGeometryForShape`:
+  disc/cone/fan distributions; palm branchDepth=0). The shape was cached but not
+  drawn before; now each species renders a distinct silhouette. rendering 127 ✓.
 
 **Phase A complete (2026-11-25):** W72, W57, W60, W77, W76, W79, W78 all
 resolved. The only true launch-gate (W72 warn-vs-block re-review) is decided —

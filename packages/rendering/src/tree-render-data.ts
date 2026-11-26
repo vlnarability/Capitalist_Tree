@@ -48,8 +48,49 @@ const SPECIES_SHAPE_BY_ID: Readonly<Record<string, SpeciesShape>> = Object.freez
   // P0 placeholder:
   'species:proto-oak': 'broadleaf-round',
   // P1 White Oak — rounded canopy (docs/biology.md §2 "Iconic, recognizable
-  // silhouette").
+  // silhouette"). P12-A Eastern Hemlock — pyramidal conifer.
   'species:white-oak': 'broadleaf-round',
+  'species:eastern-hemlock': 'conical',
+
+  // ---- W63: biome species silhouettes (one row per hand-authored species,
+  // assigned by real-world form — broadleaf-round = spreading rounded canopy,
+  // broadleaf-oval = taller/oval canopy, conical = pyramidal conifer, columnar
+  // = tall narrow, palm = frond crown). See types.ts SpeciesShape semantics. ----
+
+  // Temperate (Köppen C):
+  'species:live-oak': 'broadleaf-round', // Quercus virginiana — broad spreading
+  'species:english-oak': 'broadleaf-round', // Quercus robur — rounded
+  'species:southern-beech': 'broadleaf-oval', // Nothofagus — oval
+  'species:olive': 'broadleaf-round', // Olea — small rounded
+  'species:coast-redwood': 'conical', // Sequoia — narrow conical
+  'species:mountain-hemlock': 'conical', // Tsuga mertensiana — pyramidal
+  'species:dawn-redwood': 'conical', // Metasequoia — pyramidal
+  'species:hartwegs-pine': 'conical', // Pinus hartwegii — pyramidal
+  'species:polylepis': 'broadleaf-oval', // gnarled high-altitude, low oval
+
+  // Continental (Köppen D):
+  'species:black-spruce': 'conical', // Picea mariana — pyramidal
+  'species:siberian-larch': 'conical', // Larix sibirica — pyramidal
+  'species:dahurian-larch': 'conical', // Larix gmelinii — pyramidal
+  'species:lodgepole-pine': 'columnar', // Pinus contorta — tall narrow
+  'species:subalpine-larch': 'conical', // Larix lyallii — pyramidal
+  'species:chinese-red-pine': 'conical', // Pinus tabuliformis — pyramidal
+  'species:mongolian-oak': 'broadleaf-round', // Quercus mongolica — rounded
+
+  // Tropical (Köppen A):
+  'species:kapok': 'broadleaf-oval', // Ceiba — tall emergent, oval crown
+  'species:teak': 'broadleaf-round', // Tectona — spreading
+  'species:senegal-mahogany': 'broadleaf-oval', // Khaya — oval
+  'species:baobab': 'broadleaf-round', // Adansonia — massive spreading
+
+  // Arid (Köppen B):
+  'species:date-palm': 'palm', // Phoenix — frond crown
+  'species:saxaul': 'broadleaf-oval', // Haloxylon — shrubby small
+  'species:honey-mesquite': 'broadleaf-round', // Prosopis — spreading umbrella
+  'species:ponderosa-pine': 'conical', // Pinus ponderosa — pyramidal
+
+  // Polar (Köppen E):
+  'species:arctic-willow': 'broadleaf-oval', // Salix arctica — prostrate low
 });
 
 /**

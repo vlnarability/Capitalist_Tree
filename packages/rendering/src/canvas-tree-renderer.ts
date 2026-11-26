@@ -53,6 +53,7 @@ import type {
   TreeRenderer,
   CurrencyVisual,
   SeasonalAppearance,
+  SpeciesShape,
   LeafHit,
 } from './types.js';
 import { getDefaultCurrencyVisual } from './currency-visuals.js';
@@ -366,6 +367,49 @@ function treeStructureSignature(tree: TreeRenderData, width: number, height: num
     width,
     height,
   ].join('|');
+}
+
+// ============================================================================
+// W63: per-shape canopy geometry — varies the leaf-slot distribution + canopy
+// dimensions by SpeciesShape so each silhouette renders distinctly:
+//   broadleaf-round — spreading rounded canopy (oak, live oak, baobab).
+//   broadleaf-oval  — taller/oval canopy (beech, kapok, mahogany).
+//   conical         — narrowing upward (spruce, hemlock, pine, redwood).
+//   columnar        — tall + narrow (lodgepole pine, poplar, cypress).
+//   palm            — frond crown radiating from the trunk apex (date palm).
+//   unknown         — fallback to broadleaf-round (the baseline).
+// See tree-render-data.ts SPECIES_SHAPE_BY_ID for the species→shape mapping.
+// ============================================================================
+
+/**
+ * Per-shape canopy geometry: the canopy radii (px), the center-Y offset above
+ * the trunk top (px, positive = up), + the distribution mode the leaf-slot
+ * loop uses (`disc` = ellipse, `cone` = narrowing upward, `fan` = radiating
+ * from the apex). Pure — a function of shape + tree height.
+ */
+function canopyGeometryForShape(
+  shape: SpeciesShape,
+  treeHeightPx: number,
+): {
+  radiusX: number;
+  radiusY: number;
+  centerYAboveTrunkTop: number;
+  mode: 'disc' | 'cone' | 'fan';
+} {
+  switch (shape) {
+    case 'broadleaf-oval': // taller, slightly narrower (maple/birch/beech/kapok)
+      return { radiusX: treeHeightPx * 0.30, radiusY: treeHeightPx * 0.42, centerYAboveTrunkTop: treeHeightPx * 0.25, mode: 'disc' };
+    case 'conical': // narrowing upward (spruce/fir/hemlock/pine/redwood)
+      return { radiusX: treeHeightPx * 0.35, radiusY: treeHeightPx * 0.45, centerYAboveTrunkTop: treeHeightPx * 0.22, mode: 'cone' };
+    case 'columnar': // narrow + tall (lodgepole pine/poplar/cypress)
+      return { radiusX: treeHeightPx * 0.18, radiusY: treeHeightPx * 0.45, centerYAboveTrunkTop: treeHeightPx * 0.25, mode: 'disc' };
+    case 'palm': // fronds radiating from the trunk apex (downward fan)
+      return { radiusX: treeHeightPx * 0.40, radiusY: treeHeightPx * 0.30, centerYAboveTrunkTop: 0, mode: 'fan' };
+    case 'broadleaf-round': // rounded spreading canopy (oak) — the baseline
+    case 'unknown':
+    default:
+      return { radiusX: treeHeightPx * 0.35, radiusY: treeHeightPx * 0.35, centerYAboveTrunkTop: treeHeightPx * 0.20, mode: 'disc' };
+  }
 }
 
 // ============================================================================
@@ -752,13 +796,18 @@ export class CanvasTreeRenderer implements TreeRenderer {
     const trunkLengthPx = treeHeightPx * 0.45;
 
     // Branch recursion depth: derived from branchDevelopment (0..100 → 1..MAX).
-    const branchDepth = Math.max(
-      1,
-      Math.min(
-        PROVISIONAL_RENDER_MAX_BRANCH_DEPTH,
-        1 + Math.floor(tree.branchDevelopment / 25),
-      ),
-    );
+    // W63: palms have no branches — just the trunk + a frond crown (leaf slots).
+    // branchDepth = 0 so `grow` pushes only the trunk segment (no recursion).
+    const branchDepth =
+      tree.speciesShape === 'palm'
+        ? 0
+        : Math.max(
+            1,
+            Math.min(
+              PROVISIONAL_RENDER_MAX_BRANCH_DEPTH,
+              1 + Math.floor(tree.branchDevelopment / 25),
+            ),
+          );
 
     // LCG seeded from the structural signature.
     const rng = createLcg(hashStringToSeed(signature));
@@ -818,9 +867,13 @@ export class CanvasTreeRenderer implements TreeRenderer {
     // disc centered on the trunk top, radius = treeHeightPx × 0.35.
     // Each slot's tier is picked from a deterministic distribution:
     //   ~70% tier 0, ~20% tier 1, ~10% tier 2 (provisional tier weights).
+    // W63: per-shape canopy geometry — varies the leaf-slot distribution by
+    // SpeciesShape so each silhouette renders distinctly (round oak vs oval
+    // maple vs conical spruce vs columnar poplar vs palm frond crown).
+    const geo = canopyGeometryForShape(tree.speciesShape, treeHeightPx);
     const canopyCenterX = baseX;
-    const canopyCenterY = baseY - trunkLengthPx - treeHeightPx * 0.2;
-    const canopyRadius = treeHeightPx * 0.35;
+    const trunkTopY = baseY - trunkLengthPx;
+    const canopyCenterY = trunkTopY - geo.centerYAboveTrunkTop;
 
     // Cap the total slot count to keep per-frame draw cost bounded. The
     // seasonal canopy factor (below) reduces the active count further.
@@ -831,11 +884,32 @@ export class CanvasTreeRenderer implements TreeRenderer {
 
     const leafSlots: LeafSlot[] = [];
     for (let i = 0; i < slotCount; i++) {
-      // Random point inside a disc (rejection sampling).
-      const r = Math.sqrt(rng()) * canopyRadius;
+      // W63: distribution varies by shape mode.
+      //   disc — ellipse (broadleaf-round/oval, columnar): uniform-in-ellipse.
+      //   cone — narrowing upward (conical): radius shrinks linearly with height.
+      //   fan  — fronds from the apex (palm): downward semicircle radiating out.
       const theta = rng() * Math.PI * 2;
-      const x = canopyCenterX + Math.cos(theta) * r;
-      const y = canopyCenterY + Math.sin(theta) * r;
+      let x: number;
+      let y: number;
+      if (geo.mode === 'fan') {
+        // Palm: fronds radiate from the trunk apex outward + downward.
+        // Lower hemisphere (theta in [0,π] → sin ≥ 0 → downward).
+        const fanTheta = rng() * Math.PI;
+        const fanR = (0.2 + rng() * 0.8) * geo.radiusX;
+        x = canopyCenterX + Math.cos(fanTheta) * fanR;
+        y = canopyCenterY + Math.sin(fanTheta) * fanR;
+      } else if (geo.mode === 'cone') {
+        // Conical: radius shrinks linearly from base (t=0) to apex (t=1).
+        const t = rng(); // 0=base of canopy, 1=top
+        const coneR = Math.sqrt(rng()) * (1 - t) * geo.radiusX;
+        x = canopyCenterX + Math.cos(theta) * coneR;
+        y = canopyCenterY + (t - 0.5) * 2 * geo.radiusY; // base..top
+      } else {
+        // Disc/ellipse: uniform-in-ellipse (broadleaf-round, -oval, columnar).
+        const er = Math.sqrt(rng());
+        x = canopyCenterX + Math.cos(theta) * er * geo.radiusX;
+        y = canopyCenterY + Math.sin(theta) * er * geo.radiusY;
+      }
       // Pick tier: 0 (70%), 1 (20%), 2 (10%).
       const tierRoll = rng();
       const tier = tierRoll < 0.7 ? 0 : tierRoll < 0.9 ? 1 : 2;

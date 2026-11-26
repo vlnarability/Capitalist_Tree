@@ -51,7 +51,8 @@ Exported from `packages/rendering/src/index.ts`:
 | `buildTreeRenderData(tree, options?)` | `tree-render-data.ts` | `TreeState` → `TreeRenderData`. |
 | `buildEnvironmentRenderData(world, clock, options?)` | `environment-render-data.ts` | `WorldState` + `SimulationClock` → `EnvironmentRenderData`. |
 | `deriveSeasonalAppearance(season, seasonalCondition)` | `tree-render-data.ts` | Season + foliage condition → `SeasonalAppearance`. |
-| `resolveSpeciesShape(speciesId)` | `tree-render-data.ts` | speciesId → `SpeciesShape` (falls back to `'unknown'`). |
+| `resolveSpeciesShape(speciesId)` | `tree-render-data.ts` | speciesId → `SpeciesShape` (falls back to `'unknown'`). W63: all 27 hand-authored species mapped (broadleaf-round/oval, conical, columnar, palm). |
+| `canopyGeometryForShape(shape, H)` | `canvas-tree-renderer.ts` | W63: SpeciesShape → canopy radii + center-Y + distribution mode (`disc`/`cone`/`fan`) used by `_buildStructure`'s leaf-slot loop. Palm → branchDepth=0 (trunk-only). |
 | `mapDamageMarker(d)` | `tree-render-data.ts` | `TreeDamageState` → `DamageMarker` (1:1 mirror). |
 
 ### Currency visuals
